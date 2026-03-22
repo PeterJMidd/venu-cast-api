@@ -14,13 +14,8 @@ warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-# Install cmdstan for Prophet backend (runs once on startup)
-try:
-    import cmdstanpy
-    cmdstanpy.install_cmdstan(overwrite=False)
-    log.info("cmdstan ready")
-except Exception as e:
-    log.warning(f"cmdstan install skipped: {e}")
+# cmdstan is pre-installed via requirements.txt (cmdstanpy)
+# Do NOT call install_cmdstan() at startup — it blocks port binding on Render
 
 app = Flask(__name__)
 CORS(app)
