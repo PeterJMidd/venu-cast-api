@@ -310,3 +310,87 @@ def venue_template():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
+
+# ── /forecast-multi  (per-venue independent forecasts) ────────────────────────
+
+@app.route("/forecast-multi", methods=["POST"])
+def forecast_multi():
+    try:
+        body        = request.get_json(force=True)
+        venues_data = body.get("venues", [])
+
+        if not venues_data:
+            return jsonify({"error": "No venue data provided"}), 400
+
+        results = {}
+
+        for vd in venues_data:
+            name          = vd.get("name", "Unknown")
+            dates         = vd.get("dates", [])
+            values        = [float(v) for v in vd.get("values", [])]
+            h             = max(1, min(730, int(vd.get("forecast_days", 30))))
+            holiday_dates = vd.get("holiday_dates", [])
+            weather_map   = vd.get("weather_map", {})
+
+            if not dates or not values or len(dates) != len(values):
+                results[name] = {"error": f"Invalid or missing data for venue '{name}'"}
+                continue
+
+            last_date      = datetime.strptime(dates[-1], "%Y-%m-%d")
+            forecast_dates = [iso(add_days(last_date, i + 1)) for i in range(h)]
+
+            fi = fc = lo = hi = []
+            rmse = 0.0; model_used = None; comps = {}; warns = []
+
+            # 1 — Prophet
+            try:
+                fi, fc, lo, hi, rmse, comps = run_prophet(
+                    dates, values, h,
+                    holiday_dates=holiday_dates,
+                    weather_map=weather_map)
+                model_used = "Prophet"
+            except ImportError:
+                warns.append("Prophet not installed")
+            except Exception as e:
+                warns.append(f"Prophet failed ({str(e)[:80]}) — trying SARIMA")
+                log.warning(f"[{name}] Prophet: {traceback.format_exc()}")
+
+            # 2 — SARIMA
+            if model_used is None:
+                try:
+                    fi, fc, lo, hi, rmse, lbl = run_sarima(dates, values, h)
+                    model_used = lbl
+                except ImportError:
+                    warns.append("statsmodels not installed")
+                except Exception as e:
+                    warns.append(f"SARIMA failed ({str(e)[:80]}) — using Holt-Winters")
+
+            # 3 — Holt-Winters
+            if model_used is None:
+                M = 7
+                a, b, g = optim_hw(values, M)
+                fi, fc, lo, hi, rmse = hw_forecast(values, M, a, b, g, h)
+                model_used = f"Holt-Winters (α={a:.2f} β={b:.2f} γ={g:.2f})"
+                warns.append("Using Holt-Winters fallback")
+
+            mv = mean(values) or 1
+            results[name] = {
+                "model":          model_used,
+                "rmse":           round(rmse, 4),
+                "cv":             round(rmse / mv, 4),
+                "fitted":         [safe(v) for v in fi],
+                "forecast_dates": forecast_dates,
+                "forecast":       [safe(v) for v in fc],
+                "lower_90":       [safe(v) for v in lo],
+                "upper_90":       [safe(v) for v in hi],
+                "components":     comps,
+                "warnings":       warns,
+            }
+            log.info(f"[{name}] {model_used}  RMSE={rmse:.2f}")
+
+        return jsonify({"venues": results})
+
+    except Exception as e:
+        log.error(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
