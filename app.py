@@ -14,6 +14,11 @@ warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+class _BypassProphet(Exception):
+    """Raised inside run_prophet to return early with a non-Prophet forecast."""
+    def __init__(self, fi, fc, lo, hi, rmse, comps):
+        self.fi, self.fc, self.lo, self.hi, self.rmse, self.comps = fi, fc, lo, hi, rmse, comps
+
 # cmdstan is pre-installed via requirements.txt (cmdstanpy)
 # Do NOT call install_cmdstan() at startup — it blocks port binding on Render
 
@@ -141,50 +146,54 @@ def run_sarima(dates, values, h):
 
 def analyse_venue_history(dates, values):
     """
-    Analyse a venue's trading history to detect:
-    - n_days: calendar days of history
-    - n_trading: actual trading days with sales
-    - patchiness: fraction of days with no sales (0=consistent, 1=all gaps)
-    - consistency_score: how consistent the non-zero days are (CoV-based)
-    - stable_mean: robust average of consistent trading days (median of non-zero)
-    - recent_mean: mean of last 28 days of non-zero sales
-    - is_patchy: True if venue has large gaps or very few trading days
+    Analyse venue trading history. Returns all metrics needed for
+    adaptive model selection and forecast sanitisation.
     """
-    n_days = len(dates)
-    non_zero = [v for v in values if v > 0]
+    from datetime import datetime as _dt
+    n_days    = len(dates)
+    non_zero  = [v for v in values if v > 0]
     n_trading = len(non_zero)
 
     if not non_zero:
         return dict(n_days=n_days, n_trading=0, patchiness=1.0,
-                    consistency_score=0, stable_mean=0, recent_mean=0,
-                    is_patchy=True, use_flat_forecast=True)
+                    stable_mean=0, recent_mean=0, recent_max=0,
+                    dow_means={}, is_patchy=True, use_flat_forecast=True,
+                    bypass_prophet=True)
 
     patchiness = 1 - (n_trading / n_days) if n_days > 0 else 0
 
-    # Coefficient of variation of non-zero days
-    m = mean(non_zero)
-    s = stdev(non_zero)
-    cov = s / m if m > 0 else 0
-
-    # Stable mean = median of non-zero values (robust to outlier opening days)
+    # Stable mean = median of non-zero (robust to launch-day outliers)
     sorted_nz = sorted(non_zero)
     mid = len(sorted_nz) // 2
     stable_mean = (sorted_nz[mid-1] + sorted_nz[mid]) / 2 if len(sorted_nz) % 2 == 0 else sorted_nz[mid]
 
-    # Recent mean = last 28 trading days
-    recent_nz = [v for d, v in zip(dates[-56:], values[-56:]) if v > 0][-28:]
+    # Recent mean + max = last 28 non-zero trading days
+    recent_nz   = [v for v in values[-56:] if v > 0][-28:]
     recent_mean = mean(recent_nz) if recent_nz else stable_mean
+    recent_max  = max(recent_nz) if recent_nz else stable_mean
 
-    # Patchy = more than 30% gaps OR fewer than 21 trading days
-    is_patchy = patchiness > 0.30 or n_trading < 21
+    # Per-DOW averages from actual history (0=Mon ... 6=Sun)
+    dow_acc = {i: [] for i in range(7)}
+    for ds, v in zip(dates, values):
+        if v > 0:
+            try:
+                d = _dt.strptime(ds, "%Y-%m-%d")
+                dow_acc[d.weekday()].append(v)
+            except Exception:
+                pass
+    dow_means = {d: mean(vs) for d, vs in dow_acc.items() if vs}
 
-    # Use flat forecast if very new or very patchy
-    use_flat_forecast = n_trading < 14 or (is_patchy and n_trading < 28)
+    # Flags
+    is_patchy         = patchiness > 0.30 or n_trading < 21
+    # Bypass Prophet entirely for venues too new to have reliable patterns
+    bypass_prophet    = n_trading < 21
+    use_flat_forecast = n_trading < 28 or (is_patchy and n_trading < 56)
 
     return dict(
         n_days=n_days, n_trading=n_trading, patchiness=patchiness,
-        cov=cov, stable_mean=stable_mean, recent_mean=recent_mean,
-        is_patchy=is_patchy, use_flat_forecast=use_flat_forecast
+        stable_mean=stable_mean, recent_mean=recent_mean, recent_max=recent_max,
+        dow_means=dow_means, is_patchy=is_patchy,
+        use_flat_forecast=use_flat_forecast, bypass_prophet=bypass_prophet
     )
 
 
@@ -242,41 +251,75 @@ def prophet_params_for_history(n_days, analysis=None):
         )
 
 
-def sanitise_forecast(fc, lo, hi, analysis, h):
+def dow_flat_forecast(dates, analysis, h, last_date_str):
     """
-    Apply sanity caps to prevent a forecast running above a normal range.
-
-    Rules:
-    1. No daily forecast value > 3x the venue's stable_mean (absolute cap)
-    2. For patchy/new venues, clamp to a flat band around recent_mean
-    3. CI band cannot exceed 2x the forecast value
-    4. No negative values
+    DOW-weighted flat forecast for new/patchy venues.
+    Uses each day-of-week's historical average. Where a DOW has no data,
+    falls back to recent_mean. No trend component — stays flat.
     """
-    stable   = analysis["stable_mean"]
-    recent   = analysis["recent_mean"]
-    is_patch = analysis["is_patchy"]
-    n_trade  = analysis["n_trading"]
+    from datetime import datetime as _dt, timedelta as _td
+    dow_means = analysis["dow_means"]
+    recent    = analysis["recent_mean"]
+    recent_max = analysis["recent_max"]
+    # Ceiling = 1.5x recent max (tight for new venues)
+    ceiling   = max(recent_max * 1.5, recent * 2.0)
 
-    if stable <= 0:
+    last_d = _dt.strptime(last_date_str, "%Y-%m-%d")
+    fc_out, lo_out, hi_out = [], [], []
+    for i in range(h):
+        d    = last_d + _td(days=i+1)
+        dow  = d.weekday()
+        base = dow_means.get(dow, recent)
+        base = min(base, ceiling)
+        fc_out.append(base)
+        lo_out.append(max(0, base * 0.80))
+        hi_out.append(min(ceiling, base * 1.20))
+
+    log.info(f"DOW-flat forecast: {h} days, recent_mean={recent:.0f}, ceiling={ceiling:.0f}")
+    return fc_out, lo_out, hi_out
+
+
+def sanitise_forecast(fc, lo, hi, analysis, h, dates=None):
+    """
+    Hard-cap forecast to prevent absurd values.
+
+    Ceiling logic:
+    - New venue (<28 trading days):  ceiling = recent_max * 1.5
+    - Developing (<90 trading days): ceiling = max(recent_max * 2, stable * 3)
+    - Mature:                        ceiling = stable * 4
+    Any individual day forecast above ceiling is clamped to ceiling.
+    CI bands clamped proportionally.
+    """
+    stable    = analysis["stable_mean"]
+    recent    = analysis["recent_mean"]
+    recent_max = analysis["recent_max"]
+    n_trade   = analysis["n_trading"]
+
+    if stable <= 0 and recent <= 0:
         return [0.0]*h, [0.0]*h, [0.0]*h
 
-    # Absolute ceiling: 3x stable mean for mature, 2x for patchy/new
-    ceiling = stable * (2.0 if (is_patch or n_trade < 60) else 3.0)
+    base = max(stable, recent, 1.0)
 
-    # For very new / patchy venues, anchor to a flat band around recent mean
-    # Allow ±40% variation around recent mean
-    if analysis["use_flat_forecast"]:
-        base   = recent if recent > 0 else stable
-        fc_out = [min(max(base * 0.6, v), base * 1.4) for v in fc]
-        lo_out = [max(0, v * 0.75) for v in fc_out]
-        hi_out = [min(ceiling, v * 1.25) for v in fc_out]
-        log.info(f"Flat-band forecast applied: base={base:.0f}, ceiling={ceiling:.0f}")
-        return fc_out, lo_out, hi_out
+    if n_trade < 28:
+        ceiling = max(recent_max * 1.5, recent * 2.0)
+    elif n_trade < 90:
+        ceiling = max(recent_max * 2.0, stable * 3.0)
+    else:
+        ceiling = stable * 4.0
 
-    # For normal venues: cap at ceiling, ensure CI not wider than 100% of fc
+    # Clamp every day — no day can exceed the ceiling
     fc_out = [min(max(0, v), ceiling) for v in fc]
-    lo_out = [max(0, min(l, f)) for l, f in zip(lo, fc_out)]
-    hi_out = [min(ceiling, max(h_v, f)) for h_v, f in zip(hi, fc_out)]
+
+    # Scale CI proportionally if it was clamped
+    lo_out, hi_out = [], []
+    for i, (f_orig, f_new, l, hv) in enumerate(zip(fc, fc_out, lo, hi)):
+        scale = (f_new / f_orig) if f_orig > 0 else 1.0
+        lo_out.append(max(0, l * scale))
+        hi_out.append(min(ceiling, hv * scale))
+
+    n_clamped = sum(1 for a, b in zip(fc, fc_out) if abs(a-b) > 1)
+    if n_clamped:
+        log.info(f"Clamped {n_clamped}/{h} forecast days to ceiling={ceiling:.0f} (recent_max={recent_max:.0f})")
 
     return fc_out, lo_out, hi_out
 
@@ -301,13 +344,30 @@ def run_prophet(dates, values, h, holiday_dates=None, weather_map=None):
     # Analyse venue history for patchy/new venue detection
     analysis = analyse_venue_history(dates, values)
     n_days   = analysis["n_days"]
-    params   = prophet_params_for_history(n_days, analysis)
 
     log.info(
-        f"Prophet config: {n_days}d history, {analysis['n_trading']} trading days, "
-        f"patchiness={analysis['patchiness']:.0%}, patchy={analysis['is_patchy']}, "
-        f"stable_mean={analysis['stable_mean']:.0f}, "
-        f"changepoint_prior={params['changepoint_prior_scale']}, yearly={params['yearly_seasonality']}"
+        f"Venue analysis: {n_days}d history, {analysis['n_trading']} trading days, "
+        f"patchiness={analysis['patchiness']:.0%}, bypass_prophet={analysis['bypass_prophet']}, "
+        f"stable_mean={analysis['stable_mean']:.0f}, recent_max={analysis['recent_max']:.0f}"
+    )
+
+    # For very new venues (<21 trading days) bypass Prophet entirely.
+    # Prophet on <21 days will extrapolate the opening ramp exponentially.
+    # Use DOW-weighted flat forecast instead — much more reliable.
+    if analysis["bypass_prophet"]:
+        log.info(f"Bypassing Prophet — using DOW-flat forecast for new venue ({analysis['n_trading']} trading days)")
+        fi = [mean([v for v in values if v > 0] or [0])] * n_days  # flat fitted line
+        fc, lo, hi = dow_flat_forecast(dates, analysis, h, dates[-1])
+        # Compute RMSE vs flat mean
+        flat = mean([v for v in values if v > 0] or [0])
+        rmse = math.sqrt(mean([(v - flat)**2 for v in values]))
+        comps = {}
+        raise _BypassProphet(fi, fc, lo, hi, rmse, comps)
+
+    params = prophet_params_for_history(n_days, analysis)
+    log.info(
+        f"Prophet config: changepoint_prior={params['changepoint_prior_scale']}, "
+        f"yearly={params['yearly_seasonality']}, n_changepoints={params['n_changepoints']}"
     )
 
     m = Prophet(
@@ -362,6 +422,15 @@ def run_prophet(dates, values, h, holiday_dates=None, weather_map=None):
     return fi, fc, lo, hi, rmse, comps
 
 
+def _run_prophet_safe(dates, values, h, holiday_dates=None, weather_map=None):
+    """Wrapper that catches _BypassProphet and returns its values directly."""
+    try:
+        return run_prophet(dates, values, h, holiday_dates=holiday_dates, weather_map=weather_map)
+    except _BypassProphet as bp:
+        log.info(f"DOW-flat bypass returned: {len(bp.fc)} forecast days, max={max(bp.fc):.0f}")
+        return bp.fi, bp.fc, bp.lo, bp.hi, bp.rmse, bp.comps
+
+
 # ── /forecast ──────────────────────────────────────────────────────────────────
 
 @app.route("/forecast", methods=["POST"])
@@ -388,7 +457,7 @@ def forecast():
 
         # 1 ── Prophet
         try:
-            fi, fc, lo, hi, rmse, comps = run_prophet(
+            fi, fc, lo, hi, rmse, comps = _run_prophet_safe(
                 dates, values, h,
                 holiday_dates=holiday_dates,
                 weather_map=weather_map)
@@ -504,7 +573,7 @@ def forecast_multi():
             rmse = 0.0; model_used = None; comps = {}; warns = []
 
             try:
-                fi, fc, lo, hi, rmse, comps = run_prophet(dates, values, h, holiday_dates=holiday_dates, weather_map=weather_map)
+                fi, fc, lo, hi, rmse, comps = _run_prophet_safe(dates, values, h, holiday_dates=holiday_dates, weather_map=weather_map)
                 model_used = "Prophet" + (f" ({len(dates)}d)" if len(dates) < 365 else "")
             except ImportError:
                 warns.append("Prophet not installed")
