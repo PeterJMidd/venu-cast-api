@@ -136,50 +136,41 @@ def run_sarima(dates, values, h):
 
 # ── PROPHET ────────────────────────────────────────────────────────────────────
 
-# No trim needed — CSV only contains rows for active trading days
-
-
-def prophet_params_for_history(n_days):
+def trim_leading_zeros(dates, values, zero_threshold=0.05, min_active_days=30):
     """
-    Dynamically tune Prophet based on how much history a venue has.
-    Short history venues get simpler models to avoid overfitting the ramp-up.
+    Remove the leading zero/near-zero period from a new venue's history.
+    Only trains Prophet on the active trading period.
+    
+    zero_threshold: values below this fraction of the mean are treated as 'inactive'
+    min_active_days: minimum days of active trading needed to use trimmed data
     """
-    if n_days < 60:
-        # Very new venue: minimal model, no seasonality detection
-        return dict(
-            yearly_seasonality   = False,
-            weekly_seasonality   = True,
-            changepoint_prior_scale = 0.001,  # almost flat trend
-            seasonality_prior_scale = 1,
-            n_changepoints       = 2,
-        )
-    elif n_days < 180:
-        # New venue: conservative trend, weekly only
-        return dict(
-            yearly_seasonality   = False,
-            weekly_seasonality   = True,
-            changepoint_prior_scale = 0.01,
-            seasonality_prior_scale = 5,
-            n_changepoints       = 5,
-        )
-    elif n_days < 365:
-        # Growing venue: moderate flexibility, no full yearly cycle yet
-        return dict(
-            yearly_seasonality   = False,
-            weekly_seasonality   = True,
-            changepoint_prior_scale = 0.03,
-            seasonality_prior_scale = 8,
-            n_changepoints       = 10,
-        )
-    else:
-        # Mature venue: full model with yearly seasonality
-        return dict(
-            yearly_seasonality   = True,
-            weekly_seasonality   = True,
-            changepoint_prior_scale = 0.05,
-            seasonality_prior_scale = 10,
-            n_changepoints       = 25,
-        )
+    if not values or len(values) < min_active_days:
+        return dates, values, False
+
+    mean_val = mean([v for v in values if v > 0]) or 1
+    threshold = mean_val * zero_threshold
+
+    # Find the first sustained active period (5+ consecutive non-zero days)
+    window = 5
+    trim_idx = 0
+    for i in range(len(values) - window):
+        active = sum(1 for v in values[i:i+window] if v > threshold)
+        if active >= window - 1:  # allow 1 zero in window
+            trim_idx = i
+            break
+
+    # Only trim if we're removing a meaningful zero prefix
+    if trim_idx < 7:
+        return dates, values, False
+
+    trimmed_dates  = dates[trim_idx:]
+    trimmed_values = values[trim_idx:]
+
+    if len(trimmed_dates) < min_active_days:
+        return dates, values, False  # not enough active data, use full series
+
+    log.info(f"Trimmed {trim_idx} leading low-activity days (venue likely new/reopened)")
+    return trimmed_dates, trimmed_values, True
 
 
 def run_prophet(dates, values, h, holiday_dates=None, weather_map=None):
@@ -198,23 +189,16 @@ def run_prophet(dates, values, h, holiday_dates=None, weather_map=None):
             "upper_window": 1,
         })
     use_wx = bool(weather_map)
-
-    # Adapt model complexity to venue history length
-    n_days = len(dates)
-    params = prophet_params_for_history(n_days)
-    log.info(f"Prophet config for {n_days} days history: changepoint_prior={params['changepoint_prior_scale']}, yearly={params['yearly_seasonality']}")
-
     m = Prophet(
-        yearly_seasonality      = params["yearly_seasonality"],
-        weekly_seasonality      = params["weekly_seasonality"],
-        daily_seasonality       = False,
-        holidays                = hols_df,
-        changepoint_prior_scale = params["changepoint_prior_scale"],
-        seasonality_prior_scale = params["seasonality_prior_scale"],
+        yearly_seasonality   = True,
+        weekly_seasonality   = True,
+        daily_seasonality    = False,
+        holidays             = hols_df,
+        changepoint_prior_scale = 0.05,
+        seasonality_prior_scale = 10,
         holidays_prior_scale    = 10,
         seasonality_mode        = "multiplicative",
         interval_width          = 0.90,
-        n_changepoints          = params["n_changepoints"],
     )
     if use_wx:
         m.add_regressor("temp_max", standardize=True)
@@ -277,13 +261,20 @@ def forecast():
         comps = {}
         warns = []
 
+        # Trim leading zeros for new/reopened venues
+        train_dates, train_values, was_trimmed = trim_leading_zeros(dates, values)
+        if was_trimmed:
+            warns.append(f"Trimmed leading inactive period — training on {len(train_dates)} active days")
+
         # 1 ── Prophet
         try:
-            fi, fc, lo, hi, rmse, comps = run_prophet(
-                dates, values, h,
+            fi_trim, fc, lo, hi, rmse, comps = run_prophet(
+                train_dates, train_values, h,
                 holiday_dates=holiday_dates,
                 weather_map=weather_map)
-            model_used = "Prophet" + (f" ({len(dates)}d)" if len(dates) < 365 else "")
+            pad = len(dates) - len(fi_trim)
+            fi = [0.0] * pad + fi_trim
+            model_used = "Prophet" + (" (trimmed)" if was_trimmed else "")
         except ImportError:
             warns.append("Prophet not installed — trying SARIMA")
         except Exception as e:
@@ -394,9 +385,17 @@ def forecast_multi():
             fi = fc = lo = hi = []
             rmse = 0.0; model_used = None; comps = {}; warns = []
 
+            # Trim leading zeros for new/reopened venues before training
+            train_dates, train_values, was_trimmed = trim_leading_zeros(dates, values)
+            if was_trimmed:
+                warns.append(f"Trimmed leading inactive period — training on {len(train_dates)} active days")
+                log.info(f"[{name}] Training on {len(train_dates)} of {len(dates)} days (trimmed leading zeros)")
+
             try:
-                fi, fc, lo, hi, rmse, comps = run_prophet(dates, values, h, holiday_dates=holiday_dates, weather_map=weather_map)
-                model_used = "Prophet" + (f" ({len(dates)}d)" if len(dates) < 365 else "")
+                fi_trim, fc, lo, hi, rmse, comps = run_prophet(train_dates, train_values, h, holiday_dates=holiday_dates, weather_map=weather_map)
+                pad = len(dates) - len(fi_trim)
+                fi = [0.0] * pad + fi_trim
+                model_used = "Prophet" + (" (trimmed)" if was_trimmed else "")
             except ImportError:
                 warns.append("Prophet not installed")
             except Exception as e:
