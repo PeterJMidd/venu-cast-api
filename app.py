@@ -139,47 +139,146 @@ def run_sarima(dates, values, h):
 # No trim needed — CSV only contains rows for active trading days
 
 
-def prophet_params_for_history(n_days):
+def analyse_venue_history(dates, values):
     """
-    Dynamically tune Prophet based on how much history a venue has.
-    Short history venues get simpler models to avoid overfitting the ramp-up.
+    Analyse a venue's trading history to detect:
+    - n_days: calendar days of history
+    - n_trading: actual trading days with sales
+    - patchiness: fraction of days with no sales (0=consistent, 1=all gaps)
+    - consistency_score: how consistent the non-zero days are (CoV-based)
+    - stable_mean: robust average of consistent trading days (median of non-zero)
+    - recent_mean: mean of last 28 days of non-zero sales
+    - is_patchy: True if venue has large gaps or very few trading days
     """
-    if n_days < 60:
-        # Very new venue: minimal model, no seasonality detection
+    n_days = len(dates)
+    non_zero = [v for v in values if v > 0]
+    n_trading = len(non_zero)
+
+    if not non_zero:
+        return dict(n_days=n_days, n_trading=0, patchiness=1.0,
+                    consistency_score=0, stable_mean=0, recent_mean=0,
+                    is_patchy=True, use_flat_forecast=True)
+
+    patchiness = 1 - (n_trading / n_days) if n_days > 0 else 0
+
+    # Coefficient of variation of non-zero days
+    m = mean(non_zero)
+    s = stdev(non_zero)
+    cov = s / m if m > 0 else 0
+
+    # Stable mean = median of non-zero values (robust to outlier opening days)
+    sorted_nz = sorted(non_zero)
+    mid = len(sorted_nz) // 2
+    stable_mean = (sorted_nz[mid-1] + sorted_nz[mid]) / 2 if len(sorted_nz) % 2 == 0 else sorted_nz[mid]
+
+    # Recent mean = last 28 trading days
+    recent_nz = [v for d, v in zip(dates[-56:], values[-56:]) if v > 0][-28:]
+    recent_mean = mean(recent_nz) if recent_nz else stable_mean
+
+    # Patchy = more than 30% gaps OR fewer than 21 trading days
+    is_patchy = patchiness > 0.30 or n_trading < 21
+
+    # Use flat forecast if very new or very patchy
+    use_flat_forecast = n_trading < 14 or (is_patchy and n_trading < 28)
+
+    return dict(
+        n_days=n_days, n_trading=n_trading, patchiness=patchiness,
+        cov=cov, stable_mean=stable_mean, recent_mean=recent_mean,
+        is_patchy=is_patchy, use_flat_forecast=use_flat_forecast
+    )
+
+
+def prophet_params_for_history(n_days, analysis=None):
+    """
+    Dynamically tune Prophet based on history length and trading consistency.
+    Patchy/new venues get very conservative flat-trend models.
+    """
+    is_patchy = analysis.get("is_patchy", False) if analysis else False
+
+    if n_days < 30 or (analysis and analysis["n_trading"] < 14):
+        # Too little data for Prophet to learn anything useful
         return dict(
-            yearly_seasonality   = False,
-            weekly_seasonality   = True,
-            changepoint_prior_scale = 0.001,  # almost flat trend
+            yearly_seasonality      = False,
+            weekly_seasonality      = False,
+            changepoint_prior_scale = 0.0001,
+            seasonality_prior_scale = 0.1,
+            n_changepoints          = 0,
+        )
+    elif n_days < 60 or is_patchy:
+        # Very new or patchy: near-flat trend, weekly cycle only
+        return dict(
+            yearly_seasonality      = False,
+            weekly_seasonality      = True,
+            changepoint_prior_scale = 0.001,
             seasonality_prior_scale = 1,
-            n_changepoints       = 2,
+            n_changepoints          = 2,
         )
     elif n_days < 180:
-        # New venue: conservative trend, weekly only
+        # New venue: conservative trend
         return dict(
-            yearly_seasonality   = False,
-            weekly_seasonality   = True,
+            yearly_seasonality      = False,
+            weekly_seasonality      = True,
             changepoint_prior_scale = 0.01,
             seasonality_prior_scale = 5,
-            n_changepoints       = 5,
+            n_changepoints          = 5,
         )
     elif n_days < 365:
-        # Growing venue: moderate flexibility, no full yearly cycle yet
+        # Growing venue: moderate, no full yearly cycle yet
         return dict(
-            yearly_seasonality   = False,
-            weekly_seasonality   = True,
+            yearly_seasonality      = False,
+            weekly_seasonality      = True,
             changepoint_prior_scale = 0.03,
             seasonality_prior_scale = 8,
-            n_changepoints       = 10,
+            n_changepoints          = 10,
         )
     else:
-        # Mature venue: full model with yearly seasonality
+        # Mature venue: full model
         return dict(
-            yearly_seasonality   = True,
-            weekly_seasonality   = True,
+            yearly_seasonality      = True,
+            weekly_seasonality      = True,
             changepoint_prior_scale = 0.05,
             seasonality_prior_scale = 10,
-            n_changepoints       = 25,
+            n_changepoints          = 25,
         )
+
+
+def sanitise_forecast(fc, lo, hi, analysis, h):
+    """
+    Apply sanity caps to prevent a forecast running above a normal range.
+
+    Rules:
+    1. No daily forecast value > 3x the venue's stable_mean (absolute cap)
+    2. For patchy/new venues, clamp to a flat band around recent_mean
+    3. CI band cannot exceed 2x the forecast value
+    4. No negative values
+    """
+    stable   = analysis["stable_mean"]
+    recent   = analysis["recent_mean"]
+    is_patch = analysis["is_patchy"]
+    n_trade  = analysis["n_trading"]
+
+    if stable <= 0:
+        return [0.0]*h, [0.0]*h, [0.0]*h
+
+    # Absolute ceiling: 3x stable mean for mature, 2x for patchy/new
+    ceiling = stable * (2.0 if (is_patch or n_trade < 60) else 3.0)
+
+    # For very new / patchy venues, anchor to a flat band around recent mean
+    # Allow ±40% variation around recent mean
+    if analysis["use_flat_forecast"]:
+        base   = recent if recent > 0 else stable
+        fc_out = [min(max(base * 0.6, v), base * 1.4) for v in fc]
+        lo_out = [max(0, v * 0.75) for v in fc_out]
+        hi_out = [min(ceiling, v * 1.25) for v in fc_out]
+        log.info(f"Flat-band forecast applied: base={base:.0f}, ceiling={ceiling:.0f}")
+        return fc_out, lo_out, hi_out
+
+    # For normal venues: cap at ceiling, ensure CI not wider than 100% of fc
+    fc_out = [min(max(0, v), ceiling) for v in fc]
+    lo_out = [max(0, min(l, f)) for l, f in zip(lo, fc_out)]
+    hi_out = [min(ceiling, max(h_v, f)) for h_v, f in zip(hi, fc_out)]
+
+    return fc_out, lo_out, hi_out
 
 
 def run_prophet(dates, values, h, holiday_dates=None, weather_map=None):
@@ -199,10 +298,17 @@ def run_prophet(dates, values, h, holiday_dates=None, weather_map=None):
         })
     use_wx = bool(weather_map)
 
-    # Adapt model complexity to venue history length
-    n_days = len(dates)
-    params = prophet_params_for_history(n_days)
-    log.info(f"Prophet config for {n_days} days history: changepoint_prior={params['changepoint_prior_scale']}, yearly={params['yearly_seasonality']}")
+    # Analyse venue history for patchy/new venue detection
+    analysis = analyse_venue_history(dates, values)
+    n_days   = analysis["n_days"]
+    params   = prophet_params_for_history(n_days, analysis)
+
+    log.info(
+        f"Prophet config: {n_days}d history, {analysis['n_trading']} trading days, "
+        f"patchiness={analysis['patchiness']:.0%}, patchy={analysis['is_patchy']}, "
+        f"stable_mean={analysis['stable_mean']:.0f}, "
+        f"changepoint_prior={params['changepoint_prior_scale']}, yearly={params['yearly_seasonality']}"
+    )
 
     m = Prophet(
         yearly_seasonality      = params["yearly_seasonality"],
@@ -241,6 +347,9 @@ def run_prophet(dates, values, h, holiday_dates=None, weather_map=None):
     resid = [v - f for v, f in zip(values, fi)]
     rmse  = math.sqrt(sum(r ** 2 for r in resid) / len(resid)) if resid else 0
 
+    # Apply sanity caps — prevent forecasts running above normal range
+    fc, lo, hi = sanitise_forecast(fc, lo, hi, analysis, h)
+
     # Components
     comps = {}
     for col in ["trend", "weekly", "yearly", "holidays"]:
@@ -249,7 +358,7 @@ def run_prophet(dates, values, h, holiday_dates=None, weather_map=None):
                 "hist":     [safe(v) for v in fc_df[col].iloc[:n].tolist()],
                 "forecast": [safe(v) for v in fc_df[col].iloc[n:].tolist()],
             }
-    log.info(f"Prophet OK  RMSE={rmse:.2f}")
+    log.info(f"Prophet OK  RMSE={rmse:.2f}  stable_mean={analysis['stable_mean']:.0f}  patchy={analysis['is_patchy']}")
     return fi, fc, lo, hi, rmse, comps
 
 
@@ -412,6 +521,9 @@ def forecast_multi():
                 M = 7
                 a, b, g = optim_hw(values, M)
                 fi, fc, lo, hi, rmse = hw_forecast(values, M, a, b, g, h)
+                # Apply sanity caps to HW fallback too
+                analysis_hw = analyse_venue_history(dates, values)
+                fc, lo, hi = sanitise_forecast(fc, lo, hi, analysis_hw, h)
                 model_used = f"Holt-Winters (a={a:.2f} b={b:.2f} g={g:.2f})"
                 warns.append("Using Holt-Winters fallback")
             mv = mean(values) or 1
