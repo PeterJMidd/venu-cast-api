@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Venu Cast - Enhanced Forecasting Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+        
+        .nav-tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            background: #f5f5f5;
+        }
+        
+        .nav-tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1em;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s;
+        }
+        
+        .nav-tab.active {
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            background: white;
+        }
+        
+        .nav-tab:hover {
+            background: #ececec;
+        }
+        
+        .content {
+            display: none;
+            padding: 30px;
+        }
+        
+        .content.active {
+            display: block;
+        }
+        
+        .upload-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f9f9f9;
+        }
+        
+        .upload-section:hover {
+            background: #f0f0ff;
+            border-color: #764ba2;
+        }
+        
+        .upload-section.loaded {
+            border: 2px solid #4caf50;
+            background: #f1f8f4;
+        }
+        
+        .upload-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            overflow-x: auto;
+        }
+        
+        .upload-tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            background: #f5f5f5;
+            border-radius: 8px 8px 0 0;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: all 0.3s;
+        }
+        
+        .upload-tab.active {
+            background: white;
+            border-bottom: 2px solid #667eea;
+            color: #667eea;
+        }
+        
+        .upload-tab.loaded {
+            color: #4caf50;
+        }
+        
+        .upload-content {
+            display: none;
+        }
+        
+        .upload-content.active {
+            display: block;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        button {
+            padding: 12px 24px;
+            margin: 10px 5px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102,126,234,0.4);
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .status-message {
+            margin: 15px 0;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        
+        .status-message.success {
+            display: block;
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #4caf50;
+        }
+        
+        .status-message.error {
+            display: block;
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #f44336;
+        }
+        
+        .status-message.info {
+            display: block;
+            background: #d1ecf1;
+            color: #0c5460;
+            border-left: 4px solid #17a2b8;
+        }
+        
+        .data-summary {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .summary-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .summary-item:last-child {
+            border-bottom: none;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin: 30px 0;
+        }
+        
+        .enhancement-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin: 5px 5px 5px 0;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-tab {
+                font-size: 0.9em;
+                padding: 10px 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Venu Cast</h1>
+            <p>Enhanced Forecasting System with 7 Advanced Analytics</p>
+        </div>
+        
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('upload')">📤 Upload Data</button>
+            <button class="nav-tab" onclick="switchTab('forecast')">📊 Forecast</button>
+            <button class="nav-tab" onclick="switchTab('enhancements')">⚙️ Enhancements</button>
+            <button class="nav-tab" onclick="switchTab('summary')">📋 Summary</button>
+        </div>
+        
+        <!-- UPLOAD TAB -->
+        <div id="upload" class="content active">
+            <h2>Upload Data Files</h2>
+            <p style="margin: 15px 0; color: #666;">Upload all 6 required data files for complete forecasting with all 7 enhancements.</p>
+            
+            <div class="upload-tabs">
+                <button class="upload-tab active" onclick="switchUploadTab(0)">📄 Sales History</button>
+                <button class="upload-tab" onclick="switchUploadTab(1)">📈 Monthly Multipliers</button>
+                <button class="upload-tab" onclick="switchUploadTab(2)">🏢 Venue Details</button>
+                <button class="upload-tab" onclick="switchUploadTab(3)">🗺️ Cluster Data</button>
+                <button class="upload-tab" onclick="switchUploadTab(4)">💰 ATP History</button>
+                <button class="upload-tab" onclick="switchUploadTab(5)">📊 Growth Template</button>
+            </div>
+            
+            <!-- Tab 0: Sales History CSV -->
+            <div class="upload-content active">
+                <h3>Sales History (CSV)</h3>
+                <p>Required columns: date, venue_id, total_sales [, retail_sales, discount_sales]</p>
+                <div class="upload-section" id="upload-area-0" onclick="document.getElementById('file-input-0').click()">
+                    <p style="font-size: 3em; margin-bottom: 10px;">📥</p>
+                    <p>Drag & drop CSV file or click to browse</p>
+                    <p style="font-size: 0.9em; color: #999; margin-top: 10px;">Expected: 01_Sales_History_Template.xlsx</p>
+                </div>
+                <input type="file" id="file-input-0" class="file-input" accept=".csv,.xlsx">
+                <div id="status-0" class="status-message"></div>
+            </div>
+            
+            <!-- Tab 1: Monthly Multipliers CSV -->
+            <div class="upload-content">
+                <h3>Monthly Multipliers (CSV)</h3>
+                <p>Required columns: venue_id, month_1, month_2, ..., month_15</p>
+                <div class="upload-section" id="upload-area-1" onclick="document.getElementById('file-input-1').click()">
+                    <p style="font-size: 3em; margin-bottom: 10px;">📥</p>
+                    <p>Drag & drop CSV file or click to browse</p>
+                    <p style="font-size: 0.9em; color: #999; margin-top: 10px;">Expected: venue_city_mapping_updated_1.csv</p>
+                </div>
+                <input type="file" id="file-input-1" class="file-input" accept=".csv,.xlsx">
+                <div id="status-1" class="status-message"></div>
+            </div>
+            
+            <!-- Tab 2: Venue Details XLSX -->
+            <div class="upload-content">
+                <h3>Venue Details (Excel)</h3>
+                <p>Required columns: venue_id, parent_venue_id, opening_date, ramp_up_schedule</p>
+                <div class="upload-section" id="upload-area-2" onclick="document.getElementById('file-input-2').click()">
+                    <p style="font-size: 3em; margin-bottom: 10px;">📥</p>
+                    <p>Drag & drop Excel file or click to browse</p>
+                    <p style="font-size: 0.9em; color: #999; margin-top: 10px;">Expected: Venue Details.xlsx</p>
+                </div>
+                <input type="file" id="file-input-2" class="file-input" accept=".xlsx,.xls">
+                <div id="status-2" class="status-message"></div>
+            </div>
+            
+            <!-- Tab 3: Cluster Data XLSX -->
+            <div class="upload-content">
+                <h3>Cluster Data (Excel)</h3>
+                <p>Required columns: venue_id, Cat_Cluster, Cat_Cluster_Type</p>
+                <div class="upload-section" id="upload-area-3" onclick="document.getElementById('file-input-3').click()">
+                    <p style="font-size: 3em; margin-bottom: 10px;">📥</p>
+                    <p>Drag & drop Excel file or click to browse</p>
+                    <p style="font-size: 0.9em; color: #999; margin-top: 10px;">Expected: D03_Location_BI.xlsx</p>
+                </div>
+                <input type="file" id="file-input-3" class="file-input" accept=".xlsx,.xls">
+                <div id="status-3" class="status-message"></div>
+            </div>
+            
+            <!-- Tab 4: ATP History XLSX -->
+            <div class="upload-content">
+                <h3>ATP History (Excel)</h3>
+                <p>Required columns: venue_id, date, average_ticket_price</p>
+                <div class="upload-section" id="upload-area-4" onclick="document.getElementById('file-input-4').click()">
+                    <p style="font-size: 3em; margin-bottom: 10px;">📥</p>
+                    <p>Drag & drop Excel file or click to browse</p>
+                    <p style="font-size: 0.9em; color: #999; margin-top: 10px;">Expected: Average ticket history.xlsx</p>
+                </div>
+                <input type="file" id="file-input-4" class="file-input" accept=".xlsx,.xls">
+                <div id="status-4" class="status-message"></div>
+            </div>
+            
+            <!-- Tab 5: Growth Template XLSX -->
+            <div class="upload-content">
+                <h3>Growth Template (Excel)</h3>
+                <p>Required columns: month (1-12), growth_multiplier</p>
+                <div class="upload-section" id="upload-area-5" onclick="document.getElementById('file-input-5').click()">
+                    <p style="font-size: 3em; margin-bottom: 10px;">📥</p>
+                    <p>Drag & drop Excel file or click to browse</p>
+                    <p style="font-size: 0.9em; color: #999; margin-top: 10px;">Expected: GL_May to April 26.xlsx</p>
+                </div>
+                <input type="file" id="file-input-5" class="file-input" accept=".xlsx,.xls">
+                <div id="status-5" class="status-message"></div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px;">
+                <button class="btn-primary" onclick="testApi()">🔗 Test Connection to Render API</button>
+                <button class="btn-primary" onclick="runFullForecast()">🚀 Run Full Forecast</button>
+            </div>
+        </div>
+        
+        <!-- FORECAST TAB -->
+        <div id="forecast" class="content">
+            <h2>Forecast Results</h2>
+            <div id="forecast-content">
+                <p style="color: #999; text-align: center; padding: 40px;">Upload data and run forecast to see results here.</p>
+            </div>
+        </div>
+        
+        <!-- ENHANCEMENTS TAB -->
+        <div id="enhancements" class="content">
+            <h2>7 Advanced Enhancements</h2>
+            <div class="grid-2">
+                <div style="padding: 20px; background: #f5f5f5; border-radius: 8px;">
+                    <h4>🌤️ E1: Weather × Day-of-Week</h4>
+                    <p>Combines weather patterns with weekly behavior</p>
+                </div>
+                <div style="padding: 20px; background: #f5f5f5; border-radius: 8px;">
+                    <h4>📅 E2: Monthly Multipliers</h4>
+                    <p>15-month seasonal cycle forecasting</p>
+                </div>
+                <div style="padding: 20px; background: #f5f5f5; border-radius: 8px;">
+                    <h4>🏗️ E3: Venue Ramp-Up</h4>
+                    <p>New store openings with cannibalization</p>
+                </div>
+                <div style="padding: 20px; background: #f5f5f5; border-radius: 8px;">
+                    <h4>🗺️ E4: Cluster Analysis</h4>
+                    <p>Competitive overlap in dense markets</p>
+                </div>
+                <div style="padding: 20px; background: #f5f5f5; border-radius: 8px;">
+                    <h4>💹 E5: Multi-Component Sales</h4>
+                    <p>Total, retail, and discount separately</p>
+                </div>
+                <div style="padding: 20px; background: #f5f5f5; border-radius: 8px;">
+                    <h4>💰 E6: ATP Forecasting</h4>
+                    <p>Average ticket price with growth templates</p>
+                </div>
+                <div style="padding: 20px; background: #f5f5f5; border-radius: 8px;">
+                    <h4>👥 E7: Transaction Volume</h4>
+                    <p>Customer count derived from sales ÷ ATP</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- SUMMARY TAB -->
+        <div id="summary" class="content">
+            <h2>Data Summary</h2>
+            <div id="summary-content" class="data-summary">
+                <p style="color: #999; text-align: center; padding: 20px;">Upload data to see summary here.</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Global data storage
+        var AR = [];           // Sales History Array
+        var MM = {};           // Monthly Multipliers Map
+        var VD = {};           // Venue Details Map
+        var CD = {};           // Cluster Data Map
+        var AH = [];           // ATP History Array
+        var GT = {};           // Growth Template Map
+        var LOADED = [false, false, false, false, false, false];
+        
+        // Tab switching
+        function switchTab(tab) {
+            document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(tab).classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        function switchUploadTab(idx) {
+            document.querySelectorAll('.upload-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.upload-tab').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.upload-content')[idx].classList.add('active');
+            document.querySelectorAll('.upload-tab')[idx].classList.add('active');
+        }
+        
+        // File input handlers
+        for (let i = 0; i < 6; i++) {
+            let input = document.getElementById('file-input-' + i);
+            let area = document.getElementById('upload-area-' + i);
+            
+            input.addEventListener('change', (e) => handleFileInput(e.target, i));
+            
+            area.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                area.style.background = '#e3f2fd';
+            });
+            
+            area.addEventListener('dragleave', () => {
+                area.style.background = '#f9f9f9';
+            });
+            
+            area.addEventListener('drop', (e) => {
+                e.preventDefault();
+                area.style.background = '#f9f9f9';
+                if (e.dataTransfer.files.length > 0) {
+                    input.files = e.dataTransfer.files;
+                    handleFileInput(input, i);
+                }
+            });
+        }
+        
+        function handleFileInput(input, tabIdx) {
+            if (!input.files || input.files.length === 0) return;
+            
+            let file = input.files[0];
+            let reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    if (file.name.endsWith('.csv')) {
+                        // Parse CSV
+                        let txt = e.target.result;
+                        parseAndStoreFile(txt, tabIdx, file.name);
+                    } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                        // Parse Excel with SheetJS
+                        let arr = new Uint8Array(e.target.result);
+                        let workbook = XLSX.read(arr, {type: 'array'});
+                        let sheetName = workbook.SheetNames[0];
+                        let data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                        parseAndStoreFile(data, tabIdx, file.name, true);
+                    }
+                } catch (err) {
+                    showStatus(tabIdx, 'error', 'Error parsing file: ' + err.message);
+                }
+            };
+            
+            if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                reader.readAsArrayBuffer(file);
+            } else {
+                reader.readAsText(file);
+            }
+        }
+        
+        function parseCSV(txt) {
+            let lines = txt.trim().split(/\r?\n/).filter(l => l.trim());
+            if (lines.length < 2) return [];
+            
+            let headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            let data = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                let values = lines[i].split(',').map(v => v.trim());
+                let row = {};
+                headers.forEach((h, idx) => {
+                    row[h] = values[idx];
+                });
+                data.push(row);
+            }
+            
+            return data;
+        }
+        
+        function parseDate(dateStr) {
+            if (!dateStr) return null;
+            let d = new Date(dateStr);
+            if (isNaN(d.getTime())) {
+                let parts = dateStr.split(/[-\/]/);
+                if (parts.length === 3) {
+                    d = new Date(parts[0], parts[1]-1, parts[2]);
+                }
+            }
+            return d.toISOString().split('T')[0];
+        }
+        
+        function parseAndStoreFile(data, tabIdx, filename, isJson = false) {
+            let rows = isJson ? data : parseCSV(typeof data === 'string' ? data : JSON.stringify(data));
+            
+            if (!rows || rows.length === 0) {
+                showStatus(tabIdx, 'error', 'No data found in file');
+                return;
+            }
+            
+            // Map headers flexibly
+            let headers = Object.keys(rows[0]).map(h => h.toLowerCase());
+            
+            switch(tabIdx) {
+                case 0: // Sales History
+                    AR = rows.map(r => ({
+                        date: parseDate(r.date || r.Day),
+                        venue_id: r.venue_id || r.Venue || r.Location || r.Store,
+                        total_sales: parseFloat(r.total_sales || r.sales || r.revenue || r.Sales || 0),
+                        retail_sales: parseFloat(r.retail_sales || r.retail || 0),
+                        discount_sales: parseFloat(r.discount_sales || r.discount || r.pos_discounts || 0)
+                    }));
+                    showStatus(tabIdx, 'success', `Loaded ${AR.length} sales records`);
+                    break;
+                
+                case 1: // Monthly Multipliers
+                    MM = {};
+                    rows.forEach(r => {
+                        let vid = r.venue_id || r.Venue;
+                        MM[vid] = {};
+                        for (let i = 1; i <= 15; i++) {
+                            MM[vid][i] = parseFloat(r['month_' + i] || r['Month ' + i] || 1);
+                        }
+                    });
+                    showStatus(tabIdx, 'success', `Loaded multipliers for ${Object.keys(MM).length} venues`);
+                    break;
+                
+                case 2: // Venue Details
+                    VD = {};
+                    rows.forEach(r => {
+                        let vid = r.venue_id || r.Venue;
+                        VD[vid] = {
+                            parent_venue_id: r.parent_venue_id || r['Parent Venue'] || '',
+                            opening_date: parseDate(r.opening_date || r['Opening Date'] || ''),
+                            ramp_up_schedule: r.ramp_up_schedule || r['Ramp Up Schedule'] || ''
+                        };
+                    });
+                    showStatus(tabIdx, 'success', `Loaded details for ${Object.keys(VD).length} venues`);
+                    break;
+                
+                case 3: // Cluster Data
+                    CD = {};
+                    rows.forEach(r => {
+                        let vid = r.venue_id || r.Venue;
+                        CD[vid] = {
+                            cluster: r.cat_cluster || r['Cat_Cluster'] || '',
+                            cluster_type: r.cat_cluster_type || r['Cat_Cluster_Type'] || ''
+                        };
+                    });
+                    showStatus(tabIdx, 'success', `Loaded cluster data for ${Object.keys(CD).length} venues`);
+                    break;
+                
+                case 4: // ATP History
+                    AH = rows.map(r => ({
+                        venue_id: r.venue_id || r.Venue,
+                        date: parseDate(r.date || r.Date),
+                        atp: parseFloat(r.average_ticket_price || r['Average Ticket Price'] || r.ATP || 0)
+                    }));
+                    showStatus(tabIdx, 'success', `Loaded ${AH.length} ATP records`);
+                    break;
+                
+                case 5: // Growth Template
+                    GT = {};
+                    rows.forEach(r => {
+                        let month = parseInt(r.month || r.Month || 0);
+                        GT[month] = parseFloat(r.growth_multiplier || r['Growth Multiplier'] || 1);
+                    });
+                    showStatus(tabIdx, 'success', `Loaded growth template for ${Object.keys(GT).length} months`);
+                    break;
+            }
+            
+            LOADED[tabIdx] = true;
+            document.getElementById('upload-area-' + tabIdx).classList.add('loaded');
+            document.querySelectorAll('.upload-tab')[tabIdx].classList.add('loaded');
+            updateSummary();
+        }
+        
+        function showStatus(tabIdx, type, msg) {
+            let el = document.getElementById('status-' + tabIdx);
+            el.className = 'status-message ' + type;
+            el.textContent = msg;
+        }
+        
+        function updateSummary() {
+            let html = '<h3>Loaded Data Files</h3>';
+            const names = ['Sales History', 'Monthly Multipliers', 'Venue Details', 'Cluster Data', 'ATP History', 'Growth Template'];
+            
+            names.forEach((name, i) => {
+                let status = LOADED[i] ? '✓' : '✗';
+                let color = LOADED[i] ? '#4caf50' : '#999';
+                html += `<div class="summary-item"><span style="color: ${color}; font-weight: bold;">${status}</span> ${name}</div>`;
+            });
+            
+            document.getElementById('summary-content').innerHTML = html;
+        }
+        
+        function testApi() {
+            let status = document.getElementById('status-0');
+            status.className = 'status-message info';
+            status.textContent = 'Testing connection...';
+            
+            fetch('https://venu-cast-api-1.onrender.com/health')
+                .then(r => r.json())
+                .then(d => {
+                    status.className = 'status-message success';
+                    status.textContent = '✓ Connected to Render API: ' + JSON.stringify(d);
+                })
+                .catch(e => {
+                    status.className = 'status-message error';
+                    status.textContent = '✗ Connection failed: ' + e.message;
+                });
+        }
+        
+        function runFullForecast() {
+            if (AR.length === 0) {
+                alert('Please load Sales History first');
+                return;
+            }
+            
+            let status = document.getElementById('status-0');
+            status.className = 'status-message info';
+            status.textContent = 'Running forecast...';
+            
+            // Prepare forecast request
+            let req = {
+                dates: AR.map(r => r.date),
+                values: AR.map(r => r.total_sales),
+                forecast_days: 30
+            };
+            
+            if (AR.some(r => r.retail_sales > 0)) {
+                req.retail_values = AR.map(r => r.retail_sales);
+                req.discount_values = AR.map(r => r.discount_sales);
+            }
+            
+            if (Object.keys(MM).length > 0) {
+                req.monthly_multipliers = MM;
+                req.venue_id = AR[0].venue_id;
+            }
+            
+            if (Object.keys(VD).length > 0) {
+                req.venue_details = VD;
+            }
+            
+            if (Object.keys(CD).length > 0) {
+                req.cluster_data = CD;
+            }
+            
+            if (AH.length > 0) {
+                req.atp_history = AH.map(r => r.atp);
+                req.atp_dates = AH.map(r => r.date);
+            }
+            
+            if (Object.keys(GT).length > 0) {
+                req.atp_growth_overrides = GT;
+            }
+            
+            fetch('https://venu-cast-api-1.onrender.com/forecast', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(req)
+            })
+            .then(r => r.json())
+            .then(result => {
+                status.className = 'status-message success';
+                status.textContent = '✓ Forecast complete: ' + result.model + ' (RMSE: ' + result.rmse.toFixed(2) + ')';
+                renderForecast(result);
+            })
+            .catch(e => {
+                status.className = 'status-message error';
+                status.textContent = '✗ Forecast failed: ' + e.message;
+                console.error(e);
+            });
+        }
+        
+        function renderForecast(result) {
+            let html = `
+                <div style="padding: 20px;">
+                    <h3>Forecast Results</h3>
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <p><strong>Model:</strong> ${result.model}</p>
+                        <p><strong>RMSE:</strong> ${result.rmse.toFixed(2)}</p>
+                        <p><strong>CV:</strong> ${(result.cv || 0).toFixed(3)}</p>
+                        <p><strong>Forecast Days:</strong> ${result.forecast.length}</p>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <canvas id="forecast-chart"></canvas>
+                    </div>
+                    
+                    ${result.monthly_multipliers ? '<p style="color: #667eea;"><strong>✓ E2 Enhancement:</strong> Monthly Multipliers Applied</p>' : ''}
+                    ${result.components_forecast ? '<p style="color: #667eea;"><strong>✓ E5 Enhancement:</strong> Multi-Component Sales Forecast</p>' : ''}
+                    ${result.atp_forecast ? '<p style="color: #667eea;"><strong>✓ E6 Enhancement:</strong> ATP Forecast Included</p>' : ''}
+                    ${result.transaction_forecast ? '<p style="color: #667eea;"><strong>✓ E7 Enhancement:</strong> Transaction Volume Derived</p>' : ''}
+                </div>
+            `;
+            
+            document.getElementById('forecast-content').innerHTML = html;
+            
+            // Draw chart
+            setTimeout(() => {
+                let ctx = document.getElementById('forecast-chart');
+                if (ctx) {
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: result.forecast_dates || Array.from({length: result.forecast.length}, (_,i) => 'Day ' + (i+1)),
+                            datasets: [
+                                {
+                                    label: 'Forecast',
+                                    data: result.forecast,
+                                    borderColor: '#667eea',
+                                    backgroundColor: 'rgba(102,126,234,0.1)',
+                                    borderWidth: 2,
+                                    tension: 0.4
+                                },
+                                {
+                                    label: '90% Lower',
+                                    data: result.lower_90,
+                                    borderColor: '#999',
+                                    borderDash: [5,5],
+                                    borderWidth: 1,
+                                    fill: false
+                                },
+                                {
+                                    label: '90% Upper',
+                                    data: result.upper_90,
+                                    borderColor: '#999',
+                                    borderDash: [5,5],
+                                    borderWidth: 1,
+                                    fill: false
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: false
+                                }
+                            }
+                        }
+                    });
+                }
+            }, 100);
+            
+            // Switch to forecast tab
+            document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+            document.getElementById('forecast').classList.add('active');
+            document.querySelectorAll('.nav-tab')[1].classList.add('active');
+        }
+        
+        // Initialize
+        updateSummary();
+    </script>
+</body>
+</html>
