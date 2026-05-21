@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Venu Cast — Read-Only Forecast Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; color: #333; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        header { background: rgba(255,255,255,0.97); padding: 28px 30px; border-radius: 12px; margin-bottom: 22px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        header h1 { color: #667eea; font-size: 26px; }
+        header .meta { color: #666; margin-top: 6px; font-size: 13px; line-height: 1.6; }
+        .badge { display: inline-block; background: #eef0ff; color: #667eea; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; }
+        .readonly { background: #fff3e0; color: #e65100; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .section { background: white; padding: 26px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .section h2 { color: #333; margin-bottom: 18px; border-bottom: 3px solid #667eea; padding-bottom: 12px; font-size: 20px; }
+        .section h3 { color: #555; margin: 14px 0 10px; font-size: 16px; }
+        .stats-grid { display: grid; gap: 12px; margin: 14px 0; }
+        .stat-card { background: #f5f7ff; padding: 16px; border-radius: 6px; border-left: 4px solid #667eea; }
+        .stat-card strong { display: block; color: #667eea; font-size: 11px; text-transform: uppercase; margin-bottom: 6px; }
+        .stat-card span { display: block; font-size: 20px; font-weight: bold; }
+        select { padding: 9px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 13px; width: 100%; }
+        label { font-size: 12px; color: #666; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f5f5f5; font-weight: 600; }
+        tr:hover { background: #fafafa; }
+        .scroll-x { overflow-x: auto; }
+        pre { background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto; max-height: 400px; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Venu Cast — Forecast Review <span class="readonly">READ-ONLY SNAPSHOT</span></h1>
+            <div class="meta" id="metaInfo"></div>
+        </header>
+
+        <!-- SALES DETAIL -->
+        <div class="section">
+            <h2>FY26 vs FY27 — Sales Detail <span class="badge" id="typeBadge">Servings</span></h2>
+
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;align-items:end;">
+                <div><label>Sales Type</label><select id="fSalesType" onchange="renderAll()"></select></div>
+                <div><label>State</label><select id="fState" onchange="renderAll()"></select></div>
+                <div><label>Cluster</label><select id="fCluster" onchange="renderAll()"></select></div>
+                <div><label>Store Cohort</label><select id="fCohort" onchange="renderAll()"></select></div>
+                <div><label>Venue</label><select id="fVenue" onchange="renderAll()"></select></div>
+            </div>
+
+            <div class="stats-grid" id="kpiGrid" style="grid-template-columns:repeat(5,1fr);"></div>
+            <div id="attribBox"></div>
+
+            <div style="background:#fafbff;border-radius:8px;padding:18px;margin-top:14px;">
+                <h3>Monthly Sales Comparison (Jul → Jun)</h3>
+                <div style="position:relative;height:380px;">
+                    <canvas id="salesChart"></canvas>
+                </div>
+            </div>
+
+            <h3 style="margin-top:18px;">📅 Public Holidays &amp; ⚠️ Extreme Weather — FY26 vs FY27</h3>
+            <div class="scroll-x"><table id="eventsTable"><thead><tr id="eventsHeaderRow"></tr></thead><tbody></tbody></table></div>
+
+            <h3 style="margin-top:18px;">Monthly Detail</h3>
+            <div class="scroll-x">
+                <table id="monthlyTable">
+                    <thead><tr><th>Month</th><th>FY26</th><th>FY27</th><th>Growth %</th><th>LFL FY26</th><th>LFL FY27</th><th>LFL Growth %</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PER VENUE DETAIL -->
+        <div class="section">
+            <h2>🏪 Per-Venue Detail</h2>
+            <div class="scroll-x">
+                <table id="venueDetailTable">
+                    <thead><tr style="background:#f5f5f5;">
+                        <th>State</th><th>Cluster</th><th>Venue</th><th>Cohort</th><th>Open Date</th>
+                        <th style="text-align:right;">FY26 $</th><th style="text-align:right;">FY27 $</th><th style="text-align:right;">Growth %</th>
+                        <th style="text-align:right;">Avg ATP</th><th style="text-align:right;">FY27 Guests</th><th>Model</th><th>Comment</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <footer style="text-align:center;color:rgba(255,255,255,0.85);font-size:12px;margin-top:20px;">
+            Generated by Venu Cast — this is a read-only snapshot. Source data and full interactivity available in the live model.
+        </footer>
+    </div>
+
+    <!-- EMBEDDED SNAPSHOT DATA - injected by exporter -->
+    <script id="snapshotData">__SNAPSHOT_JSON__</script>
+
+    <script>
+        const SNAPSHOT = JSON.parse(document.getElementById('snapshotData').textContent || '{}');
+        let salesChart = null;
+
+        function formatCurrency(v) { return v === null || v === undefined ? '—' : '$' + Math.round(v).toLocaleString(); }
+        function fmtPct(v) { if (v === null || v === undefined) return '—'; const c = v >= 0 ? '#43a047' : '#e53935'; return `<span style="color:${c};font-weight:600;">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`; }
+
+        function init() {
+            const meta = SNAPSHOT.meta || {};
+            document.getElementById('metaInfo').innerHTML =
+                `<strong>${meta.name || 'Forecast'}</strong> · Saved ${meta.saved_at || ''} · ` +
+                `Period: ${meta.forecast_period || ''} · ${meta.venue_count || 0} venues` +
+                (meta.note ? `<br><em>${meta.note}</em>` : '');
+
+            // Populate filters
+            const opts = SNAPSHOT.filter_options || {};
+            const fill = (id, list, allLabel) => {
+                const sel = document.getElementById(id);
+                sel.innerHTML = `<option value="all">${allLabel}</option>` +
+                    (list || []).map(o => `<option value="${o}">${o}</option>`).join('');
+            };
+            fill('fState', opts.states, 'All States');
+            fill('fCluster', opts.clusters, 'All Clusters');
+            fill('fCohort', opts.cohorts, 'All Store Cohorts');
+            fill('fVenue', opts.venues, 'All Venues');
+
+            const sales_types = ['servings', 'retail', 'pos_discounts', 'all'];
+            document.getElementById('fSalesType').innerHTML = sales_types.map(s => {
+                const labels = {servings: 'Servings', retail: 'Retail', pos_discounts: 'POS Discounts', all: 'All Combined (Net)'};
+                return `<option value="${s}">${labels[s]}</option>`;
+            }).join('');
+
+            renderAll();
+        }
+
+        function currentFilterKey() {
+            return [
+                document.getElementById('fSalesType').value,
+                document.getElementById('fState').value,
+                document.getElementById('fCluster').value,
+                document.getElementById('fCohort').value,
+                document.getElementById('fVenue').value,
+            ].join('|');
+        }
+
+        function renderAll() {
+            const key = currentFilterKey();
+            const slice = (SNAPSHOT.sales_detail_by_filter || {})[key];
+            const venues = (SNAPSHOT.venues_detail_by_filter || {})[key];
+            const typeLabels = {servings: 'Servings', retail: 'Retail', pos_discounts: 'POS Discounts', all: 'All Combined (Net)'};
+            document.getElementById('typeBadge').textContent = typeLabels[document.getElementById('fSalesType').value];
+
+            if (!slice) {
+                document.getElementById('kpiGrid').innerHTML =
+                    '<div class="stat-card" style="grid-column:span 5;"><strong>No data</strong><span>This filter combination was not pre-computed in this snapshot.</span></div>';
+                if (salesChart) { salesChart.destroy(); salesChart = null; }
+                document.querySelector('#monthlyTable tbody').innerHTML = '';
+                document.querySelector('#eventsTable tbody').innerHTML = '';
+                document.querySelector('#venueDetailTable tbody').innerHTML = '';
+                return;
+            }
+            renderKpis(slice);
+            renderChart(slice);
+            renderEvents(slice);
+            renderMonthly(slice);
+            renderVenues(venues || []);
+        }
+
+        function renderKpis(slice) {
+            const s = slice.summary;
+            const kpis = [
+                { label: 'FY27 Forecast Sales', value: formatCurrency(s.fy27_forecast) },
+                { label: 'FY26 Comparator', value: formatCurrency(s.fy26_comparator) },
+                { label: 'Total Growth', value: (s.total_growth_pct || 0).toFixed(1) + '%' },
+                { label: 'LFL Growth', value: (s.lfl_growth_pct || 0).toFixed(1) + '%' },
+                { label: 'FY26 Completion FC', value: formatCurrency(s.fy26_completion_forecast) },
+            ];
+            document.getElementById('kpiGrid').innerHTML = kpis.map(k =>
+                `<div class="stat-card"><strong>${k.label}</strong><span style="font-size:17px;">${k.value}</span></div>`
+            ).join('');
+
+            const totalFmt = (v) => v === null || v === undefined ? '—' : v.toFixed(1) + '%';
+            document.getElementById('attribBox').innerHTML = `
+                <div style="background:#f5f7ff;border-left:4px solid #667eea;padding:12px 18px;border-radius:6px;margin-top:12px;font-size:13px;">
+                    <strong style="color:#667eea;">Growth Attribution:</strong><br>
+                    <table style="margin-top:6px;width:100%;font-size:13px;">
+                        <tr><td style="padding:4px 12px 4px 0;">Total (all venues)</td><td style="text-align:right;">Prophet base: <strong>${totalFmt(s.base_growth_pct)}</strong></td><td style="text-align:right;">+ Mult lift: <strong style="color:#43a047;">${totalFmt(s.multiplier_lift_pct)}</strong></td><td style="text-align:right;">= Total: <strong>${totalFmt(s.total_growth_pct)}</strong></td></tr>
+                        <tr><td style="padding:4px 12px 4px 0;">LFL (same-store)</td><td style="text-align:right;">Prophet base: <strong>${totalFmt(s.lfl_base_growth_pct)}</strong></td><td style="text-align:right;">+ Mult lift: <strong style="color:#43a047;">${totalFmt(s.lfl_multiplier_lift_pct)}</strong></td><td style="text-align:right;">= Total: <strong>${totalFmt(s.lfl_growth_pct)}</strong></td></tr>
+                    </table>
+                </div>`;
+        }
+
+        function renderChart(slice) {
+            const monthly = slice.monthly;
+            const labels = monthly.map(m => m.month_label);
+            const fy26 = monthly.map(m => m.fy26_comparator);
+            const fy27 = monthly.map(m => m.fy27_forecast);
+            const growthPct = monthly.map(m => m.growth_pct);
+            const lflGrowth = monthly.map(m => m.lfl_growth_pct);
+
+            if (salesChart) salesChart.destroy();
+            const ctx = document.getElementById('salesChart').getContext('2d');
+            salesChart = new Chart(ctx, {
+                data: {
+                    labels,
+                    datasets: [
+                        { type: 'bar', label: 'FY26 Comparator ($)', data: fy26, backgroundColor: 'rgba(149,165,166,0.7)', yAxisID: 'yLeft' },
+                        { type: 'bar', label: 'FY27 Forecast ($)', data: fy27, backgroundColor: 'rgba(102,126,234,0.85)', yAxisID: 'yLeft' },
+                        { type: 'line', label: 'FY27 % Growth', data: growthPct, borderColor: '#43a047', borderWidth: 2, tension: 0.3, pointRadius: 4, fill: false, yAxisID: 'yRight' },
+                        { type: 'line', label: 'LFL FY27 % Growth', data: lflGrowth, borderColor: '#fb8c00', borderWidth: 2, tension: 0.3, pointRadius: 4, fill: false, yAxisID: 'yRight' },
+                    ],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        tooltip: { callbacks: { label: (c) => {
+                            const v = c.parsed.y; if (v === null || v === undefined) return c.dataset.label + ': —';
+                            if (c.dataset.yAxisID === 'yRight') return c.dataset.label + ': ' + v.toFixed(1) + '%';
+                            return c.dataset.label + ': $' + Math.round(v).toLocaleString();
+                        }}},
+                    },
+                    scales: {
+                        yLeft: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: 'Sales ($)' }, ticks: { callback: v => '$' + (v / 1e6).toFixed(1) + 'M' } },
+                        yRight: { type: 'linear', position: 'right', title: { display: true, text: 'Growth %' }, grid: { drawOnChartArea: false }, ticks: { callback: v => v.toFixed(0) + '%' } },
+                    },
+                },
+            });
+        }
+
+        function renderEvents(slice) {
+            const monthly = slice.monthly;
+            const headerRow = document.getElementById('eventsHeaderRow');
+            headerRow.innerHTML = '<th style="text-align:left;padding:6px 10px;background:#f5f5f5;">FY</th>' +
+                monthly.map(m => `<th style="text-align:center;padding:6px 8px;background:#f5f5f5;min-width:70px;">${m.month_label}</th>`).join('');
+            const tbody = document.querySelector('#eventsTable tbody');
+            const cell = (count, names, kind, fy) => {
+                if (!count) return `<td style="background:#fafafa;color:#bbb;text-align:center;padding:8px;">–</td>`;
+                const tip = (names || []).slice(0, 12).join('\n');
+                const emoji = kind === 'holiday' ? '🎉' : '⚠️';
+                const bg = kind === 'holiday' ? (fy === 26 ? '#fff8e1' : '#fff3cd') : (fy === 26 ? '#ffebee' : '#ffcdd2');
+                const color = kind === 'holiday' ? '#e65100' : '#c62828';
+                return `<td style="background:${bg};text-align:center;padding:8px;font-weight:600;color:${color};" title="${tip.replace(/"/g, '&quot;')}">${emoji} ${count}</td>`;
+            };
+            const exDetail = (d) => (d || []).map(x => `${x.date} — ${x.detail}`);
+            tbody.innerHTML = [
+                { label: 'FY26 Holidays', color: '#e65100', cells: monthly.map(m => cell(m.fy26_holiday_count, m.fy26_holidays, 'holiday', 26)) },
+                { label: 'FY27 Holidays', color: '#e65100', cells: monthly.map(m => cell(m.fy27_holiday_count, m.fy27_holidays, 'holiday', 27)) },
+                { label: 'FY26 Extreme Wx', color: '#c62828', cells: monthly.map(m => cell(m.fy26_extreme_count, exDetail(m.fy26_extreme_detail), 'extreme', 26)) },
+                { label: 'FY27 Extreme Wx', color: '#c62828', cells: monthly.map(m => cell(m.fy27_extreme_count, exDetail(m.fy27_extreme_detail), 'extreme', 27)) },
+            ].map(r => `<tr><td style="font-weight:600;padding:6px 10px;color:${r.color};background:#fafafa;white-space:nowrap;">${r.label}</td>${r.cells.join('')}</tr>`).join('');
+        }
+
+        function renderMonthly(slice) {
+            const tbody = document.querySelector('#monthlyTable tbody');
+            tbody.innerHTML = slice.monthly.map(m => `<tr>
+                <td><strong>${m.month_label}</strong></td>
+                <td>${formatCurrency(m.fy26_comparator)}</td>
+                <td>${formatCurrency(m.fy27_forecast)}</td>
+                <td>${fmtPct(m.growth_pct)}</td>
+                <td>${formatCurrency(m.lfl_fy26)}</td>
+                <td>${formatCurrency(m.lfl_fy27)}</td>
+                <td>${fmtPct(m.lfl_growth_pct)}</td>
+            </tr>`).join('');
+        }
+
+        function renderVenues(rows) {
+            const tbody = document.querySelector('#venueDetailTable tbody');
+            const fmtCohort = (c) => {
+                const colors = {'FY26 Existing': '#667eea', 'FY26 New Opening': '#fb8c00', 'FY27 New Opening': '#43a047', 'Other': '#888'};
+                return `<span style="background:${colors[c] || '#888'};color:white;padding:2px 8px;border-radius:10px;font-size:11px;">${c}</span>`;
+            };
+            let prevState = null, prevCluster = null;
+            tbody.innerHTML = rows.map(v => {
+                let pre = '';
+                if (v.state !== prevState) { pre += `<tr style="background:#eef0ff;"><td colspan="12" style="padding:6px 10px;font-weight:700;color:#667eea;">📍 ${v.state}</td></tr>`; prevState = v.state; prevCluster = null; }
+                if (v.cluster !== prevCluster) { pre += `<tr style="background:#f5f7ff;"><td></td><td colspan="11" style="padding:4px 10px;font-weight:600;color:#5568d3;font-size:11px;">└ ${v.cluster}</td></tr>`; prevCluster = v.cluster; }
+                return pre + `<tr>
+                    <td>${v.state}</td><td>${v.cluster}</td><td><strong>${v.venue}</strong></td>
+                    <td>${fmtCohort(v.cohort)}</td><td>${v.opening_date || '—'}</td>
+                    <td style="text-align:right;">${formatCurrency(v.fy26_forecast)}</td>
+                    <td style="text-align:right;"><strong>${formatCurrency(v.fy27_forecast)}</strong></td>
+                    <td style="text-align:right;">${fmtPct(v.growth_pct)}</td>
+                    <td style="text-align:right;">${formatCurrency(v.avg_atp)}</td>
+                    <td style="text-align:right;">${v.transactions_fy27 ? Math.round(v.transactions_fy27).toLocaleString() : '—'}</td>
+                    <td style="font-size:11px;color:#666;">${v.model}</td>
+                    <td style="font-size:12px;color:#555;line-height:1.4;">${v.comment}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        init();
+    </script>
+</body>
+</html>

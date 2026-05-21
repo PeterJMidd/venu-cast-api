@@ -1,0 +1,2442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Venu Cast — Multi-Venue Forecasting</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; color: #333; }
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        header { background: rgba(255,255,255,0.97); padding: 30px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        header h1 { color: #667eea; font-size: 28px; }
+        header p { color: #666; margin-top: 5px; font-size: 14px; }
+
+        .section { background: white; padding: 28px; border-radius: 12px; margin-bottom: 22px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .section h2 { color: #333; margin-bottom: 20px; border-bottom: 3px solid #667eea; padding-bottom: 12px; font-size: 20px; }
+        .section h3 { color: #555; margin: 16px 0 10px; font-size: 16px; }
+
+        .file-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+        .file-card { border: 2px dashed #d0d4eb; border-radius: 8px; padding: 18px; background: #fafbff; transition: all 0.2s; }
+        .file-card.loaded { border-color: #43a047; background: #f0fff4; }
+        .file-card.error { border-color: #e53935; background: #fff5f5; }
+        .file-card label { display: block; font-weight: 600; color: #333; margin-bottom: 6px; }
+        .file-card small { display: block; color: #888; margin-bottom: 10px; font-size: 12px; line-height: 1.4; }
+        .file-card input[type=file] { width: 100%; padding: 8px; font-size: 13px; }
+        .file-card .file-status { margin-top: 10px; font-size: 13px; font-weight: 600; }
+        .file-card.loaded .file-status { color: #2e7d32; }
+        .file-card.error .file-status { color: #c62828; }
+
+        button { background: #667eea; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.25s; margin-right: 10px; }
+        button:hover:not(:disabled) { background: #5568d3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        button.secondary { background: #95a5a6; }
+        button.secondary:hover:not(:disabled) { background: #7f8c8d; }
+        button.success { background: #43a047; }
+        button.success:hover:not(:disabled) { background: #2e7d32; }
+
+        .status { padding: 14px; margin-bottom: 16px; border-radius: 6px; border-left: 4px solid; display: none; }
+        .status.info { background: #e3f2fd; color: #1565c0; border-color: #1976d2; }
+        .status.success { background: #e8f5e9; color: #2e7d32; border-color: #43a047; }
+        .status.error { background: #ffebee; color: #c62828; border-color: #e53935; }
+        .status.loading { background: #fff3e0; color: #e65100; border-color: #fb8c00; }
+
+        .loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #f3f3f3; border-top: 2px solid currentColor; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px; vertical-align: middle; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f5f5f5; font-weight: 600; }
+        tr:hover { background: #fafafa; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 15px 0; }
+        .stat-card { background: #f5f7ff; padding: 16px; border-radius: 6px; border-left: 4px solid #667eea; }
+        .stat-card strong { display: block; color: #667eea; font-size: 11px; text-transform: uppercase; margin-bottom: 6px; }
+        .stat-card span { display: block; font-size: 20px; font-weight: bold; }
+
+        .atp-growth-table { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; }
+        .atp-growth-table input { width: 60px; padding: 4px; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; text-align: right; }
+
+        .tabs { display: flex; gap: 5px; margin-bottom: 16px; border-bottom: 2px solid #eee; flex-wrap: wrap; }
+        .tab { padding: 10px 18px; cursor: pointer; background: none; border: none; color: #666; font-weight: 600; border-bottom: 3px solid transparent; }
+        .tab.active { color: #667eea; border-bottom-color: #667eea; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        select { padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; width: 100%; max-width: 400px; }
+        input[type=text] { padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; width: 100%; }
+
+        .scroll-x { overflow-x: auto; }
+        pre { background: #f5f5f5; padding: 12px; border-radius: 4px; overflow-x: auto; max-height: 400px; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Venu Cast — Multi-Venue Daily Forecasting</h1>
+            <p>Forecast period: <strong>May 2026 → June 2027</strong> · Engine: Prophet → SARIMA → Holt-Winters · Outputs: Servings sales, Retail sales, POS Discounts, ATP, Transactions</p>
+        </header>
+
+        <!-- SNAPSHOT BAR: save versions / load past versions / export for colleague review -->
+        <div class="section" id="snapshotBar">
+            <h2>💾 Snapshots &amp; Sharing</h2>
+            <div id="snapStatus" class="status"></div>
+
+            <div style="display:grid;grid-template-columns:2fr 3fr 1fr 1fr;gap:12px;align-items:end;">
+                <div>
+                    <label style="font-size:12px;color:#666;font-weight:600;">Snapshot Name</label>
+                    <input type="text" id="snapName" placeholder="e.g. FY27 Base Case" style="padding:10px;border:2px solid #e0e0e0;border-radius:6px;width:100%;">
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;font-weight:600;">Note (optional)</label>
+                    <input type="text" id="snapNote" placeholder="What's different about this version?" style="padding:10px;border:2px solid #e0e0e0;border-radius:6px;width:100%;">
+                </div>
+                <div><button onclick="snapSave()" style="width:100%;">💾 Save Snapshot</button></div>
+                <div><button class="success" onclick="snapExport()" style="width:100%;">📤 Export Read-Only HTML</button></div>
+            </div>
+
+            <div style="margin-top:14px;">
+                <h3 style="font-size:14px;color:#555;margin-bottom:8px;">Saved Versions</h3>
+                <div class="scroll-x">
+                    <table id="snapTable" style="font-size:12px;">
+                        <thead><tr style="background:#f5f5f5;"><th>Name</th><th>Saved</th><th style="text-align:right;">Venues</th><th>Note</th><th style="text-align:right;">Size</th><th>Actions</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 1: UPLOAD TEMPLATES -->
+        <div class="section">
+            <h2>1️⃣ Upload All Templates</h2>
+            <div id="uploadStatus" class="status"></div>
+
+            <div class="file-grid">
+                <div class="file-card" id="card-sales_history">
+                    <label>📈 Sales History (3 tabs)</label>
+                    <small>01_Sales_History_Template.xlsx<br>Tabs: Servings, Retail, POS Discounts (wide format: row=venue, columns=dates)</small>
+                    <input type="file" id="sales_history" accept=".xlsx">
+                    <div class="file-status">Not loaded</div>
+                </div>
+
+                <div class="file-card" id="card-atp_history">
+                    <label>🎫 ATP History</label>
+                    <small>Average ticket history.xlsx<br>Columns: Date, Venue, ATV (average ticket value per venue per day)</small>
+                    <input type="file" id="atp_history" accept=".xlsx">
+                    <div class="file-status">Not loaded</div>
+                </div>
+
+                <div class="file-card" id="card-location_bi">
+                    <label>📍 Location BI (Cluster Info)</label>
+                    <small>D03_Location_BI.xlsx<br>Sheet: D_Locations_ALL · Fields: Cat_Cluster, Cat_Cluster_Type (used for cluster-based interactions)</small>
+                    <input type="file" id="location_bi" accept=".xlsx">
+                    <div class="file-status">Not loaded</div>
+                </div>
+
+                <div class="file-card" id="card-venue_details">
+                    <label>🏪 Venue Details (Ramp / Impact)</label>
+                    <small>Venue Details.xlsx<br>New venues, opening date, ramp-up %, impact venues + monthly impact % (placeholders)</small>
+                    <input type="file" id="venue_details" accept=".xlsx">
+                    <div class="file-status">Not loaded</div>
+                </div>
+
+                <div class="file-card" id="card-multipliers">
+                    <label>🔢 15-Month Multipliers</label>
+                    <small>venue_city_mapping_updated_1.csv<br>Mth 1-15 multipliers per venue (applied on top of data-science forecast)</small>
+                    <input type="file" id="multipliers" accept=".csv">
+                    <div class="file-status">Not loaded</div>
+                </div>
+
+                <div class="file-card" style="background: #f0fff4; border-color: #43a047; border-style: solid;">
+                    <label>🌦️ Weather + Holidays (Auto-loaded)</label>
+                    <small style="line-height:1.5;">
+                        <strong>No upload needed.</strong> After templates are loaded, weather (Open-Meteo) and full state-aware public holidays are auto-fetched per venue state (VIC, NSW, QLD, etc.).<br>
+                        Includes historical data for training + future climatology / future holidays for the forecast window.<br>
+                        View &amp; manage in the <strong>Weather &amp; Holidays</strong> tab below.
+                    </small>
+                    <input type="hidden" id="holidays" value="">
+                </div>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <button onclick="uploadAll()" id="btnUpload">⬆️ Upload All Templates</button>
+                <button class="secondary" onclick="resetSession()">🗑️ Reset Session</button>
+            </div>
+        </div>
+
+        <!-- STEP 2: REVIEW LOADED DATA -->
+        <div class="section" id="reviewSection" style="display:none;">
+            <h2>2️⃣ Review Loaded Data</h2>
+
+            <div class="stats-grid" id="loadStats"></div>
+
+            <div class="tabs">
+                <button class="tab active" onclick="showLoadTab(event, 'venues_loaded')">Venues</button>
+                <button class="tab" onclick="showLoadTab(event, 'atp_growth')">ATP Growth Template</button>
+                <button class="tab" onclick="showLoadTab(event, 'multipliers_view')">Multipliers</button>
+                <button class="tab" onclick="showLoadTab(event, 'cluster_view')">Clusters</button>
+                <button class="tab" onclick="showLoadTab(event, 'weather_view')">Weather &amp; Holidays</button>
+            </div>
+
+            <div id="venues_loaded" class="tab-content active">
+                <p style="margin-bottom:10px;color:#666;">All venues detected across the loaded templates. Forecasts will be generated for venues with sales history.</p>
+                <div class="scroll-x">
+                    <table id="venuesTable">
+                        <thead><tr><th>Venue</th><th>State</th><th>Cluster</th><th>Cluster Type</th><th>Open Status</th><th>Has Multipliers</th><th>Has ATP</th><th>Has Sales</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="atp_growth" class="tab-content">
+                <h3>ATP Monthly Growth Template (Placeholder: 0% per month per venue)</h3>
+                <p style="margin-bottom:10px;color:#666;font-size:13px;">Edit values to apply month-by-month % growth to ATP forecasts. Defaults to 0% (nil) per the spec. Months 1-15 correspond to May 2026 → July 2027.</p>
+                <div style="margin-bottom:10px;">
+                    <button class="secondary" onclick="saveGrowthTemplate()">💾 Save Growth Edits</button>
+                    <button class="secondary" onclick="loadGrowthTemplate()">🔄 Reload</button>
+                </div>
+                <div class="atp-growth-table scroll-x">
+                    <table id="growthTable"></table>
+                </div>
+            </div>
+
+            <div id="multipliers_view" class="tab-content">
+                <h3>15-Month Multipliers by Venue</h3>
+                <div class="scroll-x"><table id="multipliersTable"></table></div>
+            </div>
+
+            <div id="cluster_view" class="tab-content">
+                <h3>Cluster Membership (from D03_Location_BI)</h3>
+                <div class="scroll-x"><table id="clusterTable"></table></div>
+            </div>
+
+            <div id="weather_view" class="tab-content">
+                <h3>State-Based Weather, Public Holidays &amp; School Holidays</h3>
+                <p style="color:#666;margin-bottom:10px;font-size:13px;">
+                    Weather (temp, rainfall, wind) from <strong>Open-Meteo Archive API</strong> using a representative capital city per state.
+                    Future dates beyond today are filled with <strong>seasonal climatology</strong>.
+                    Public holidays from the <strong>holidays</strong> Python package — state-aware.
+                    School holidays from official state Department of Education calendars (2024-2028) split into autumn/winter/spring/summer.
+                    All three are fed into Prophet so it learns separate coefficients for each.
+                </p>
+                <div style="margin-bottom:12px;">
+                    <button onclick="prefetchDataSources()">🌦️ Pre-fetch Weather &amp; Holidays For All States</button>
+                    <button class="secondary" onclick="loadDataSources()">🔄 Refresh View</button>
+                </div>
+                <div id="dataSourceStatus" class="status"></div>
+
+                <h3 style="margin-top:18px;">Weather Coverage</h3>
+                <div class="scroll-x"><table id="weatherTable"></table></div>
+
+                <h3 style="margin-top:18px;">Public Holidays by State</h3>
+                <div class="scroll-x"><table id="holidayTable"></table></div>
+
+                <h3 style="margin-top:18px;">🎒 School Holidays by State (2024-2028)</h3>
+                <p style="color:#666;font-size:12px;margin-bottom:8px;">Total school-holiday DAYS per state, plus first and last published periods (start → end).</p>
+                <div class="scroll-x"><table id="schoolHolidayTable"></table></div>
+
+                <h3 style="margin-top:18px;">State → City Mapping (Weather Anchor)</h3>
+                <div class="scroll-x"><table id="stateCityTable"></table></div>
+            </div>
+        </div>
+
+        <!-- STEP 3: GENERATE FORECASTS -->
+        <div class="section" id="generateSection" style="display:none;">
+            <h2>3️⃣ Generate Forecasts (May 2026 → June 2027)</h2>
+            <div id="generateStatus" class="status"></div>
+
+            <div style="margin-bottom: 15px;">
+                <label style="display:block;font-weight:600;margin-bottom:5px;">Venue Scope</label>
+                <select id="venueScope">
+                    <option value="all">All venues with sales history</option>
+                </select>
+            </div>
+
+            <button class="success" onclick="generate()" id="btnGenerate">🚀 Run Forecasts For All Venues</button>
+        </div>
+
+        <!-- STEP 4: RESULTS -->
+        <div class="section" id="resultsSection" style="display:none;">
+            <h2>4️⃣ Forecast Results</h2>
+
+            <div class="stats-grid" id="resultStats"></div>
+
+            <div class="tabs">
+                <button class="tab active" onclick="showResultTab(event, 'r_summary')">Summary</button>
+                <button class="tab" onclick="showResultTab(event, 'r_venue')">Per Venue</button>
+                <button class="tab" onclick="showResultTab(event, 'r_export')">Export</button>
+            </div>
+
+            <div id="r_summary" class="tab-content active">
+                <h3>Model Distribution</h3>
+                <div id="modelDist"></div>
+                <h3 style="margin-top:20px;">Per-Venue Summary</h3>
+                <div class="scroll-x">
+                    <table id="venueSummaryTable">
+                        <thead><tr><th>Venue</th><th>Model</th><th>RMSE</th><th>Total Servings Sales</th><th>Total Transactions</th><th>Avg ATP</th><th>Cluster</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="r_venue" class="tab-content">
+                <label style="font-weight:600;">Select Venue:</label>
+                <select id="venueSelect" onchange="showVenueDetails()" style="margin-bottom:15px;"></select>
+                <div id="venueDetails"></div>
+            </div>
+
+            <div id="r_export" class="tab-content">
+                <h3>Export Results</h3>
+                <p style="color:#666;margin-bottom:15px;">Download daily forecasts for all venues as a CSV file. Includes servings, retail, POS discounts, multipliers, ATP, and transactions.</p>
+                <button class="success" onclick="downloadCsv()">⬇️ Download CSV</button>
+                <br><br>
+                <details>
+                    <summary style="cursor:pointer;">Show raw JSON (debug)</summary>
+                    <pre id="rawJson"></pre>
+                </details>
+            </div>
+        </div>
+
+        <!-- STEP 5: SALES DETAIL DASHBOARD -->
+        <div class="section" id="salesDetailSection" style="display:none;">
+            <h2>📊 Sales Detail — FY26 vs FY27 <span id="sdTypeBadge" style="font-size:14px;color:#667eea;background:#eef0ff;padding:4px 10px;border-radius:12px;margin-left:10px;">Servings</span></h2>
+            <div id="sdStatus" class="status"></div>
+
+            <!-- Filter bar -->
+            <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:10px;margin-bottom:18px;align-items:end;">
+                <div>
+                    <label style="font-size:12px;color:#666;">Sales Type</label>
+                    <select id="sdSalesType" onchange="loadSalesDetail()">
+                        <option value="servings">Servings</option>
+                        <option value="retail">Retail</option>
+                        <option value="pos_discounts">POS Discounts</option>
+                        <option value="all">All Combined (Net)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;">State</label>
+                    <select id="sdState" onchange="loadSalesDetail()"></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;">Cluster</label>
+                    <select id="sdCluster" onchange="loadSalesDetail()"></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;">Store Cohort</label>
+                    <select id="sdCohort" onchange="loadSalesDetail()"></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;">Venue</label>
+                    <select id="sdVenue" onchange="loadSalesDetail()"></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;">Growth % Scenario</label>
+                    <input type="number" id="sdGrowth" value="0" step="0.5" style="padding:8px;border:2px solid #e0e0e0;border-radius:6px;width:100%;" onchange="renderSalesDetailChart()">
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;" title="Cap FY27 within a band of annualized FY26 to prevent extreme Prophet extrapolations.">Guardrails</label>
+                    <select id="sdGuardrails" onchange="loadSalesDetail()">
+                        <option value="on">ON (safe)</option>
+                        <option value="off">OFF (raw Prophet)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;" title="Apply impact %s from Venue Details when a new venue opens nearby (cannibalisation). Fall-back: switch OFF to compare.">Cannibalisation</label>
+                    <select id="sdCannibalisation" onchange="loadSalesDetail()">
+                        <option value="on">ON (apply impacts)</option>
+                        <option value="off">OFF (ignore)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;" title="Softens Prophet's extreme predictions toward recent FY26 baseline. β=0.7 means 70% Prophet, 30% baseline (moderate). β=1 means no softening.">Soften Prophet</label>
+                    <select id="sdSoftening" onchange="ulSyncSoftening()">
+                        <option value="0.5">Heavy (β=0.5)</option>
+                        <option value="0.7" selected>Moderate (β=0.7)</option>
+                        <option value="0.85">Light (β=0.85)</option>
+                        <option value="1.0">OFF (raw Prophet)</option>
+                    </select>
+                </div>
+                <div>
+                    <button onclick="loadSalesDetail()" style="width:100%;">🔄 Refresh</button>
+                </div>
+            </div>
+
+            <!-- UNIVERSAL LFL TARGET -->
+            <div style="background:#f5f7ff;border-left:4px solid #43a047;border-radius:6px;padding:14px 18px;margin-bottom:14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                    <h3 style="margin:0;color:#43a047;font-size:15px;">🎯 Universal LFL Target — distributes a network-wide LFL growth target across months</h3>
+                    <div style="display:flex;gap:10px;align-items:center;font-size:12px;">
+                        <label><input type="checkbox" id="ulEnabled" onchange="ulSyncAndRefresh()"> Enable</label>
+                        <label>Target LFL %: <input type="number" id="ulTargetPct" value="3" step="0.5" style="width:65px;padding:4px;border:1px solid #ccc;border-radius:4px;"></label>
+                        <button onclick="ulSyncAndRefresh()" style="padding:6px 14px;font-size:12px;">💾 Apply</button>
+                    </div>
+                </div>
+                <p style="color:#555;font-size:12px;margin-top:6px;margin-bottom:8px;">
+                    Only applies to <strong>LFL venues (FY26 Existing cohort)</strong> without a per-venue scenario.
+                    Each month's % is the share of the growth gap delivered in that month. Auto-normalised to sum to 100%.
+                </p>
+                <div style="display:grid;grid-template-columns:repeat(13,1fr);gap:4px;align-items:end;font-size:11px;">
+                    <div style="font-weight:600;color:#555;text-align:right;padding-right:6px;">Month weight %</div>
+                    <div style="text-align:center;"><label>Jul</label><input type="number" class="ul-wt" data-m="0" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>Aug</label><input type="number" class="ul-wt" data-m="1" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>Sep</label><input type="number" class="ul-wt" data-m="2" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>Oct</label><input type="number" class="ul-wt" data-m="3" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>Nov</label><input type="number" class="ul-wt" data-m="4" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>Dec</label><input type="number" class="ul-wt" data-m="5" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>Jan</label><input type="number" class="ul-wt" data-m="6" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>Feb</label><input type="number" class="ul-wt" data-m="7" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>Mar</label><input type="number" class="ul-wt" data-m="8" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>Apr</label><input type="number" class="ul-wt" data-m="9" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>May</label><input type="number" class="ul-wt" data-m="10" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                    <div style="text-align:center;"><label>Jun</label><input type="number" class="ul-wt" data-m="11" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
+                </div>
+                <div style="display:flex;gap:14px;align-items:center;margin-top:8px;font-size:12px;">
+                    <span>Sum: <strong id="ulSum">0%</strong> <span id="ulSumNote" style="color:#888;">(auto-normalises to 100 on Apply)</span></span>
+                    <button onclick="ulPresetEven()" class="secondary" style="padding:4px 12px;font-size:11px;">Even spread (8.33% each)</button>
+                    <button onclick="ulPresetExample()" class="secondary" style="padding:4px 12px;font-size:11px;">Example: Q4-Q3 ramp</button>
+                    <button onclick="ulPresetReset()" class="secondary" style="padding:4px 12px;font-size:11px;">Clear</button>
+                </div>
+                <div id="ulSummary" style="font-size:12px;color:#555;margin-top:8px;"></div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="stats-grid" id="sdKpis" style="grid-template-columns:repeat(5,1fr);"></div>
+
+            <!-- Growth Attribution: Prophet base + Multiplier lift -->
+            <div id="sdGrowthAttrib"></div>
+
+            <!-- Chart -->
+            <div style="background:#fafbff;border-radius:8px;padding:20px;margin-top:18px;">
+                <h3 style="margin-bottom:15px;">Monthly Sales Comparison (FY: Jul → Jun)</h3>
+                <div style="position:relative;height:400px;">
+                    <canvas id="sdChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Events Strip: Holidays + Extreme Weather per month, FY26 vs FY27 -->
+            <div style="background:#fafbff;border-radius:8px;padding:20px;margin-top:18px;">
+                <h3 style="margin-bottom:8px;">📅 Public Holidays &amp; 🎒 School Holidays &amp; ⚠️ Extreme Weather — FY26 vs FY27</h3>
+                <p style="color:#666;font-size:12px;margin-bottom:12px;">Hover any cell for details. Public holidays = unique events per state. School holidays = unique calendar dates in school break for any state in the filter. All three are fed into Prophet so it learns separate coefficients for each.</p>
+                <div class="scroll-x">
+                    <table id="sdEventsTable" style="font-size:12px;">
+                        <thead><tr id="sdEvtHeaderRow"></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Monthly table -->
+            <h3 style="margin-top:20px;">Monthly Detail</h3>
+            <div class="scroll-x">
+                <table id="sdTable">
+                    <thead><tr><th>Month</th><th>FY26 Comparator</th><th>FY27 Forecast</th><th>Growth %</th><th>FY27 Scenario</th><th>Scenario %</th><th>LFL FY26</th><th>LFL FY27</th><th>LFL Growth %</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SCENARIO PLANNER: 3 named versions, per-venue growth target + comments -->
+        <div class="section" id="scenarioSection" style="display:none;">
+            <h2>🎯 Scenarios — set venue growth targets &amp; comments</h2>
+            <p style="color:#666;font-size:13px;margin-bottom:12px;">
+                Create up to 3 scenarios (e.g. Base / Stretch / Conservative). For each venue, enter the <strong>full-year FY27 growth %</strong> you want — the model calibrates a single daily multiplier per venue so the FY27 total exactly equals <em>FY26 baseline × (1 + growth%)</em>. Add up to 5 free-text comments per venue. Switch the active scenario at any time — every chart and table updates instantly.
+            </p>
+            <div id="scStatus" class="status"></div>
+
+            <!-- Scenario tab bar -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;border-bottom:2px solid #e0e0e0;padding-bottom:10px;">
+                <div id="scTabs" style="display:flex;gap:6px;flex-wrap:wrap;flex:1;"></div>
+                <input type="text" id="scNewName" placeholder="New scenario name…" style="padding:8px;border:2px solid #e0e0e0;border-radius:6px;width:200px;font-size:13px;">
+                <button onclick="scenarioCreate()" style="padding:8px 16px;font-size:13px;">➕ New Scenario</button>
+                <button class="secondary" onclick="scenarioDeactivate()" style="padding:8px 16px;font-size:13px;">⏸ No Scenario</button>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <h3 style="margin:0;font-size:15px;">Per-Venue Targets &amp; Comments <span id="scActiveBadge" style="font-size:12px;color:#667eea;background:#eef0ff;padding:3px 10px;border-radius:10px;margin-left:8px;">(none)</span></h3>
+                <button class="success" onclick="scenarioApplyAll()" style="padding:8px 16px;font-size:13px;">💾 Save All Edits &amp; Refresh</button>
+            </div>
+
+            <p style="color:#666;font-size:12px;margin-bottom:10px;">
+                Set either a <strong>Target Growth %</strong> OR a <strong>Target Avg Daily $</strong> per venue (Avg Daily wins if both are entered). The calibration multiplies Prophet's daily forecast by a single scalar — preserving Prophet's weekly/seasonal phasing — to hit the target. Use this to pull back excessive ramp-ups or lock in budget targets.
+            </p>
+            <div class="scroll-x">
+                <table id="scVenueTable" style="font-size:12px;">
+                    <thead>
+                        <tr style="background:#f5f5f5;">
+                            <th style="text-align:center;width:180px;">Monthly Shape<br><span style="font-weight:400;font-size:10px;color:#888;"><span style="color:#888;">━</span> FY25 &nbsp; <span style="color:#667eea;">━</span> FY26 &nbsp; <span style="color:#43a047;">━</span> FY27</span></th>
+                            <th>Venue</th><th>State</th><th>Cluster</th>
+                            <th style="text-align:right;">FY26 $</th><th style="text-align:right;">FY27 $ (current)</th>
+                            <th style="text-align:right;">Current Growth %</th>
+                            <th style="text-align:right;">FY26 Avg Daily $</th>
+                            <th style="text-align:right;">FY27 Avg Daily $</th>
+                            <th style="text-align:right;width:100px;">Target Growth %</th>
+                            <th style="text-align:right;width:120px;">Target Avg Daily $</th>
+                            <th style="min-width:220px;">Comment</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- STEP 5b: PER-VENUE PER-MONTH ADJUSTMENTS — growth override or cannibalisation delta -->
+        <div class="section" id="venueMonthAdjustmentSection" style="display:none;">
+            <h2>📅 Per-Venue Per-Month Adjustments — overlay growth or cannibalisation</h2>
+            <p style="color:#666;font-size:13px;margin-bottom:12px;">
+                Apply <strong>Growth Override</strong> (replace a month's LFL with a specific %) or <strong>Cannibalisation Delta</strong> (add/subtract from LFL) for individual venue × month combinations. Adjustments are view-time only — applied after universal LFL, preserving the forecast structure. No /generate needed.
+            </p>
+            <div id="vmaStatus" class="status"></div>
+
+            <div style="background:#f5f7ff;border-left:4px solid #667eea;border-radius:6px;padding:14px 18px;margin-bottom:16px;">
+                <h3 style="margin:0 0 12px;color:#667eea;font-size:15px;">Add New Adjustment</h3>
+                <div style="display:grid;grid-template-columns:1.5fr 1fr 1.5fr 1.2fr 1.2fr 0.8fr;gap:12px;align-items:end;">
+                    <div>
+                        <label style="font-size:12px;color:#666;font-weight:600;">Venue</label>
+                        <select id="vmaVenue" style="width:100%;"></select>
+                    </div>
+                    <div>
+                        <label style="font-size:12px;color:#666;font-weight:600;">Month (YYYY-MM)</label>
+                        <input type="text" id="vmaMonth" placeholder="2026-07" style="width:100%;padding:8px;border:2px solid #e0e0e0;border-radius:6px;font-size:13px;">
+                    </div>
+                    <div>
+                        <label style="font-size:12px;color:#666;font-weight:600;">Adjustment Type</label>
+                        <select id="vmaType" style="width:100%;">
+                            <option value="growth">Growth Override (replace LFL %)</option>
+                            <option value="cannibalisation">Cannibalisation Delta (add/subtract %)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:12px;color:#666;font-weight:600;">Value %</label>
+                        <input type="number" id="vmaValue" placeholder="0.0" step="0.5" style="width:100%;padding:8px;border:2px solid #e0e0e0;border-radius:6px;font-size:13px;text-align:right;">
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <button onclick="vmaApplyAdjustment()" style="flex:1;padding:8px 12px;font-size:13px;">➕ Add</button>
+                        <button class="secondary" onclick="vmaLoadAdjustments()" style="flex:0 0 auto;padding:8px 12px;font-size:13px;">🔄</button>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin-top:16px;margin-bottom:10px;">Active Adjustments</h3>
+            <div class="scroll-x">
+                <table id="vmaTable" style="font-size:12px;">
+                    <thead>
+                        <tr style="background:#f5f5f5;">
+                            <th>Venue</th>
+                            <th>Month</th>
+                            <th>Type</th>
+                            <th style="text-align:right;">Value %</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <p style="color:#888;font-size:11px;margin-top:10px;font-style:italic;">💡 Tip: Growth Override replaces the calculated LFL for that month. Cannibalisation Delta adds/subtracts from it. Both are applied after universal LFL, so the resolution order is: Scenario → Cannibalisation → Guardrails → Universal LFL → Per-Month Adjustments.</p>
+        </div>
+
+        <!-- STEP 6: VENUE-LEVEL DETAIL TABLE (grouped by State → Cluster) -->
+        <div class="section" id="venueDetailSection" style="display:none;">
+            <h2>🏪 Per-Venue Detail — FY26 vs FY27 by State &amp; Cluster</h2>
+            <p style="color:#666;font-size:13px;margin-bottom:12px;">
+                Same filters as the Sales Detail dashboard above apply. Click a header to sort.
+            </p>
+
+            <div class="scroll-x">
+                <table id="venueDetailTable" style="font-size:12px;">
+                    <thead>
+                        <tr style="background:#f5f5f5;">
+                            <th style="text-align:left;cursor:pointer;" onclick="sortVenueTable('state')">State</th>
+                            <th style="text-align:left;cursor:pointer;" onclick="sortVenueTable('cluster')">Cluster</th>
+                            <th style="text-align:left;cursor:pointer;" onclick="sortVenueTable('venue')">Venue</th>
+                            <th style="text-align:left;cursor:pointer;" onclick="sortVenueTable('cohort')">Cohort</th>
+                            <th style="text-align:left;cursor:pointer;" onclick="sortVenueTable('opening_date')">Open Date</th>
+                            <th style="text-align:right;cursor:pointer;" onclick="sortVenueTable('fy26_forecast')">FY26 $</th>
+                            <th style="text-align:right;cursor:pointer;" onclick="sortVenueTable('fy27_forecast')">FY27 $</th>
+                            <th style="text-align:right;cursor:pointer;" onclick="sortVenueTable('growth_pct')">Growth %</th>
+                            <th style="text-align:right;cursor:pointer;" onclick="sortVenueTable('base_growth_pct')">Prophet Base %</th>
+                            <th style="text-align:right;cursor:pointer;" onclick="sortVenueTable('multiplier_lift_pct')">Mult Lift</th>
+                            <th style="text-align:right;cursor:pointer;" onclick="sortVenueTable('avg_atp')">Avg ATP $</th>
+                            <th style="text-align:right;cursor:pointer;" onclick="sortVenueTable('transactions_fy27')">FY27 Guests</th>
+                            <th style="text-align:left;cursor:pointer;" onclick="sortVenueTable('model')">Model</th>
+                            <th style="text-align:left;min-width:340px;">Comment</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <h3 style="margin-top:20px;">State Summary</h3>
+            <div class="scroll-x">
+                <table id="venueStateTable" style="font-size:12px;">
+                    <thead><tr style="background:#f5f5f5;"><th>State</th><th style="text-align:right;">Venues</th><th style="text-align:right;">FY26 $</th><th style="text-align:right;">FY27 $</th><th style="text-align:right;">Growth %</th><th style="text-align:right;">FY27 Guests</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <h3 style="margin-top:20px;">Cluster Summary</h3>
+            <div class="scroll-x">
+                <table id="venueClusterTable" style="font-size:12px;">
+                    <thead><tr style="background:#f5f5f5;"><th>State</th><th>Cluster</th><th style="text-align:right;">Venues</th><th style="text-align:right;">FY26 $</th><th style="text-align:right;">FY27 $</th><th style="text-align:right;">Growth %</th><th style="text-align:right;">FY27 Guests</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- STEP 7: VENUE COMPARISON — pick up to 4 venues -->
+        <div class="section" id="venueCompareSection" style="display:none;">
+            <h2>🔬 Venue Comparison — up to 4 venues</h2>
+            <p style="color:#666;font-size:13px;margin-bottom:12px;">
+                Pick a cluster to narrow the venue list, then select up to 4 venues. The chart shows monthly $ or YoY growth % side-by-side.
+            </p>
+
+            <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:18px;align-items:end;">
+                <div>
+                    <label style="font-size:12px;color:#666;">Cluster Filter</label>
+                    <select id="vcCluster" onchange="vcOnClusterChange()"></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;">Venue 1</label>
+                    <select id="vcV1" onchange="loadVenueCompare()"></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;">Venue 2</label>
+                    <select id="vcV2" onchange="loadVenueCompare()"></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;">Venue 3</label>
+                    <select id="vcV3" onchange="loadVenueCompare()"></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;">Venue 4</label>
+                    <select id="vcV4" onchange="loadVenueCompare()"></select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#666;">View</label>
+                    <select id="vcView" onchange="renderVenueCompareChart()">
+                        <option value="fy27_$">FY27 Sales ($)</option>
+                        <option value="fy26_$">FY26 Sales ($)</option>
+                        <option value="both_$">FY26 vs FY27 ($)</option>
+                        <option value="growth_%">YoY Growth %</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="background:#fafbff;border-radius:8px;padding:20px;">
+                <h3 style="margin-bottom:10px;">Monthly Comparison</h3>
+                <div style="position:relative;height:400px;">
+                    <canvas id="vcChart"></canvas>
+                </div>
+            </div>
+
+            <div class="scroll-x" style="margin-top:18px;">
+                <table id="vcTable" style="font-size:12px;">
+                    <thead><tr style="background:#f5f5f5;"><th>Venue</th><th>State</th><th>Cluster</th><th>Cohort</th><th style="text-align:right;">FY26 $</th><th style="text-align:right;">FY27 $</th><th style="text-align:right;">Growth %</th><th>Model</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════ -->
+        <!-- STEP 8: EXPENSE TEMPLATES + FULL P&L (independent of sales model)       -->
+        <!-- ═══════════════════════════════════════════════════════════════════════ -->
+        <div class="section" id="expenseSection">
+            <h2>💼 Expenses &amp; Full P&amp;L (FY27)</h2>
+            <p style="color:#666;font-size:13px;margin-bottom:12px;">
+                Upload labour / COGS / rent / other-P&amp;L assumptions, then view a full venue P&amp;L overlaid on the FY27 sales forecast.
+                Uses the <strong>same scenarios &amp; guardrails</strong> as the sales section — your scenario flows straight through to the bottom line.
+            </p>
+            <div id="expStatus" class="status"></div>
+
+            <h3 style="margin-top:14px;">Upload Expense Templates</h3>
+            <div class="file-grid">
+                <div class="file-card" id="card-labour">
+                    <label>👷 Labour</label>
+                    <small>05_Labour_Template.xlsx<br>Per venue: SPLH, hourly rate, oncosts, mgmt salary, award rates</small>
+                    <input type="file" id="labour" accept=".xlsx">
+                    <div class="file-status">Not loaded</div>
+                </div>
+                <div class="file-card" id="card-cogs">
+                    <label>🍳 COGS</label>
+                    <small>06_COGS_Template.xlsx<br>Per venue: food %, packaging %, retail %, discount % (all of net sales)</small>
+                    <input type="file" id="cogs" accept=".xlsx">
+                    <div class="file-status">Not loaded</div>
+                </div>
+                <div class="file-card" id="card-rent">
+                    <label>🏢 Rent</label>
+                    <small>07_Rent_Template.xlsx<br>Per venue: base rent, outgoings, % rent threshold/rate, marketing levy</small>
+                    <input type="file" id="rent" accept=".xlsx">
+                    <div class="file-status">Not loaded</div>
+                </div>
+                <div class="file-card" id="card-other_pnl">
+                    <label>📒 Other P&amp;L</label>
+                    <small>08_Other_PnL_Template.xlsx<br>Per venue × GL account: monthly $ amounts for everything else (bank fees, cleaning, admin, etc.)</small>
+                    <input type="file" id="other_pnl" accept=".xlsx">
+                    <div class="file-status">Not loaded</div>
+                </div>
+            </div>
+
+            <div style="margin-top:16px;">
+                <button onclick="expUploadAll()" id="btnExpUpload">⬆️ Upload Expense Templates</button>
+                <button class="success" onclick="loadPnl()" id="btnExpRender">📊 Build P&amp;L</button>
+                <button class="secondary" onclick="downloadPnlCsv()">⬇️ Download P&amp;L CSV</button>
+            </div>
+
+            <!-- Filters mirror Sales Detail -->
+            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:20px;align-items:end;">
+                <div><label style="font-size:12px;color:#666;">State</label><select id="pState" onchange="loadPnl()"></select></div>
+                <div><label style="font-size:12px;color:#666;">Cluster</label><select id="pCluster" onchange="loadPnl()"></select></div>
+                <div><label style="font-size:12px;color:#666;">Store Cohort</label><select id="pCohort" onchange="loadPnl()"></select></div>
+                <div><label style="font-size:12px;color:#666;">Venue</label><select id="pVenue" onchange="loadPnl()"></select></div>
+                <div><label style="font-size:12px;color:#666;">Guardrails</label><select id="pGuardrails" onchange="loadPnl()"><option value="on">ON</option><option value="off">OFF</option></select></div>
+                <div><label style="font-size:12px;color:#666;">Cannibalisation</label><select id="pCannibalisation" onchange="loadPnl()"><option value="on">ON</option><option value="off">OFF</option></select></div>
+            </div>
+
+            <!-- Network P&L summary cards -->
+            <div class="stats-grid" id="pnlKpis" style="grid-template-columns:repeat(4,1fr);margin-top:18px;"></div>
+
+            <!-- Monthly P&L network table -->
+            <h3 style="margin-top:18px;">FY27 Network P&amp;L (monthly)</h3>
+            <div class="scroll-x">
+                <table id="pnlNetworkTable" style="font-size:12px;">
+                    <thead><tr style="background:#f5f5f5;">
+                        <th>Line</th>
+                        <th style="text-align:right;">Jul</th><th style="text-align:right;">Aug</th><th style="text-align:right;">Sep</th>
+                        <th style="text-align:right;">Oct</th><th style="text-align:right;">Nov</th><th style="text-align:right;">Dec</th>
+                        <th style="text-align:right;">Jan</th><th style="text-align:right;">Feb</th><th style="text-align:right;">Mar</th>
+                        <th style="text-align:right;">Apr</th><th style="text-align:right;">May</th><th style="text-align:right;">Jun</th>
+                        <th style="text-align:right;">Total FY27</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <!-- Per-venue P&L table -->
+            <h3 style="margin-top:20px;">Per-Venue P&amp;L Annual Totals (FY27)</h3>
+            <div class="scroll-x">
+                <table id="pnlVenueTable" style="font-size:12px;">
+                    <thead><tr style="background:#f5f5f5;">
+                        <th>State</th><th>Cluster</th><th>Venue</th>
+                        <th style="text-align:right;">Net Sales</th>
+                        <th style="text-align:right;">COGS</th>
+                        <th style="text-align:right;">GP</th>
+                        <th style="text-align:right;">GP %</th>
+                        <th style="text-align:right;">Labour</th>
+                        <th style="text-align:right;">Labour %</th>
+                        <th style="text-align:right;">Occupancy</th>
+                        <th style="text-align:right;">Occ %</th>
+                        <th style="text-align:right;">Other</th>
+                        <th style="text-align:right;">Contribution</th>
+                        <th style="text-align:right;">Contr %</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let session = { loaded: {}, venues: [], lastResults: null, growthTemplate: null };
+
+        // ─── SNAPSHOTS & SHARING ──────────────────────────────────────────
+        async function snapRefreshList() {
+            try {
+                const res = await fetch('/snapshot/list');
+                const data = await res.json();
+                const tbody = document.querySelector('#snapTable tbody');
+                if (!data.snapshots || data.snapshots.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;padding:14px;">No snapshots saved yet.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.snapshots.map(s => `<tr>
+                    <td><strong>${s.name || s.filename}</strong></td>
+                    <td>${s.saved_at || ''}</td>
+                    <td style="text-align:right;">${s.venue_count || 0}</td>
+                    <td style="font-size:11px;color:#666;">${s.note || ''}</td>
+                    <td style="text-align:right;">${s.size_kb || 0} KB</td>
+                    <td>
+                        <button onclick="snapLoad('${s.filename}')" style="padding:5px 10px;font-size:11px;">Load</button>
+                        <button class="secondary" onclick="snapDelete('${s.filename}')" style="padding:5px 10px;font-size:11px;">Delete</button>
+                    </td>
+                </tr>`).join('');
+            } catch (err) { console.error(err); }
+        }
+
+        async function snapSave() {
+            const name = document.getElementById('snapName').value.trim();
+            const note = document.getElementById('snapNote').value.trim();
+            if (!name) {
+                showStatus('snapStatus', '⚠️ Please enter a snapshot name', 'error');
+                return;
+            }
+            showStatus('snapStatus', '<span class="loading-spinner"></span> Saving snapshot…', 'loading');
+            try {
+                const res = await fetch('/snapshot/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, note }),
+                });
+                const data = await res.json();
+                if (!res.ok) { showStatus('snapStatus', '❌ ' + (data.error || 'Failed'), 'error'); return; }
+                showStatus('snapStatus', `✅ Saved "${data.name}" (${data.size_kb} KB)`, 'success');
+                document.getElementById('snapName').value = '';
+                document.getElementById('snapNote').value = '';
+                snapRefreshList();
+            } catch (err) { showStatus('snapStatus', '❌ ' + err.message, 'error'); }
+        }
+
+        async function snapLoad(filename) {
+            if (!confirm(`Load snapshot "${filename}"? This replaces the current session data.`)) return;
+            showStatus('snapStatus', '<span class="loading-spinner"></span> Loading snapshot…', 'loading');
+            try {
+                const res = await fetch('/snapshot/load', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename }),
+                });
+                const data = await res.json();
+                if (!res.ok) { showStatus('snapStatus', '❌ ' + (data.error || 'Failed'), 'error'); return; }
+                showStatus('snapStatus', `✅ Loaded "${data.name}" (saved ${data.saved_at}, ${data.venue_count} venues)`, 'success');
+                // Reveal sections + refresh views
+                document.getElementById('resultsSection').style.display = 'block';
+                document.getElementById('reviewSection').style.display = 'block';
+                document.getElementById('generateSection').style.display = 'block';
+                await refreshVenues();
+                await loadGrowthTemplate();
+                await loadDataSources();
+                initSalesDetail();
+            } catch (err) { showStatus('snapStatus', '❌ ' + err.message, 'error'); }
+        }
+
+        async function snapDelete(filename) {
+            if (!confirm(`Delete snapshot "${filename}" permanently?`)) return;
+            try {
+                const res = await fetch('/snapshot/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename }),
+                });
+                const data = await res.json();
+                if (!res.ok) { showStatus('snapStatus', '❌ ' + (data.error || 'Failed'), 'error'); return; }
+                showStatus('snapStatus', `🗑️ Deleted ${data.deleted}`, 'info');
+                snapRefreshList();
+            } catch (err) { showStatus('snapStatus', '❌ ' + err.message, 'error'); }
+        }
+
+        async function snapExport() {
+            const name = document.getElementById('snapName').value.trim() || 'Forecast';
+            const note = document.getElementById('snapNote').value.trim();
+            showStatus('snapStatus', '<span class="loading-spinner"></span> Generating standalone HTML… (precomputes filter slices, may take 30-60s)', 'loading');
+            try {
+                const res = await fetch('/export/standalone', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, note }),
+                });
+                if (!res.ok) {
+                    const data = await res.json();
+                    showStatus('snapStatus', '❌ ' + (data.error || 'Failed'), 'error');
+                    return;
+                }
+                // Trigger download
+                const blob = await res.blob();
+                const disposition = res.headers.get('Content-Disposition') || '';
+                const match = disposition.match(/filename=([^;]+)/);
+                const filename = (match ? match[1].trim().replace(/"/g, '') : 'forecast.html');
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url; link.download = filename;
+                document.body.appendChild(link); link.click();
+                document.body.removeChild(link); URL.revokeObjectURL(url);
+                showStatus('snapStatus', `✅ Downloaded <strong>${filename}</strong> (${(blob.size / 1024).toFixed(0)} KB). Send this file to your colleague — they just double-click to open in any browser.`, 'success');
+            } catch (err) {
+                showStatus('snapStatus', '❌ ' + err.message, 'error');
+            }
+        }
+
+        // Load list on page load
+        window.addEventListener('DOMContentLoaded', () => { snapRefreshList(); });
+
+        function showStatus(id, msg, type) {
+            const el = document.getElementById(id);
+            el.className = 'status ' + type;
+            el.innerHTML = msg;
+            el.style.display = 'block';
+        }
+
+        function setCardStatus(key, status, text) {
+            const card = document.getElementById('card-' + key);
+            if (!card) return;
+            card.classList.remove('loaded', 'error');
+            if (status) card.classList.add(status);
+            const s = card.querySelector('.file-status');
+            if (s) s.textContent = text || '';
+        }
+
+        async function uploadAll() {
+            const fileIds = ['sales_history', 'atp_history', 'location_bi', 'venue_details', 'multipliers'];
+            const fd = new FormData();
+            let any = false;
+            fileIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.files.length > 0) {
+                    fd.append(id, el.files[0]);
+                    any = true;
+                }
+            });
+            if (!any) {
+                showStatus('uploadStatus', '⚠️ Select at least one file to upload', 'error');
+                return;
+            }
+
+            showStatus('uploadStatus', '<span class="loading-spinner"></span> Uploading and parsing templates… this may take a minute for large files.', 'loading');
+            document.getElementById('btnUpload').disabled = true;
+
+            try {
+                const res = await fetch('/upload', { method: 'POST', body: fd });
+                const data = await res.json();
+
+                Object.keys(data.summary || {}).forEach(key => {
+                    if (key === 'sales_history') {
+                        const s = data.summary[key];
+                        const tabs = s.tabs.join(', ');
+                        const counts = Object.entries(s.venues_per_tab).map(([t, c]) => `${t}: ${c} venues`).join('; ');
+                        setCardStatus(key, 'loaded', `✓ ${tabs} (${counts})`);
+                    } else {
+                        const s = data.summary[key];
+                        setCardStatus(key, 'loaded', `✓ ${s.venues || 0} venues`);
+                    }
+                });
+                (data.errors || []).forEach(e => {
+                    showStatus('uploadStatus', '⚠️ ' + e, 'error');
+                });
+
+                session.loaded = data.session_loaded;
+                showStatus('uploadStatus', '✅ Upload complete. Review loaded data below.', 'success');
+                document.getElementById('reviewSection').style.display = 'block';
+                document.getElementById('generateSection').style.display = 'block';
+                await refreshVenues();
+                await loadGrowthTemplate();
+                await loadDataSources();
+            } catch (err) {
+                showStatus('uploadStatus', '❌ Upload failed: ' + err.message, 'error');
+            } finally {
+                document.getElementById('btnUpload').disabled = false;
+            }
+        }
+
+        async function refreshVenues() {
+            try {
+                const res = await fetch('/venues');
+                const data = await res.json();
+                session.venues = data.venues;
+
+                const stats = [
+                    { label: 'Total Venues', value: data.count },
+                    { label: 'With Sales', value: data.venues.filter(v => session.loaded.sales_servings).length },
+                    { label: 'With ATP', value: data.venues.filter(v => v.venue && session.loaded.atp_history).length },
+                    { label: 'With Cluster', value: data.venues.filter(v => v.cluster).length },
+                ];
+                document.getElementById('loadStats').innerHTML = stats.map(s =>
+                    `<div class="stat-card"><strong>${s.label}</strong><span>${s.value}</span></div>`).join('');
+
+                // Venues table
+                const tbody = document.querySelector('#venuesTable tbody');
+                tbody.innerHTML = data.venues.map(v => `<tr>
+                    <td>${v.venue}</td>
+                    <td>${v.state || ''}</td>
+                    <td>${v.cluster || ''}</td>
+                    <td>${v.cluster_type || ''}</td>
+                    <td>${v.open_status || ''}</td>
+                    <td>${v.multipliers ? '✓' : '—'}</td>
+                    <td>${session.loaded.atp_history ? '✓' : '—'}</td>
+                    <td>${session.loaded.sales_servings ? '✓' : '—'}</td>
+                </tr>`).join('');
+
+                // Multipliers table
+                const multTbody = document.getElementById('multipliersTable');
+                const mhdr = '<thead><tr><th>Venue</th>' + Array.from({length: 15}, (_, i) => `<th>M${i+1}</th>`).join('') + '</tr></thead>';
+                const mrows = data.venues.filter(v => v.multipliers).map(v =>
+                    `<tr><td>${v.venue}</td>${v.multipliers.map(m => `<td>${m.toFixed(3)}</td>`).join('')}</tr>`).join('');
+                multTbody.innerHTML = mhdr + '<tbody>' + mrows + '</tbody>';
+
+                // Cluster table
+                const clusTbody = document.getElementById('clusterTable');
+                clusTbody.innerHTML = '<thead><tr><th>Venue</th><th>Cluster</th><th>Cluster Type</th><th>Cannibalisation</th><th>Region</th><th>State</th></tr></thead>' +
+                    '<tbody>' + data.venues.filter(v => v.cluster).map(v =>
+                        `<tr><td>${v.venue}</td><td>${v.cluster || ''}</td><td>${v.cluster_type || ''}</td><td>${v.cannibalisation || ''}</td><td>${v.region || ''}</td><td>${v.state || ''}</td></tr>`).join('') + '</tbody>';
+
+                // Venue scope dropdown
+                const scope = document.getElementById('venueScope');
+                scope.innerHTML = '<option value="all">All venues with sales history</option>' +
+                    data.venues.map(v => `<option value="${v.venue}">${v.venue}</option>`).join('');
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function loadGrowthTemplate() {
+            try {
+                const res = await fetch('/atp-growth');
+                const data = await res.json();
+                session.growthTemplate = data.template;
+                const venues = Object.keys(data.template).filter(k => k !== '_default').sort();
+                let html = '<thead><tr><th style="position:sticky;left:0;background:#f5f5f5;">Venue</th>' +
+                    Array.from({length: 15}, (_, i) => `<th>M${i+1}</th>`).join('') + '</tr></thead><tbody>';
+                venues.forEach(v => {
+                    html += `<tr><td style="position:sticky;left:0;background:white;font-weight:600;">${v}</td>` +
+                        Array.from({length: 15}, (_, i) => {
+                            const val = data.template[v][String(i+1)] || 0;
+                            return `<td><input type="number" step="0.1" value="${val}" data-venue="${v}" data-month="${i+1}"></td>`;
+                        }).join('') + '</tr>';
+                });
+                html += '</tbody>';
+                document.getElementById('growthTable').innerHTML = html;
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function prefetchDataSources() {
+            showStatus('dataSourceStatus', '<span class="loading-spinner"></span> Fetching weather (Open-Meteo) and public holidays for all venue states. May take 20-60 seconds.', 'loading');
+            try {
+                const res = await fetch('/data-sources', { method: 'POST' });
+                const data = await res.json();
+                showStatus('dataSourceStatus', `✅ Loaded data for states: ${data.states_loaded.join(', ')}`, 'success');
+                await loadDataSources();
+            } catch (err) {
+                showStatus('dataSourceStatus', '❌ ' + err.message, 'error');
+            }
+        }
+
+        async function loadDataSources() {
+            try {
+                const res = await fetch('/data-sources');
+                const data = await res.json();
+
+                // State city map
+                const scTbody = document.getElementById('stateCityTable');
+                scTbody.innerHTML = '<thead><tr><th>State</th><th>Anchor City (used for weather)</th></tr></thead><tbody>' +
+                    Object.entries(data.state_city_map).map(([s, c]) => `<tr><td>${s}</td><td>${c}</td></tr>`).join('') +
+                    '</tbody>';
+
+                // Weather coverage
+                const wxRows = Object.entries(data.weather || {});
+                const wxTbody = document.getElementById('weatherTable');
+                if (wxRows.length === 0) {
+                    wxTbody.innerHTML = '<tbody><tr><td colspan="6" style="color:#888;text-align:center;">No weather loaded yet — click "Pre-fetch" above.</td></tr></tbody>';
+                } else {
+                    wxTbody.innerHTML = '<thead><tr><th>State Cache Key</th><th>Days</th><th>Date Range</th><th>Min Temp</th><th>Max Temp</th><th>Avg Temp</th></tr></thead><tbody>' +
+                        wxRows.map(([k, v]) => `<tr><td>${k}</td><td>${v.days}</td><td>${v.min_date} → ${v.max_date}</td><td>${v.min_temp}°C</td><td>${v.max_temp}°C</td><td>${v.avg_temp}°C</td></tr>`).join('') +
+                        '</tbody>';
+                }
+
+                // Public holidays
+                const hlRows = Object.entries(data.holidays || {});
+                const hlTbody = document.getElementById('holidayTable');
+                if (hlRows.length === 0) {
+                    hlTbody.innerHTML = '<tbody><tr><td colspan="3" style="color:#888;text-align:center;">No holidays loaded yet — click "Pre-fetch" above.</td></tr></tbody>';
+                } else {
+                    hlTbody.innerHTML = '<thead><tr><th>State Cache Key</th><th>Holiday Count</th><th>Sample (first 5)</th></tr></thead><tbody>' +
+                        hlRows.map(([k, v]) => `<tr><td>${k}</td><td>${v.count}</td><td style="font-size:12px;">${v.examples.map(e => `${e[0]} — ${e[1]}`).join('<br>')}</td></tr>`).join('') +
+                        '</tbody>';
+                }
+
+                // School holidays
+                const shRows = Object.entries(data.school_holidays || {});
+                const shTbody = document.getElementById('schoolHolidayTable');
+                if (shRows.length === 0) {
+                    shTbody.innerHTML = '<tbody><tr><td colspan="6" style="color:#888;text-align:center;">No school holidays loaded.</td></tr></tbody>';
+                } else {
+                    shTbody.innerHTML = '<thead><tr><th>State</th><th>Total Days</th><th>Periods</th><th>Date Range</th><th>First 3 Periods (start → end)</th><th>Last 3 Periods (start → end)</th></tr></thead><tbody>' +
+                        shRows.map(([state, v]) => {
+                            const firstP = (v.first_periods || []).map(p => `${p[0]} → ${p[1]}`).join('<br>');
+                            const lastP = (v.last_periods || []).map(p => `${p[0]} → ${p[1]}`).join('<br>');
+                            return `<tr style="background:#f1f8f4;">
+                                <td style="font-weight:600;color:#2e7d32;">${state}</td>
+                                <td style="text-align:right;font-weight:600;">${v.total_days}</td>
+                                <td style="text-align:right;">${v.period_count}</td>
+                                <td>${v.min_date} → ${v.max_date}</td>
+                                <td style="font-size:12px;">${firstP}</td>
+                                <td style="font-size:12px;">${lastP}</td>
+                            </tr>`;
+                        }).join('') +
+                        '</tbody>';
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function saveGrowthTemplate() {
+            const inputs = document.querySelectorAll('#growthTable input');
+            const template = {};
+            inputs.forEach(i => {
+                const venue = i.dataset.venue;
+                const month = i.dataset.month;
+                if (!template[venue]) template[venue] = {};
+                template[venue][month] = parseFloat(i.value) || 0;
+            });
+            try {
+                const res = await fetch('/atp-growth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ template })
+                });
+                if (res.ok) {
+                    showStatus('uploadStatus', '✅ ATP growth template saved', 'success');
+                }
+            } catch (err) {
+                showStatus('uploadStatus', '❌ ' + err.message, 'error');
+            }
+        }
+
+        async function generate() {
+            showStatus('generateStatus', '<span class="loading-spinner"></span> Generating forecasts… this can take 5-20 minutes for all 67 venues × 426 days.', 'loading');
+            document.getElementById('btnGenerate').disabled = true;
+
+            const scope = document.getElementById('venueScope').value;
+            const holidaysRaw = document.getElementById('holidays').value || '';
+            const holidays = holidaysRaw.split(',').map(s => s.trim()).filter(s => s);
+
+            const payload = { holiday_dates: holidays };
+            if (scope !== 'all') payload.venues = [scope];
+
+            try {
+                const res = await fetch('/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.error || `HTTP ${res.status}`);
+                }
+                const data = await res.json();
+                session.lastResults = data;
+                renderResults(data);
+                showStatus('generateStatus', `✅ Forecasts complete: ${data.summary.successful}/${data.summary.total_venues} venues`, 'success');
+                document.getElementById('resultsSection').style.display = 'block';
+                document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+                // Auto-load Sales Detail dashboard
+                initSalesDetail();
+            } catch (err) {
+                showStatus('generateStatus', '❌ Forecast failed: ' + err.message, 'error');
+            } finally {
+                document.getElementById('btnGenerate').disabled = false;
+            }
+        }
+
+        function renderResults(data) {
+            const s = data.summary;
+            document.getElementById('resultStats').innerHTML = [
+                { label: 'Venues Forecast', value: s.successful },
+                { label: 'Failed', value: s.failed },
+                { label: 'Forecast Period', value: s.forecast_period },
+                { label: 'Days per Venue', value: s.forecast_days },
+            ].map(x => `<div class="stat-card"><strong>${x.label}</strong><span>${x.value}</span></div>`).join('');
+
+            // Model distribution
+            const md = Object.entries(s.models_used).map(([k, v]) => `<span style="display:inline-block;background:#e3f2fd;padding:5px 12px;border-radius:15px;margin:3px;">${k}: <strong>${v}</strong></span>`).join('');
+            document.getElementById('modelDist').innerHTML = md || '—';
+
+            // Per-venue summary table
+            const tbody = document.querySelector('#venueSummaryTable tbody');
+            tbody.innerHTML = data.results.filter(r => 'servings' in r).map(r => {
+                const tot = r.servings.sales.reduce((a, b) => a + b, 0);
+                const totT = r.servings.transactions.reduce((a, b) => a + b, 0);
+                const avgAtp = r.servings.atp_forecast.reduce((a, b) => a + b, 0) / r.servings.atp_forecast.length;
+                const cluster = r.cluster_info ? r.cluster_info.cluster : '';
+                return `<tr><td>${r.venue}</td><td>${r.servings.model}</td><td>${r.servings.rmse}</td><td>$${tot.toFixed(0)}</td><td>${totT.toFixed(0)}</td><td>$${avgAtp.toFixed(2)}</td><td>${cluster}</td></tr>`;
+            }).join('');
+
+            // Venue selector
+            const sel = document.getElementById('venueSelect');
+            sel.innerHTML = data.results.filter(r => 'servings' in r).map(r => `<option value="${r.venue}">${r.venue}</option>`).join('');
+            showVenueDetails();
+
+            // Raw JSON
+            document.getElementById('rawJson').textContent = JSON.stringify(data, null, 2).slice(0, 100000);
+        }
+
+        function showVenueDetails() {
+            if (!session.lastResults) return;
+            const venue = document.getElementById('venueSelect').value;
+            const r = session.lastResults.results.find(x => x.venue === venue);
+            if (!r) return;
+            const days = Math.min(60, r.forecast_dates.length);
+            let html = `<h3>${venue} — first ${days} forecast days</h3>`;
+            if (r.cluster_info) {
+                html += `<p style="color:#666;margin-bottom:10px;">Cluster: <strong>${r.cluster_info.cluster}</strong> · Cluster type: <strong>${r.cluster_info.cluster_type}</strong> · Peers: ${(r.cluster_peers || []).slice(0,8).join(', ') || 'none'}</p>`;
+            }
+            html += `<p style="color:#666;font-size:13px;margin-bottom:10px;">Model: <strong>${r.servings.model}</strong> · RMSE: ${r.servings.rmse} · State: <strong>${r.state || '—'}</strong> · Weather days: ${r.data_sources ? r.data_sources.weather_days_loaded : 0} · State holidays: ${r.data_sources ? r.data_sources.state_holidays_loaded : 0}</p>`;
+            html += '<div class="scroll-x"><table><thead><tr><th>Date</th><th>Servings $</th><th>Lower 90</th><th>Upper 90</th><th>Mult</th><th>Retail $</th><th>Discounts $</th><th>ATP $</th><th>Trans</th><th>Temp °C</th><th>Rain mm</th><th>Gusts km/h</th><th>Extreme</th><th>Public Holiday</th></tr></thead><tbody>';
+            const wxT = r.weather_temp_max || [];
+            const wxP = r.weather_precip_mm || [];
+            const wxG = r.weather_gusts_kmh || [];
+            const wxE = r.weather_extreme || [];
+            const hols = r.holiday_names || [];
+            for (let i = 0; i < days; i++) {
+                const t = wxT[i], p = wxP[i], g = wxG[i], ex = wxE[i] || 0;
+                const hol = hols[i] || '';
+                let rowStyle = '';
+                if (ex) rowStyle = 'background:#ffebee;font-weight:600;color:#c62828;';
+                else if (hol) rowStyle = 'background:#fff3e0;font-weight:600;color:#e65100;';
+                const exTag = ex ? '⚠️ YES' : '';
+                html += `<tr style="${rowStyle}"><td>${r.forecast_dates[i]}</td><td>${r.servings.sales[i].toFixed(2)}</td><td>${r.servings.lower_90[i].toFixed(2)}</td><td>${r.servings.upper_90[i].toFixed(2)}</td><td>${r.servings.multipliers[i].toFixed(4)}</td><td>${r.retail ? r.retail.sales[i].toFixed(2) : '—'}</td><td>${r.discounts ? r.discounts.sales[i].toFixed(2) : '—'}</td><td>$${r.servings.atp_forecast[i].toFixed(2)}</td><td>${r.servings.transactions[i].toFixed(1)}</td><td>${t !== null && t !== undefined ? t.toFixed(1) : '—'}</td><td>${p !== null && p !== undefined ? p.toFixed(1) : '—'}</td><td>${g !== null && g !== undefined ? g.toFixed(0) : '—'}</td><td>${exTag}</td><td>${hol}</td></tr>`;
+            }
+            html += '</tbody></table></div>';
+            document.getElementById('venueDetails').innerHTML = html;
+        }
+
+        function downloadCsv() {
+            window.location.href = '/download-csv';
+        }
+
+        // ─── PROPHET SOFTENING ─────────────────────────────────────────────
+        async function ulSyncSoftening() {
+            const beta = parseFloat(document.getElementById('sdSoftening').value) || 0.7;
+            const enabled = beta < 0.99;
+            try {
+                await fetch('/softening/set', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled, beta }),
+                });
+                await loadSalesDetail();
+            } catch (err) { console.error(err); }
+        }
+        async function ulFetchSoftening() {
+            try {
+                const r = await fetch('/softening/get');
+                const cfg = await r.json();
+                const sel = document.getElementById('sdSoftening');
+                if (!sel) return;
+                if (!cfg.enabled) { sel.value = '1.0'; return; }
+                const beta = cfg.beta;
+                if (beta <= 0.55) sel.value = '0.5';
+                else if (beta <= 0.75) sel.value = '0.7';
+                else if (beta <= 0.9) sel.value = '0.85';
+                else sel.value = '1.0';
+            } catch (err) { /* ignore */ }
+        }
+
+        // ─── UNIVERSAL LFL TARGET ──────────────────────────────────────────
+        async function ulFetchAndPaint() {
+            try {
+                const r = await fetch('/universal-lfl/get');
+                const cfg = await r.json();
+                document.getElementById('ulEnabled').checked = !!cfg.enabled;
+                document.getElementById('ulTargetPct').value = cfg.target_pct ?? 0;
+                const weights = cfg.monthly_weights || [0,0,0,0,0,0,0,0,0,0,0,0];
+                document.querySelectorAll('.ul-wt').forEach(inp => {
+                    inp.value = weights[parseInt(inp.dataset.m)] ?? 0;
+                });
+                ulRecalcSum();
+            } catch (e) { /* ignore */ }
+        }
+        function ulRecalcSum() {
+            const total = Array.from(document.querySelectorAll('.ul-wt'))
+                .reduce((s, inp) => s + (parseFloat(inp.value) || 0), 0);
+            const el = document.getElementById('ulSum');
+            el.textContent = total.toFixed(1) + '%';
+            el.style.color = Math.abs(total - 100) < 0.5 ? '#43a047' : '#fb8c00';
+        }
+        document.addEventListener('input', e => {
+            if (e.target?.classList?.contains('ul-wt')) ulRecalcSum();
+        });
+        function ulPresetEven() {
+            document.querySelectorAll('.ul-wt').forEach(i => i.value = (100/12).toFixed(2));
+            ulRecalcSum();
+        }
+        function ulPresetExample() {
+            const weights = [0,0,0,5,10,10,10,10,10,15,15,15];   // Q4-Q3 ramp
+            document.querySelectorAll('.ul-wt').forEach(i => i.value = weights[parseInt(i.dataset.m)]);
+            ulRecalcSum();
+        }
+        function ulPresetReset() {
+            document.querySelectorAll('.ul-wt').forEach(i => i.value = 0);
+            ulRecalcSum();
+        }
+        async function ulSyncAndRefresh() {
+            const enabled = document.getElementById('ulEnabled').checked;
+            const target_pct = parseFloat(document.getElementById('ulTargetPct').value) || 0;
+            const monthly_weights = Array.from(document.querySelectorAll('.ul-wt'))
+                .sort((a,b) => parseInt(a.dataset.m) - parseInt(b.dataset.m))
+                .map(i => parseFloat(i.value) || 0);
+            try {
+                await fetch('/universal-lfl/set', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled, target_pct, monthly_weights }),
+                });
+                // Re-paint with normalised values
+                await ulFetchAndPaint();
+                // Refresh all downstream views
+                if (typeof loadSalesDetail === 'function') await loadSalesDetail();
+            } catch (e) { console.error(e); }
+        }
+        function ulRenderSummary(summary) {
+            const el = document.getElementById('ulSummary');
+            if (!summary || !summary.enabled) { el.innerHTML = ''; return; }
+            const fm$ = v => '$' + Math.round(v).toLocaleString();
+            const fmP = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+            if (summary.warning || !summary.venues_in_pool) {
+                el.innerHTML = `<div style="background:#fff3e0;border-left:4px solid #fb8c00;padding:10px 14px;border-radius:4px;color:#e65100;">
+                    ⚠️ <strong>Universal LFL did not apply</strong> — ${summary.warning || 'No LFL venues found.'}<br>
+                    <span style="font-size:11px;color:#555;">Fix: re-upload <strong>Venue Details.xlsx</strong> in the Upload step, then click Apply here again.</span>
+                </div>`;
+                return;
+            }
+            const gapColor = summary.gap >= 0 ? '#43a047' : '#e53935';
+            const basisLabels = { servings: 'Servings', retail: 'Retail', pos_discounts: 'POS Discounts', all: 'NET (All Combined)' };
+            const basis = basisLabels[summary.target_basis] || summary.target_basis || 'NET';
+            el.innerHTML = `
+                <strong>Target basis: ${basis}</strong> (matches the Sales Type dropdown above) ·
+                <strong>LFL pool:</strong> ${summary.venues_in_pool} venues ·
+                <strong>LFL FY26:</strong> ${fm$(summary.lfl_fy26_total)} ·
+                <strong>Pre-adjustment LFL FY27:</strong> ${fm$(summary.lfl_fy27_pre_total)} (${fmP(summary.current_growth_pct)}) ·
+                <strong>Target FY27:</strong> ${fm$(summary.lfl_fy27_target)} (${fmP(summary.target_pct)}) ·
+                <strong style="color:${gapColor};">Gap to bridge: ${fm$(summary.gap)}</strong>
+            `;
+        }
+
+        // ─── SALES DETAIL DASHBOARD ─────────────────────────────────────────
+        let sdData = null;
+        let sdChart = null;
+
+        function formatCurrency(v) {
+            if (v === null || v === undefined) return '—';
+            return '$' + Math.round(v).toLocaleString();
+        }
+
+        function populateSdFilter(selectId, options, allLabel) {
+            const sel = document.getElementById(selectId);
+            const current = sel.value || 'all';
+            sel.innerHTML = `<option value="all">${allLabel}</option>` +
+                options.map(o => `<option value="${o}">${o}</option>`).join('');
+            if ([...sel.options].some(o => o.value === current)) sel.value = current;
+        }
+
+        async function initSalesDetail() {
+            document.getElementById('salesDetailSection').style.display = 'block';
+            await ulFetchSoftening();
+            await ulFetchAndPaint();
+            await loadSalesDetail(true);
+        }
+
+        async function loadSalesDetail(isInitial) {
+            const state = document.getElementById('sdState')?.value || 'all';
+            const cluster = document.getElementById('sdCluster')?.value || 'all';
+            const cohort = document.getElementById('sdCohort')?.value || 'all';
+            const venue = document.getElementById('sdVenue')?.value || 'all';
+            const salesType = document.getElementById('sdSalesType')?.value || 'servings';
+            const guardrails = document.getElementById('sdGuardrails')?.value || 'on';
+            const cannibalisation = document.getElementById('sdCannibalisation')?.value || 'on';
+
+            showStatus('sdStatus', '<span class="loading-spinner"></span> Loading sales detail…', 'loading');
+            try {
+                const params = new URLSearchParams({state, cluster, cohort, venue, sales_type: salesType, guardrails, cannibalisation});
+                const res = await fetch('/sales-detail?' + params.toString());
+                const data = await res.json();
+                if (!res.ok) {
+                    showStatus('sdStatus', '❌ ' + (data.error || 'Failed to load'), 'error');
+                    return;
+                }
+                sdData = data;
+
+                if (isInitial) {
+                    populateSdFilter('sdState', data.filters_available.states, 'All States');
+                    populateSdFilter('sdCluster', data.filters_available.clusters, 'All Clusters');
+                    populateSdFilter('sdCohort', data.filters_available.cohorts, 'All Store Cohorts');
+                    populateSdFilter('sdVenue', data.filters_available.venues, 'All Venues');
+                }
+
+                // Update Sales Type badge in the heading
+                const typeLabels = {
+                    servings: 'Servings',
+                    retail: 'Retail',
+                    pos_discounts: 'POS Discounts',
+                    all: 'All Combined (Net Revenue)',
+                };
+                const badge = document.getElementById('sdTypeBadge');
+                if (badge) badge.textContent = typeLabels[data.filters_applied.sales_type] || 'Servings';
+
+                renderSalesDetailKpis();
+                renderSalesDetailChart();
+                renderSalesDetailEvents();
+                renderSalesDetailTable();
+                ulRenderSummary(data.universal_lfl);
+                document.getElementById('sdStatus').style.display = 'none';
+                // Also load per-venue detail (uses same filters)
+                loadVenueDetail();
+            } catch (err) {
+                showStatus('sdStatus', '❌ ' + err.message, 'error');
+            }
+        }
+
+        function renderSalesDetailKpis() {
+            if (!sdData) return;
+            const s = sdData.summary;
+            const growth = parseFloat(document.getElementById('sdGrowth')?.value || 0);
+            const scenarioFy27 = s.fy27_forecast * (1 + growth / 100);
+            const scenarioGrowth = s.fy26_comparator > 0
+                ? ((scenarioFy27 - s.fy26_comparator) / s.fy26_comparator * 100) : 0;
+
+            const kpis = [
+                { label: 'FY27 Forecast Sales', value: formatCurrency(s.fy27_forecast) },
+                { label: 'FY26 Comparator', value: formatCurrency(s.fy26_comparator) },
+                { label: 'Total Growth', value: (s.total_growth_pct || 0).toFixed(1) + '%' },
+                { label: 'LFL Growth', value: (s.lfl_growth_pct || 0).toFixed(1) + '%' },
+                { label: 'FY26 Completion FC', value: formatCurrency(s.fy26_completion_forecast) },
+            ];
+            document.getElementById('sdKpis').innerHTML = kpis.map(k =>
+                `<div class="stat-card"><strong>${k.label}</strong><span style="font-size:18px;">${k.value}</span></div>`
+            ).join('');
+
+            // Growth Attribution: Prophet base vs Multiplier lift
+            const attribEl = document.getElementById('sdGrowthAttrib');
+            if (attribEl) {
+                const totalFmt = (v) => v === null || v === undefined ? '—' : v.toFixed(1) + '%';
+                attribEl.innerHTML = `
+                    <div style="background:#f5f7ff;border-left:4px solid #667eea;padding:12px 18px;border-radius:6px;margin-top:12px;font-size:13px;line-height:1.7;">
+                        <strong style="color:#667eea;">📐 Growth attribution — how the total is built up:</strong><br>
+                        <table style="margin-top:6px;width:100%;font-size:13px;">
+                            <tr>
+                                <td style="padding:4px 12px 4px 0;"><strong>Total (all venues)</strong></td>
+                                <td style="text-align:right;padding:4px 8px;">Prophet base: <strong>${totalFmt(s.base_growth_pct)}</strong></td>
+                                <td style="text-align:right;padding:4px 8px;">+ Multiplier lift: <strong style="color:#43a047;">${totalFmt(s.multiplier_lift_pct)}</strong></td>
+                                <td style="text-align:right;padding:4px 8px;">= Total: <strong>${totalFmt(s.total_growth_pct)}</strong></td>
+                            </tr>
+                            <tr>
+                                <td style="padding:4px 12px 4px 0;"><strong>LFL (same-store)</strong></td>
+                                <td style="text-align:right;padding:4px 8px;">Prophet base: <strong>${totalFmt(s.lfl_base_growth_pct)}</strong></td>
+                                <td style="text-align:right;padding:4px 8px;">+ Multiplier lift: <strong style="color:#43a047;">${totalFmt(s.lfl_multiplier_lift_pct)}</strong></td>
+                                <td style="text-align:right;padding:4px 8px;">= Total: <strong>${totalFmt(s.lfl_growth_pct)}</strong></td>
+                            </tr>
+                        </table>
+                        <div style="font-size:11px;color:#666;margin-top:6px;">
+                            Prophet base = forecast with multiplier set to 1.0. Multiplier lift = the additional uplift from your 15-month multipliers (compounds on top).
+                        </div>
+                    </div>`;
+            }
+        }
+
+        function renderSalesDetailChart() {
+            if (!sdData) return;
+            const monthly = sdData.monthly;
+            const labels = monthly.map(m => m.month_label);
+            const fy26 = monthly.map(m => m.fy26_comparator);
+            const fy27 = monthly.map(m => m.fy27_forecast);
+            const growth = parseFloat(document.getElementById('sdGrowth')?.value || 0);
+
+            // Bar series ($)
+            const scenarioBars = fy27.map(v => v * (1 + growth / 100));
+
+            // Line series (% growth YoY) — right axis
+            const growthPct = monthly.map(m => m.growth_pct);
+            const lflGrowthPct = monthly.map(m => m.lfl_growth_pct);
+            const scenarioGrowthPct = monthly.map(m => {
+                const sc = m.fy27_forecast * (1 + growth / 100);
+                return m.fy26_comparator > 0 ? ((sc - m.fy26_comparator) / m.fy26_comparator * 100) : null;
+            });
+
+            renderSalesDetailKpis();
+            renderSalesDetailTable();
+
+            if (sdChart) sdChart.destroy();
+            const ctx = document.getElementById('sdChart').getContext('2d');
+
+            // Custom plugin: draw holiday/extreme-weather flag emojis above each month
+            const eventMarkers = {
+                id: 'eventMarkers',
+                afterDatasetsDraw(chart) {
+                    const {ctx, scales: {x, yLeft}} = chart;
+                    if (!yLeft) return;
+                    ctx.save();
+                    ctx.textAlign = 'center';
+                    ctx.font = '12px sans-serif';
+                    monthly.forEach((m, idx) => {
+                        const px = x.getPixelForValue(idx);
+                        const py = yLeft.top + 4;
+                        const tags = [];
+                        // FY26 (left of center)
+                        if (m.fy26_holiday_count) tags.push({txt: `🎉${m.fy26_holiday_count}`, color: '#e65100', fy: 26});
+                        if (m.fy26_extreme_count) tags.push({txt: `⚠️${m.fy26_extreme_count}`, color: '#c62828', fy: 26});
+                        if (m.fy27_holiday_count) tags.push({txt: `🎉${m.fy27_holiday_count}`, color: '#e65100', fy: 27});
+                        if (m.fy27_extreme_count) tags.push({txt: `⚠️${m.fy27_extreme_count}`, color: '#c62828', fy: 27});
+                        tags.forEach((t, i) => {
+                            ctx.fillStyle = t.color;
+                            ctx.fillText(t.txt, px, py + i * 14);
+                        });
+                    });
+                    ctx.restore();
+                },
+            };
+
+            sdChart = new Chart(ctx, {
+                plugins: [eventMarkers],
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            type: 'bar', label: 'FY26 Comparator ($)',
+                            data: fy26, backgroundColor: 'rgba(149,165,166,0.7)',
+                            yAxisID: 'yLeft', order: 3,
+                        },
+                        {
+                            type: 'bar', label: 'FY27 Forecast ($)',
+                            data: fy27, backgroundColor: 'rgba(102,126,234,0.85)',
+                            yAxisID: 'yLeft', order: 2,
+                        },
+                        {
+                            type: 'line', label: 'FY27 Scenario % Growth',
+                            data: scenarioGrowthPct,
+                            borderColor: '#43a047', backgroundColor: 'rgba(67,160,71,0.1)',
+                            borderWidth: 2, tension: 0.3, pointRadius: 4, fill: false,
+                            yAxisID: 'yRight', order: 1,
+                        },
+                        {
+                            type: 'line', label: 'LFL FY27 % Growth',
+                            data: lflGrowthPct,
+                            borderColor: '#fb8c00', backgroundColor: 'rgba(251,140,0,0.1)',
+                            borderWidth: 2, tension: 0.3, pointRadius: 4, fill: false,
+                            yAxisID: 'yRight', order: 0,
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const v = ctx.parsed.y;
+                                    if (v === null || v === undefined) return ctx.dataset.label + ': —';
+                                    if (ctx.dataset.yAxisID === 'yRight') {
+                                        return ctx.dataset.label + ': ' + v.toFixed(1) + '%';
+                                    }
+                                    return ctx.dataset.label + ': $' + Math.round(v).toLocaleString();
+                                },
+                            },
+                        },
+                    },
+                    scales: {
+                        yLeft: {
+                            type: 'linear', position: 'left', beginAtZero: true,
+                            title: { display: true, text: 'Sales ($)' },
+                            ticks: { callback: v => '$' + (v / 1e6).toFixed(1) + 'M' },
+                        },
+                        yRight: {
+                            type: 'linear', position: 'right',
+                            title: { display: true, text: 'Growth %' },
+                            grid: { drawOnChartArea: false },
+                            ticks: { callback: v => v.toFixed(0) + '%' },
+                        },
+                    },
+                },
+            });
+        }
+
+        // ─── EXPENSES & FULL P&L ─────────────────────────────────────────────
+        let pnlData = null;
+
+        async function expUploadAll() {
+            const keys = ['labour', 'cogs', 'rent', 'other_pnl'];
+            const fd = new FormData();
+            let any = false;
+            keys.forEach(k => {
+                const el = document.getElementById(k);
+                if (el && el.files.length) { fd.append(k, el.files[0]); any = true; }
+            });
+            if (!any) { showStatus('expStatus', '⚠️ Pick at least one expense template', 'error'); return; }
+            document.getElementById('btnExpUpload').disabled = true;
+            showStatus('expStatus', '<span class="loading-spinner"></span> Uploading expense templates…', 'loading');
+            try {
+                const res = await fetch('/expense/upload', { method: 'POST', body: fd });
+                const data = await res.json();
+                Object.entries(data.summary || {}).forEach(([key, info]) => {
+                    const card = document.getElementById('card-' + key);
+                    if (!card) return;
+                    card.classList.add('loaded');
+                    const txt = key === 'other_pnl'
+                        ? `✓ ${info.line_items} line items / ${info.venues} venues`
+                        : `✓ ${info.venues} venues`;
+                    card.querySelector('.file-status').textContent = txt;
+                });
+                (data.errors || []).forEach(e => showStatus('expStatus', '⚠️ ' + e, 'error'));
+                showStatus('expStatus', '✅ Expense templates loaded — click "Build P&L" to render', 'success');
+            } catch (err) {
+                showStatus('expStatus', '❌ ' + err.message, 'error');
+            } finally {
+                document.getElementById('btnExpUpload').disabled = false;
+            }
+        }
+
+        function pnlPopulateFilters() {
+            if (!venueDetailData) return;
+            const states = [...new Set(venueDetailData.venues.map(v => v.state).filter(s => s && s !== '—'))].sort();
+            const clusters = [...new Set(venueDetailData.venues.map(v => v.cluster).filter(c => c && c !== '—' && c !== 'nan'))].sort();
+            const cohorts = [...new Set(venueDetailData.venues.map(v => v.cohort).filter(c => c))].sort();
+            const venues = venueDetailData.venues.map(v => v.venue).sort();
+            const fill = (id, list, allLabel) => {
+                const sel = document.getElementById(id);
+                if (!sel) return;
+                const cur = sel.value;
+                sel.innerHTML = `<option value="all">${allLabel}</option>` +
+                    list.map(o => `<option value="${o}">${o}</option>`).join('');
+                if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+            };
+            fill('pState', states, 'All States');
+            fill('pCluster', clusters, 'All Clusters');
+            fill('pCohort', cohorts, 'All Store Cohorts');
+            fill('pVenue', venues, 'All Venues');
+        }
+
+        async function loadPnl() {
+            pnlPopulateFilters();
+            const params = new URLSearchParams({
+                state: document.getElementById('pState').value || 'all',
+                cluster: document.getElementById('pCluster').value || 'all',
+                cohort: document.getElementById('pCohort').value || 'all',
+                venue: document.getElementById('pVenue').value || 'all',
+                guardrails: document.getElementById('pGuardrails').value || 'on',
+                cannibalisation: document.getElementById('pCannibalisation')?.value || 'on',
+            });
+            showStatus('expStatus', '<span class="loading-spinner"></span> Building P&L…', 'loading');
+            try {
+                const res = await fetch('/pnl?' + params.toString());
+                const data = await res.json();
+                if (!res.ok) { showStatus('expStatus', '❌ ' + (data.error || 'Failed'), 'error'); return; }
+                pnlData = data;
+                renderPnlKpis();
+                renderPnlNetworkTable();
+                renderPnlVenueTable();
+                document.getElementById('expStatus').style.display = 'none';
+            } catch (err) { showStatus('expStatus', '❌ ' + err.message, 'error'); }
+        }
+
+        function fmt$M(v) {
+            if (v === null || v === undefined) return '—';
+            return '$' + Math.round(v).toLocaleString();
+        }
+        function fmtP(v) {
+            if (v === null || v === undefined) return '—';
+            const c = v >= 0 ? '#43a047' : '#e53935';
+            return `<span style="color:${c};font-weight:600;">${v.toFixed(1)}%</span>`;
+        }
+
+        function renderPnlKpis() {
+            if (!pnlData) return;
+            const n = pnlData.network_totals;
+            const ns = n.net_sales || 0;
+            const kpis = [
+                { label: `Network Net Sales (${n.venue_count} venues)`, value: fmt$M(ns) },
+                { label: 'Gross Profit', value: fmt$M(n.gross_profit) + (ns ? ` (${(n.gross_profit/ns*100).toFixed(1)}%)` : '') },
+                { label: 'Labour + Occupancy', value: fmt$M((n.labour_total || 0) + (n.occupancy_total || 0)) },
+                { label: 'Venue Contribution', value: fmt$M(n.contribution) + (ns ? ` (${(n.contribution/ns*100).toFixed(1)}%)` : '') },
+            ];
+            document.getElementById('pnlKpis').innerHTML = kpis.map(k =>
+                `<div class="stat-card"><strong>${k.label}</strong><span style="font-size:18px;">${k.value}</span></div>`
+            ).join('');
+        }
+
+        function renderPnlNetworkTable() {
+            if (!pnlData) return;
+            const monthly = pnlData.network_monthly || [];
+            const months = ['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'];
+            const byMonth = {};
+            monthly.forEach(m => byMonth[m.month] = m);
+            const cellsFor = (key) => months.map(m => byMonth[m] ? `<td style="text-align:right;">${fmt$M(byMonth[m][key])}</td>` : '<td style="text-align:right;color:#aaa;">—</td>').join('');
+            const totalFor = (key) => fmt$M(months.reduce((s, m) => s + (byMonth[m]?.[key] || 0), 0));
+            const lines = [
+                { label: 'Net Sales', key: 'net_sales', style: 'font-weight:700;background:#f9f9ff;' },
+                { label: '− COGS', key: 'cogs_total', sign: -1 },
+                { label: '= Gross Profit', key: 'gross_profit', style: 'font-weight:700;background:#f9f9ff;' },
+                { label: '− Labour', key: 'labour_total', sign: -1 },
+                { label: '− Occupancy', key: 'occupancy_total', sign: -1 },
+                { label: '+ Other P&L', key: 'other_pnl_total' },
+                { label: '= Contribution', key: 'contribution', style: 'font-weight:700;background:#e8f5e9;color:#1b5e20;' },
+            ];
+            const tbody = document.querySelector('#pnlNetworkTable tbody');
+            tbody.innerHTML = lines.map(l => {
+                const sign = l.sign || 1;
+                const cells = months.map(m => {
+                    const v = byMonth[m]?.[l.key];
+                    return v === undefined || v === null ? '<td style="text-align:right;color:#aaa;">—</td>' :
+                        `<td style="text-align:right;">${fmt$M(v * sign)}</td>`;
+                }).join('');
+                const tot = months.reduce((s, m) => s + (byMonth[m]?.[l.key] || 0), 0) * sign;
+                return `<tr style="${l.style || ''}"><td>${l.label}</td>${cells}<td style="text-align:right;font-weight:600;">${fmt$M(tot)}</td></tr>`;
+            }).join('');
+        }
+
+        function renderPnlVenueTable() {
+            if (!pnlData) return;
+            const tbody = document.querySelector('#pnlVenueTable tbody');
+            let prevState = null, prevCluster = null;
+            tbody.innerHTML = (pnlData.venues || []).map(v => {
+                const t = v.totals;
+                const ns = t.net_sales || 1;
+                let pre = '';
+                if (v.state !== prevState) { pre += `<tr style="background:#eef0ff;"><td colspan="14" style="padding:6px 10px;font-weight:700;color:#667eea;">📍 ${v.state}</td></tr>`; prevState = v.state; prevCluster = null; }
+                if (v.cluster !== prevCluster) { pre += `<tr style="background:#f5f7ff;"><td></td><td colspan="13" style="padding:4px 10px;font-weight:600;color:#5568d3;font-size:11px;">└ ${v.cluster || '—'}</td></tr>`; prevCluster = v.cluster; }
+                return pre + `<tr>
+                    <td>${v.state}</td><td>${v.cluster || '—'}</td><td><strong>${v.venue}</strong></td>
+                    <td style="text-align:right;">${fmt$M(t.net_sales)}</td>
+                    <td style="text-align:right;color:#888;">${fmt$M(t.cogs_total)}</td>
+                    <td style="text-align:right;">${fmt$M(t.gross_profit)}</td>
+                    <td style="text-align:right;">${fmtP(t.gross_profit/ns*100)}</td>
+                    <td style="text-align:right;color:#888;">${fmt$M(t.labour_total)}</td>
+                    <td style="text-align:right;">${fmtP(t.labour_total/ns*100)}</td>
+                    <td style="text-align:right;color:#888;">${fmt$M(t.occupancy_total)}</td>
+                    <td style="text-align:right;">${fmtP(t.occupancy_total/ns*100)}</td>
+                    <td style="text-align:right;color:#888;">${fmt$M(t.other_pnl_total)}</td>
+                    <td style="text-align:right;font-weight:700;color:${t.contribution >= 0 ? '#1b5e20' : '#c62828'};">${fmt$M(t.contribution)}</td>
+                    <td style="text-align:right;">${fmtP(t.contribution/ns*100)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function downloadPnlCsv() {
+            const params = new URLSearchParams({
+                state: document.getElementById('pState').value || 'all',
+                cluster: document.getElementById('pCluster').value || 'all',
+                cohort: document.getElementById('pCohort').value || 'all',
+                venue: document.getElementById('pVenue').value || 'all',
+                guardrails: document.getElementById('pGuardrails').value || 'on',
+                cannibalisation: document.getElementById('pCannibalisation')?.value || 'on',
+            });
+            window.location.href = '/pnl/csv?' + params.toString();
+        }
+
+        // ─── SCENARIOS: 3 named versions per venue, target growth % + 5 comments ─
+        let scList = null;
+
+        async function scenarioRefresh() {
+            try {
+                const res = await fetch('/scenario/list');
+                const data = await res.json();
+                scList = data;
+                renderScenarioTabs();
+                renderScenarioVenueTable();
+            } catch (err) { console.error(err); }
+        }
+
+        function renderScenarioTabs() {
+            const tabsEl = document.getElementById('scTabs');
+            const active = scList?.active;
+            const scenarios = scList?.scenarios || [];
+            tabsEl.innerHTML = scenarios.length === 0
+                ? '<span style="color:#888;font-size:12px;align-self:center;">No scenarios yet — create one to the right →</span>'
+                : scenarios.map(s => {
+                    const isActive = s.name === active;
+                    const bg = isActive ? '#667eea' : '#eef0ff';
+                    const color = isActive ? 'white' : '#667eea';
+                    return `<div style="display:inline-flex;align-items:center;background:${bg};color:${color};padding:6px 4px 6px 12px;border-radius:18px;font-weight:600;font-size:13px;">
+                        <span onclick="scenarioActivate('${s.name.replace(/'/g, "\\'")}')" style="cursor:pointer;">${s.name} <span style="opacity:0.7;font-weight:400;">· ${s.venue_count} venue(s)</span></span>
+                        <button onclick="scenarioDelete('${s.name.replace(/'/g, "\\'")}')" title="Delete scenario" style="background:transparent;color:${color};border:0;cursor:pointer;font-size:14px;margin-left:6px;padding:2px 8px;">✕</button>
+                    </div>`;
+                }).join('');
+
+            const badge = document.getElementById('scActiveBadge');
+            badge.textContent = active ? `Active: ${active}` : '(none active)';
+            badge.style.background = active ? '#43a047' : '#eef0ff';
+            badge.style.color = active ? 'white' : '#667eea';
+        }
+
+        async function scenarioCreate() {
+            const name = document.getElementById('scNewName').value.trim();
+            if (!name) { showStatus('scStatus', '⚠️ Enter a scenario name', 'error'); return; }
+            try {
+                const res = await fetch('/scenario/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name }),
+                });
+                const data = await res.json();
+                if (!res.ok) { showStatus('scStatus', '❌ ' + (data.error || 'Failed'), 'error'); return; }
+                document.getElementById('scNewName').value = '';
+                showStatus('scStatus', `✅ Scenario "${data.name}" created (now active). Set growth targets below.`, 'success');
+                await scenarioRefresh();
+                await refreshAllDashboards();
+            } catch (err) { showStatus('scStatus', '❌ ' + err.message, 'error'); }
+        }
+
+        async function scenarioActivate(name) {
+            try {
+                await fetch('/scenario/activate', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name }),
+                });
+                showStatus('scStatus', `✅ Scenario "${name}" activated — dashboard refreshing…`, 'success');
+                await scenarioRefresh();
+                await refreshAllDashboards();
+            } catch (err) { showStatus('scStatus', '❌ ' + err.message, 'error'); }
+        }
+
+        async function scenarioDeactivate() {
+            try {
+                await fetch('/scenario/activate', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: '' }),
+                });
+                showStatus('scStatus', '✅ No scenario active — showing raw forecast.', 'info');
+                await scenarioRefresh();
+                await refreshAllDashboards();
+            } catch (err) { showStatus('scStatus', '❌ ' + err.message, 'error'); }
+        }
+
+        async function scenarioDelete(name) {
+            if (!confirm(`Delete scenario "${name}"?`)) return;
+            try {
+                await fetch('/scenario/delete', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name }),
+                });
+                showStatus('scStatus', `🗑️ Deleted "${name}"`, 'info');
+                await scenarioRefresh();
+                await refreshAllDashboards();
+            } catch (err) { showStatus('scStatus', '❌ ' + err.message, 'error'); }
+        }
+
+        // Inline SVG sparkline for FY25 / FY26 / FY27 monthly comparison.
+        // 12 points per series (Jul..Jun). Shared y-axis across all 3 series.
+        function buildSparkline(fy25, fy26, fy27, w = 180, h = 60) {
+            const pad = 4;
+            const all = [...(fy25 || []), ...(fy26 || []), ...(fy27 || [])].filter(v => v !== null && v !== undefined);
+            if (!all.length) return `<div style="width:${w}px;height:${h}px;font-size:10px;color:#bbb;display:flex;align-items:center;justify-content:center;">no data</div>`;
+            const yMin = 0;
+            const yMax = Math.max(...all) * 1.05 || 1;
+            const xStep = (w - pad * 2) / 11;  // 12 points → 11 gaps
+            const toPath = (series, color, dashed) => {
+                if (!series || !series.length) return '';
+                const points = series.map((v, i) => {
+                    if (v === null || v === undefined) return null;
+                    const x = pad + i * xStep;
+                    const y = h - pad - ((v - yMin) / (yMax - yMin)) * (h - pad * 2);
+                    return [x, y];
+                });
+                const segments = [];
+                let buf = [];
+                for (const p of points) {
+                    if (p === null) { if (buf.length) { segments.push(buf); buf = []; } }
+                    else buf.push(p);
+                }
+                if (buf.length) segments.push(buf);
+                return segments.map(seg => {
+                    const d = seg.map((p, i) => (i === 0 ? `M${p[0].toFixed(1)},${p[1].toFixed(1)}` : `L${p[0].toFixed(1)},${p[1].toFixed(1)}`)).join(' ');
+                    const dash = dashed ? ' stroke-dasharray="3 3"' : '';
+                    return `<path d="${d}" stroke="${color}" stroke-width="1.4" fill="none"${dash}/>`;
+                }).join('');
+            };
+            // Tooltip with monthly totals (Jul..Jun)
+            const months = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+            const tip = months.map((m, i) => {
+                const v25 = fy25?.[i], v26 = fy26?.[i], v27 = fy27?.[i];
+                const fmt = (n) => n ? '$' + Math.round(n / 1000) + 'k' : '–';
+                return `${m}: FY25 ${fmt(v25)} | FY26 ${fmt(v26)} | FY27 ${fmt(v27)}`;
+            }).join('\n');
+            return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;" title="${tip.replace(/"/g, '&quot;')}">
+                <rect x="0" y="0" width="${w}" height="${h}" fill="#fafbff" stroke="#e0e0e0" stroke-width="0.5"/>
+                ${toPath(fy25, '#888', true)}
+                ${toPath(fy26, '#667eea', false)}
+                ${toPath(fy27, '#43a047', false)}
+            </svg>`;
+        }
+
+        function renderScenarioVenueTable() {
+            // Use the venueDetailData already loaded — it tells us all venues + their FY26/FY27 baselines
+            const tbody = document.querySelector('#scVenueTable tbody');
+            if (!venueDetailData || !venueDetailData.venues) {
+                tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#888;padding:14px;">Run a forecast first.</td></tr>';
+                return;
+            }
+            const active = scList?.active;
+            const rows = venueDetailData.venues;
+            const fmt$ = (v) => v === null || v === undefined ? '—' : '$' + Math.round(v).toLocaleString();
+            const fmt$2 = (v) => v === null || v === undefined ? '—' : '$' + v.toFixed(0);
+            const fmtPct = (v) => v === null || v === undefined ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+            tbody.innerHTML = rows.map(v => {
+                const tGrowth = v.scenario_target_growth_pct;
+                const tAvgDaily = v.scenario_target_avg_daily;
+                const comment = v.scenario_comment || '';
+                const disabled = !active ? 'disabled style="background:#f5f5f5;color:#aaa;"' : '';
+                const spark = buildSparkline(v.monthly_fy25, v.monthly_fy26, v.monthly_fy27);
+                return `<tr data-venue="${v.venue.replace(/"/g, '&quot;')}">
+                    <td style="text-align:center;padding:4px;">${spark}</td>
+                    <td><strong>${v.venue}</strong></td>
+                    <td>${v.state}</td>
+                    <td>${v.cluster}</td>
+                    <td style="text-align:right;">${fmt$(v.fy26_forecast)}</td>
+                    <td style="text-align:right;">${fmt$(v.fy27_forecast)}</td>
+                    <td style="text-align:right;color:${(v.growth_pct ?? 0) >= 0 ? '#43a047' : '#e53935'};font-weight:600;">${fmtPct(v.growth_pct)}</td>
+                    <td style="text-align:right;color:#555;">${fmt$2(v.avg_daily_fy26)}</td>
+                    <td style="text-align:right;color:#555;">${fmt$2(v.avg_daily_fy27)}</td>
+                    <td><input type="number" step="0.1" class="sc-target-growth" value="${tGrowth ?? ''}" placeholder="—" ${disabled} style="width:80px;padding:5px;border:1px solid #ccc;border-radius:4px;text-align:right;font-size:12px;"></td>
+                    <td><input type="number" step="100" class="sc-target-avg" value="${tAvgDaily ?? ''}" placeholder="—" ${disabled} style="width:100px;padding:5px;border:1px solid #ccc;border-radius:4px;text-align:right;font-size:12px;"></td>
+                    <td><input type="text" class="sc-comment" value="${(comment || '').replace(/"/g, '&quot;')}" ${disabled} placeholder="Movement note…" style="width:100%;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function scenarioApplyAll() {
+            const active = scList?.active;
+            if (!active) { showStatus('scStatus', '⚠️ Activate a scenario first.', 'error'); return; }
+            const rows = document.querySelectorAll('#scVenueTable tbody tr');
+            showStatus('scStatus', `<span class="loading-spinner"></span> Saving ${rows.length} venue inputs…`, 'loading');
+            let saved = 0;
+            for (const row of rows) {
+                const venue = row.dataset.venue;
+                const growthRaw = row.querySelector('.sc-target-growth').value;
+                const avgDailyRaw = row.querySelector('.sc-target-avg').value;
+                const comment = row.querySelector('.sc-comment').value || '';
+                const target_growth_pct = growthRaw === '' ? null : parseFloat(growthRaw);
+                const target_avg_daily = avgDailyRaw === '' ? null : parseFloat(avgDailyRaw);
+                try {
+                    const res = await fetch('/scenario/venue', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ scenario: active, venue, target_growth_pct, target_avg_daily, comment }),
+                    });
+                    if (res.ok) saved++;
+                } catch (e) { /* skip */ }
+            }
+            showStatus('scStatus', `✅ Saved ${saved}/${rows.length} venues for "${active}". Refreshing dashboards…`, 'success');
+            await refreshAllDashboards();
+        }
+
+        async function refreshAllDashboards() {
+            // Re-fetch all the dependent views so the scenario takes effect everywhere
+            await loadSalesDetail();   // also loads /venues-detail via the pipeline
+        }
+
+        // ─── PER-VENUE PER-MONTH ADJUSTMENTS ───────────────────────────────
+        let vmaData = {};
+
+        function vmaInit() {
+            // Populate venue dropdown from venueDetailData
+            if (!venueDetailData || !venueDetailData.venues) return;
+            const venues = venueDetailData.venues.map(v => v.venue).sort();
+            const vSel = document.getElementById('vmaVenue');
+            const cur = vSel.value;
+            vSel.innerHTML = `<option value="">-- Select Venue --</option>` +
+                venues.map(v => `<option value="${v}">${v}</option>`).join('');
+            if (cur && [...vSel.options].some(o => o.value === cur)) vSel.value = cur;
+            document.getElementById('venueMonthAdjustmentSection').style.display = 'block';
+            vmaLoadAdjustments();
+        }
+
+        async function vmaLoadAdjustments() {
+            try {
+                const res = await fetch('/venue-month-adjustment/list');
+                if (!res.ok) throw new Error(res.statusText);
+                vmaData = await res.json();
+                vmaBuildTable();
+            } catch (e) {
+                showStatus('vmaStatus', '⚠️ Failed to load adjustments: ' + e.message, 'error');
+            }
+        }
+
+        function vmaBuildTable() {
+            const tbody = document.querySelector('#vmaTable tbody');
+            const rows = [];
+            for (const [venue, months] of Object.entries(vmaData)) {
+                for (const [month, adj] of Object.entries(months)) {
+                    rows.push({
+                        venue,
+                        month,
+                        type: adj.adjustment_type,
+                        value: adj.value_pct,
+                    });
+                }
+            }
+            tbody.innerHTML = rows.map(r => {
+                const typeLabel = r.type === 'growth' ? 'Growth Override' : 'Cannibalisation Delta';
+                return `<tr>
+                    <td>${r.venue}</td>
+                    <td>${r.month}</td>
+                    <td>${typeLabel}</td>
+                    <td style="text-align:right;font-weight:600;">${r.value > 0 ? '+' : ''}${r.value.toFixed(1)}%</td>
+                    <td><button class="secondary" onclick="vmaDeleteAdjustment('${r.venue.replace(/'/g, "\\'")}', '${r.month}')" style="padding:4px 10px;font-size:12px;">🗑️ Delete</button></td>
+                </tr>`;
+            }).join('');
+            if (rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888;padding:14px;">No adjustments yet.</td></tr>';
+            }
+        }
+
+        async function vmaApplyAdjustment() {
+            const venue = document.getElementById('vmaVenue').value || '';
+            const month = document.getElementById('vmaMonth').value || '';
+            const type = document.getElementById('vmaType').value || 'growth';
+            const value = parseFloat(document.getElementById('vmaValue').value || '0');
+
+            if (!venue || !month) {
+                showStatus('vmaStatus', '⚠️ Select venue and month.', 'error');
+                return;
+            }
+
+            // Validate month format YYYY-MM
+            if (!/^\d{4}-\d{2}$/.test(month)) {
+                showStatus('vmaStatus', '⚠️ Month must be in YYYY-MM format.', 'error');
+                return;
+            }
+
+            showStatus('vmaStatus', '<span class="loading-spinner"></span> Saving adjustment…', 'loading');
+            try {
+                const res = await fetch('/venue-month-adjustment/set', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        venue,
+                        year_month: month,
+                        adjustment_type: type,
+                        value_pct: value,
+                    }),
+                });
+                if (!res.ok) throw new Error(res.statusText);
+                showStatus('vmaStatus', `✅ Adjustment saved. Refreshing…`, 'success');
+                document.getElementById('vmaMonth').value = '';
+                document.getElementById('vmaValue').value = '';
+                vmaLoadAdjustments();
+                await refreshAllDashboards();
+            } catch (e) {
+                showStatus('vmaStatus', '❌ Failed to save: ' + e.message, 'error');
+            }
+        }
+
+        async function vmaDeleteAdjustment(venue, month) {
+            if (!confirm(`Delete adjustment for ${venue} in ${month}?`)) return;
+            showStatus('vmaStatus', '<span class="loading-spinner"></span> Deleting…', 'loading');
+            try {
+                const res = await fetch('/venue-month-adjustment/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ venue, year_month: month }),
+                });
+                if (!res.ok) throw new Error(res.statusText);
+                showStatus('vmaStatus', '✅ Adjustment deleted. Refreshing…', 'success');
+                vmaLoadAdjustments();
+                await refreshAllDashboards();
+            } catch (e) {
+                showStatus('vmaStatus', '❌ Failed to delete: ' + e.message, 'error');
+            }
+        }
+
+        // ─── VENUE COMPARISON ──────────────────────────────────────────────
+        let vcData = null;
+        let vcChart = null;
+        const VC_COLORS = ['#667eea', '#43a047', '#fb8c00', '#e91e63'];
+
+        function vcInit() {
+            // Populate cluster dropdown from venueDetailData (must be loaded first)
+            if (!venueDetailData) return;
+            const clusters = [...new Set(venueDetailData.venues.map(v => v.cluster).filter(c => c && c !== 'nan'))].sort();
+            const cSel = document.getElementById('vcCluster');
+            const cur = cSel.value;
+            cSel.innerHTML = `<option value="all">All Clusters</option>` +
+                clusters.map(c => `<option value="${c}">${c}</option>`).join('');
+            if ([...cSel.options].some(o => o.value === cur)) cSel.value = cur;
+            vcPopulateVenues();
+            document.getElementById('venueCompareSection').style.display = 'block';
+        }
+
+        function vcPopulateVenues() {
+            if (!venueDetailData) return;
+            const cluster = document.getElementById('vcCluster').value;
+            const venues = venueDetailData.venues
+                .filter(v => cluster === 'all' || v.cluster === cluster)
+                .map(v => v.venue)
+                .sort();
+            ['vcV1', 'vcV2', 'vcV3', 'vcV4'].forEach((id, idx) => {
+                const sel = document.getElementById(id);
+                const cur = sel.value;
+                sel.innerHTML = `<option value="">— none —</option>` +
+                    venues.map(v => `<option value="${v}">${v}</option>`).join('');
+                if ([...sel.options].some(o => o.value === cur)) {
+                    sel.value = cur;
+                } else if (idx < venues.length && cluster !== 'all') {
+                    // Auto-pick first few venues when switching to a specific cluster
+                    sel.value = venues[idx];
+                }
+            });
+        }
+
+        function vcOnClusterChange() {
+            vcPopulateVenues();
+            loadVenueCompare();
+        }
+
+        async function loadVenueCompare() {
+            const picks = ['vcV1', 'vcV2', 'vcV3', 'vcV4']
+                .map(id => document.getElementById(id).value)
+                .filter(v => v);
+            if (picks.length === 0) {
+                if (vcChart) { vcChart.destroy(); vcChart = null; }
+                document.querySelector('#vcTable tbody').innerHTML = '';
+                return;
+            }
+            try {
+                const params = new URLSearchParams({venues: picks.join('|')});
+                const res = await fetch('/venue-compare?' + params.toString());
+                if (!res.ok) return;
+                vcData = await res.json();
+                renderVenueCompareChart();
+                renderVenueCompareTable();
+            } catch (err) { console.error(err); }
+        }
+
+        function renderVenueCompareChart() {
+            if (!vcData) return;
+            const view = document.getElementById('vcView').value;
+            const labels = vcData.venues[0]?.monthly.map(m => m.month_label) || [];
+            const datasets = [];
+            vcData.venues.forEach((v, i) => {
+                if (v.error) return;
+                const color = VC_COLORS[i % VC_COLORS.length];
+                if (view === 'fy27_$') {
+                    datasets.push({
+                        type: 'line', label: `${v.venue} FY27`,
+                        data: v.monthly.map(m => m.fy27),
+                        borderColor: color, backgroundColor: color + '22',
+                        borderWidth: 2.5, tension: 0.3, pointRadius: 4, fill: false,
+                    });
+                } else if (view === 'fy26_$') {
+                    datasets.push({
+                        type: 'line', label: `${v.venue} FY26`,
+                        data: v.monthly.map(m => m.fy26),
+                        borderColor: color, backgroundColor: color + '22',
+                        borderWidth: 2.5, tension: 0.3, pointRadius: 4, fill: false,
+                    });
+                } else if (view === 'both_$') {
+                    datasets.push({
+                        type: 'line', label: `${v.venue} FY26`,
+                        data: v.monthly.map(m => m.fy26),
+                        borderColor: color, borderDash: [5, 5],
+                        borderWidth: 2, tension: 0.3, pointRadius: 3, fill: false,
+                    });
+                    datasets.push({
+                        type: 'line', label: `${v.venue} FY27`,
+                        data: v.monthly.map(m => m.fy27),
+                        borderColor: color,
+                        borderWidth: 2.5, tension: 0.3, pointRadius: 4, fill: false,
+                    });
+                } else { // growth_%
+                    datasets.push({
+                        type: 'line', label: `${v.venue} YoY %`,
+                        data: v.monthly.map(m => m.growth_pct),
+                        borderColor: color, backgroundColor: color + '22',
+                        borderWidth: 2.5, tension: 0.3, pointRadius: 4, fill: false, spanGaps: true,
+                    });
+                }
+            });
+
+            if (vcChart) vcChart.destroy();
+            const ctx = document.getElementById('vcChart').getContext('2d');
+            const isPct = view === 'growth_%';
+            vcChart = new Chart(ctx, {
+                data: { labels, datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: (c) => {
+                                    const v = c.parsed.y;
+                                    if (v === null || v === undefined) return c.dataset.label + ': —';
+                                    return c.dataset.label + ': ' + (isPct ? v.toFixed(1) + '%' : '$' + Math.round(v).toLocaleString());
+                                },
+                            },
+                        },
+                    },
+                    scales: {
+                        y: {
+                            title: { display: true, text: isPct ? 'YoY Growth %' : 'Sales ($)' },
+                            ticks: {
+                                callback: v => isPct ? v.toFixed(0) + '%' : '$' + (v / 1e6).toFixed(2) + 'M',
+                            },
+                        },
+                    },
+                },
+            });
+        }
+
+        function renderVenueCompareTable() {
+            if (!vcData) return;
+            const tbody = document.querySelector('#vcTable tbody');
+            tbody.innerHTML = vcData.venues.map((v, i) => {
+                if (v.error) {
+                    return `<tr><td><strong>${v.venue}</strong></td><td colspan="7" style="color:#c62828;">${v.error}</td></tr>`;
+                }
+                const color = VC_COLORS[i % VC_COLORS.length];
+                const fmt$ = (x) => '$' + Math.round(x).toLocaleString();
+                const g = v.growth_pct;
+                const gColor = g === null ? '#888' : (g >= 0 ? '#43a047' : '#e53935');
+                return `<tr>
+                    <td><span style="display:inline-block;width:10px;height:10px;background:${color};border-radius:2px;margin-right:6px;"></span><strong>${v.venue}</strong></td>
+                    <td>${v.state}</td>
+                    <td>${v.cluster}</td>
+                    <td>${v.cohort}</td>
+                    <td style="text-align:right;">${fmt$(v.fy26_total)}</td>
+                    <td style="text-align:right;"><strong>${fmt$(v.fy27_total)}</strong></td>
+                    <td style="text-align:right;color:${gColor};font-weight:600;">${g === null ? '—' : (g >= 0 ? '+' : '') + g.toFixed(1) + '%'}</td>
+                    <td style="font-size:11px;color:#666;">${v.model}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        // ─── PER-VENUE DETAIL TABLE ─────────────────────────────────────────
+        let venueDetailData = null;
+        let venueSortKey = 'state';
+        let venueSortAsc = true;
+
+        async function loadVenueDetail() {
+            const state = document.getElementById('sdState')?.value || 'all';
+            const cluster = document.getElementById('sdCluster')?.value || 'all';
+            const cohort = document.getElementById('sdCohort')?.value || 'all';
+            const venue = document.getElementById('sdVenue')?.value || 'all';
+            const guardrails = document.getElementById('sdGuardrails')?.value || 'on';
+            const cannibalisation = document.getElementById('sdCannibalisation')?.value || 'on';
+            try {
+                const params = new URLSearchParams({state, cluster, cohort, venue, guardrails, cannibalisation});
+                const res = await fetch('/venues-detail?' + params.toString());
+                if (!res.ok) return;
+                venueDetailData = await res.json();
+                document.getElementById('venueDetailSection').style.display = 'block';
+                document.getElementById('scenarioSection').style.display = 'block';
+                renderVenueDetail();
+                // Initialize the venue comparison section now that we know the venues
+                vcInit();
+                // Initialize per-venue per-month adjustments section
+                vmaInit();
+                // Refresh scenarios pane (uses venueDetailData)
+                scenarioRefresh();
+            } catch (err) { console.error(err); }
+        }
+
+        function sortVenueTable(key) {
+            if (venueSortKey === key) {
+                venueSortAsc = !venueSortAsc;
+            } else {
+                venueSortKey = key;
+                venueSortAsc = (key === 'state' || key === 'cluster' || key === 'venue' || key === 'cohort' || key === 'opening_date' || key === 'model');
+            }
+            renderVenueDetail();
+        }
+
+        function renderVenueDetail() {
+            if (!venueDetailData) return;
+            const rows = [...venueDetailData.venues];
+            rows.sort((a, b) => {
+                let av = a[venueSortKey], bv = b[venueSortKey];
+                if (av === null || av === undefined) av = venueSortAsc ? Infinity : -Infinity;
+                if (bv === null || bv === undefined) bv = venueSortAsc ? Infinity : -Infinity;
+                if (typeof av === 'string') return venueSortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+                return venueSortAsc ? av - bv : bv - av;
+            });
+
+            const fmt$ = (v) => v === null || v === undefined ? '—' : '$' + Math.round(v).toLocaleString();
+            const fmtPct = (v) => {
+                if (v === null || v === undefined) return '—';
+                const c = v >= 0 ? '#43a047' : '#e53935';
+                return `<span style="color:${c};font-weight:600;">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+            };
+            const fmtCohort = (c) => {
+                const colors = {
+                    'FY26 Existing': '#667eea',
+                    'FY26 New Opening': '#fb8c00',
+                    'FY27 New Opening': '#43a047',
+                    'Other': '#888',
+                };
+                return `<span style="background:${colors[c] || '#888'};color:white;padding:2px 8px;border-radius:10px;font-size:11px;">${c}</span>`;
+            };
+
+            // Build the body with state-row + cluster-row grouping headers (subtle)
+            let prevState = null, prevCluster = null;
+            const tbody = document.querySelector('#venueDetailTable tbody');
+            tbody.innerHTML = rows.map((v) => {
+                let pre = '';
+                if (v.state !== prevState) {
+                    pre += `<tr style="background:#eef0ff;"><td colspan="14" style="padding:6px 10px;font-weight:700;color:#667eea;">📍 ${v.state}</td></tr>`;
+                    prevState = v.state;
+                    prevCluster = null;
+                }
+                if (v.cluster !== prevCluster) {
+                    pre += `<tr style="background:#f5f7ff;"><td></td><td colspan="13" style="padding:4px 10px;font-weight:600;color:#5568d3;font-size:11px;">└ ${v.cluster}</td></tr>`;
+                    prevCluster = v.cluster;
+                }
+                return pre + `<tr>
+                    <td>${v.state}</td>
+                    <td>${v.cluster}</td>
+                    <td><strong>${v.venue}</strong></td>
+                    <td>${fmtCohort(v.cohort)}</td>
+                    <td>${v.opening_date || '—'}</td>
+                    <td style="text-align:right;">${fmt$(v.fy26_forecast)}</td>
+                    <td style="text-align:right;"><strong>${fmt$(v.fy27_forecast)}</strong></td>
+                    <td style="text-align:right;">${fmtPct(v.growth_pct)}</td>
+                    <td style="text-align:right;color:#666;">${fmtPct(v.base_growth_pct)}</td>
+                    <td style="text-align:right;color:#666;">${fmtPct(v.multiplier_lift_pct)}</td>
+                    <td style="text-align:right;">${fmt$(v.avg_atp)}</td>
+                    <td style="text-align:right;">${v.transactions_fy27 ? Math.round(v.transactions_fy27).toLocaleString() : '—'}</td>
+                    <td style="font-size:11px;color:#666;">${v.model}</td>
+                    <td style="font-size:12px;color:#555;line-height:1.4;">${v.comment}${v.guardrail_note ? `<br><span style="display:inline-block;background:#fff3e0;color:#e65100;padding:2px 6px;border-radius:8px;font-size:10px;font-weight:600;margin-top:3px;">🛡️ ${v.guardrail_note}</span>` : ''}</td>
+                </tr>`;
+            }).join('');
+
+            // State summary
+            const stBody = document.querySelector('#venueStateTable tbody');
+            stBody.innerHTML = (venueDetailData.state_summary || []).map(s => `<tr>
+                <td><strong>${s.state}</strong></td>
+                <td style="text-align:right;">${s.venue_count}</td>
+                <td style="text-align:right;">${fmt$(s.fy26)}</td>
+                <td style="text-align:right;"><strong>${fmt$(s.fy27)}</strong></td>
+                <td style="text-align:right;">${fmtPct(s.growth_pct)}</td>
+                <td style="text-align:right;">${Math.round(s.transactions_fy27).toLocaleString()}</td>
+            </tr>`).join('');
+
+            // Cluster summary
+            const clBody = document.querySelector('#venueClusterTable tbody');
+            clBody.innerHTML = (venueDetailData.cluster_summary || []).map(s => `<tr>
+                <td>${s.state}</td>
+                <td><strong>${s.cluster}</strong></td>
+                <td style="text-align:right;">${s.venue_count}</td>
+                <td style="text-align:right;">${fmt$(s.fy26)}</td>
+                <td style="text-align:right;"><strong>${fmt$(s.fy27)}</strong></td>
+                <td style="text-align:right;">${fmtPct(s.growth_pct)}</td>
+                <td style="text-align:right;">${Math.round(s.transactions_fy27).toLocaleString()}</td>
+            </tr>`).join('');
+        }
+
+        function renderSalesDetailEvents() {
+            if (!sdData) return;
+            const monthly = sdData.monthly;
+            const table = document.getElementById('sdEventsTable');
+            const tbody = table.querySelector('tbody');
+            const headerRow = document.getElementById('sdEvtHeaderRow');
+
+            // Build header row (idempotent: replace innerHTML, not outerHTML)
+            headerRow.innerHTML = '<th style="text-align:left;padding:6px 10px;background:#f5f5f5;">FY</th>' +
+                monthly.map(m =>
+                    `<th style="text-align:center;padding:6px 8px;background:#f5f5f5;min-width:75px;">${m.month_label}</th>`
+                ).join('');
+
+            const cellStyle = (count, kind, fy) => {
+                if (count === 0) return 'background:#fafafa;color:#bbb;text-align:center;padding:8px;font-size:14px;';
+                if (kind === 'holiday') {
+                    const bg = fy === 26 ? '#fff8e1' : '#fff3cd';
+                    return `background:${bg};text-align:center;padding:8px;font-weight:600;color:#e65100;`;
+                }
+                if (kind === 'school') {
+                    // distinct green palette so school holidays don't blur into public holidays
+                    const bg = fy === 26 ? '#e8f5e9' : '#c8e6c9';
+                    return `background:${bg};text-align:center;padding:8px;font-weight:600;color:#2e7d32;`;
+                }
+                // extreme weather
+                const bg = fy === 26 ? '#ffebee' : '#ffcdd2';
+                return `background:${bg};text-align:center;padding:8px;font-weight:600;color:#c62828;`;
+            };
+
+            const cell = (count, names, kind, fy) => {
+                if (!count) return `<td style="${cellStyle(0, kind, fy)}">–</td>`;
+                const tip = (names || []).slice(0, 12).join('\n');
+                const emoji = kind === 'holiday' ? '🎉' : (kind === 'school' ? '🎒' : '⚠️');
+                return `<td style="${cellStyle(count, kind, fy)}" title="${tip.replace(/"/g, '&quot;')}">${emoji} ${count}</td>`;
+            };
+
+            const extremeNames = (detail) => (detail || []).map(d => `${d.date} — ${d.detail}`);
+            const schoolNames = (detail) => (detail || []).map(d => `${d.date} (${(d.states || []).join(', ')})`);
+
+            const rows = [
+                {
+                    label: `FY26 Public Holidays`,
+                    color: '#e65100',
+                    cells: monthly.map(m => cell(m.fy26_holiday_count, m.fy26_holidays, 'holiday', 26)),
+                },
+                {
+                    label: `FY27 Public Holidays`,
+                    color: '#e65100',
+                    cells: monthly.map(m => cell(m.fy27_holiday_count, m.fy27_holidays, 'holiday', 27)),
+                },
+                {
+                    label: `FY26 School Holidays`,
+                    color: '#2e7d32',
+                    cells: monthly.map(m => cell(m.fy26_school_holiday_count, schoolNames(m.fy26_school_holiday_detail), 'school', 26)),
+                },
+                {
+                    label: `FY27 School Holidays`,
+                    color: '#2e7d32',
+                    cells: monthly.map(m => cell(m.fy27_school_holiday_count, schoolNames(m.fy27_school_holiday_detail), 'school', 27)),
+                },
+                {
+                    label: `FY26 Extreme Wx`,
+                    color: '#c62828',
+                    cells: monthly.map(m => cell(m.fy26_extreme_count, extremeNames(m.fy26_extreme_detail), 'extreme', 26)),
+                },
+                {
+                    label: `FY27 Extreme Wx`,
+                    color: '#c62828',
+                    cells: monthly.map(m => cell(m.fy27_extreme_count, extremeNames(m.fy27_extreme_detail), 'extreme', 27)),
+                },
+            ];
+
+            tbody.innerHTML = rows.map(r =>
+                `<tr><td style="font-weight:600;padding:6px 10px;color:${r.color};background:#fafafa;white-space:nowrap;">${r.label}</td>${r.cells.join('')}</tr>`
+            ).join('');
+        }
+
+        function renderSalesDetailTable() {
+            if (!sdData) return;
+            const monthly = sdData.monthly;
+            const growth = parseFloat(document.getElementById('sdGrowth')?.value || 0);
+            const fmtPct = (v) => v === null || v === undefined ? '—' :
+                `<span style="color:${v >= 0 ? '#43a047' : '#e53935'};font-weight:600;">${v.toFixed(1)}%</span>`;
+            const tbody = document.querySelector('#sdTable tbody');
+            tbody.innerHTML = monthly.map(m => {
+                const scenario = m.fy27_forecast * (1 + growth / 100);
+                const scenarioPct = m.fy26_comparator > 0
+                    ? ((scenario - m.fy26_comparator) / m.fy26_comparator * 100) : null;
+                return `<tr>
+                    <td><strong>${m.month_label}</strong></td>
+                    <td>${formatCurrency(m.fy26_comparator)}</td>
+                    <td>${formatCurrency(m.fy27_forecast)}</td>
+                    <td>${fmtPct(m.growth_pct)}</td>
+                    <td>${formatCurrency(scenario)}</td>
+                    <td>${fmtPct(scenarioPct)}</td>
+                    <td>${formatCurrency(m.lfl_fy26)}</td>
+                    <td>${formatCurrency(m.lfl_fy27)}</td>
+                    <td>${fmtPct(m.lfl_growth_pct)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function resetSession() {
+            if (!confirm('Clear all uploaded data and results?')) return;
+            await fetch('/reset', { method: 'POST' });
+            ['sales_history', 'atp_history', 'location_bi', 'venue_details', 'multipliers'].forEach(k => {
+                setCardStatus(k, '', 'Not loaded');
+                const el = document.getElementById(k);
+                if (el) el.value = '';
+            });
+            document.getElementById('reviewSection').style.display = 'none';
+            document.getElementById('generateSection').style.display = 'none';
+            document.getElementById('resultsSection').style.display = 'none';
+            showStatus('uploadStatus', '🗑️ Session reset', 'info');
+        }
+
+        function showLoadTab(e, id) {
+            document.querySelectorAll('#reviewSection .tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('#reviewSection .tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            e.target.classList.add('active');
+        }
+        function showResultTab(e, id) {
+            document.querySelectorAll('#resultsSection .tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('#resultsSection .tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            e.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>
