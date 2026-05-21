@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; padding: 40px; }
+  .container { max-width: 900px; margin: 0 auto; background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); overflow: hidden; }
+  .header { background: linear-gradient(135deg, #2c3e50, #3498db); padding: 32px 40px; text-align: center; }
+  .header h1 { color: #fff; font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  .header p { color: rgba(255,255,255,0.8); font-size: 14px; margin-top: 6px; }
+  .body { padding: 40px; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 60px; }
+  .timeline::before { content: ''; position: absolute; left: 24px; top: 0; bottom: 0; width: 3px; background: linear-gradient(to bottom, #3498db, #2ecc71, #e67e22, #9b59b6, #e74c3c); border-radius: 2px; }
+
+  .step { position: relative; margin-bottom: 32px; }
+  .step:last-child { margin-bottom: 0; }
+  .step-dot { position: absolute; left: -42px; top: 6px; width: 18px; height: 18px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 3px currentColor; }
+  .step-number { position: absolute; left: -56px; top: 28px; font-size: 10px; font-weight: 700; color: #999; text-align: center; width: 46px; }
+
+  .step-card { background: #f8f9fa; border-radius: 12px; padding: 20px 24px; border-left: 4px solid; transition: transform 0.2s; }
+  .step-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .step-card p { font-size: 13px; color: #666; line-height: 1.5; }
+  .step-card .tech { display: inline-block; margin-top: 8px; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; color: #fff; }
+
+  .step1 .step-dot { color: #3498db; background: #3498db; }
+  .step1 .step-card { border-color: #3498db; }
+  .step1 .tech { background: #3498db; }
+
+  .step2 .step-dot { color: #0078d4; background: #0078d4; }
+  .step2 .step-card { border-color: #0078d4; }
+  .step2 .tech { background: #0078d4; }
+
+  .step3 .step-dot { color: #2ecc71; background: #2ecc71; }
+  .step3 .step-card { border-color: #2ecc71; }
+  .step3 .tech { background: #2ecc71; }
+
+  .step4 .step-dot { color: #e67e22; background: #e67e22; }
+  .step4 .step-card { border-color: #e67e22; }
+  .step4 .tech { background: #e67e22; }
+
+  .step5 .step-dot { color: #9b59b6; background: #9b59b6; }
+  .step5 .step-card { border-color: #9b59b6; }
+  .step5 .tech { background: #9b59b6; }
+
+  .step6 .step-dot { color: #e74c3c; background: #e74c3c; }
+  .step6 .step-card { border-color: #e74c3c; }
+  .step6 .tech { background: #e74c3c; }
+
+  /* Systems bar */
+  .systems { display: flex; gap: 12px; padding: 24px 40px; background: #f8f9fa; border-top: 1px solid #eee; flex-wrap: wrap; justify-content: center; }
+  .sys-badge { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #fff; border-radius: 8px; border: 1px solid #ddd; font-size: 12px; font-weight: 600; color: #333; }
+  .sys-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700; }
+
+  .footer { padding: 16px 40px; text-align: center; font-size: 11px; color: #aaa; border-top: 1px solid #eee; }
+
+  /* Arrow connectors */
+  .arrow { text-align: center; margin: -12px 0; padding-left: 60px; }
+  .arrow span { display: inline-block; color: #ccc; font-size: 20px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Yo-Chi Daily Operations Email</h1>
+    <p>Automated daily reporting pipeline - runs every day at 5:00 AM AEST</p>
+  </div>
+
+  <div class="body">
+    <div class="timeline">
+
+      <div class="step step1">
+        <div class="step-dot"></div>
+        <div class="step-number">5:00 AM</div>
+        <div class="step-card">
+          <h3>Timer Trigger</h3>
+          <p>Azure Functions automatically wakes up the function at 5:00 AM Sydney time. No human input required. Calculates yesterday's date in AEST timezone.</p>
+          <span class="tech">Azure Functions</span>
+        </div>
+      </div>
+
+      <div class="step step2">
+        <div class="step-dot"></div>
+        <div class="step-number">5:00 AM</div>
+        <div class="step-card">
+          <h3>Load Venue Configuration</h3>
+          <p>Downloads the Excel config file from SharePoint to determine which venues to report on, sender email addresses, and recipient lists per venue.</p>
+          <span class="tech">SharePoint</span>
+          <span class="tech">Microsoft Graph API</span>
+        </div>
+      </div>
+
+      <div class="step step3">
+        <div class="step-dot"></div>
+        <div class="step-number">5:01 AM</div>
+        <div class="step-card">
+          <h3>Fetch Shift Data</h3>
+          <p>Pulls all shift report submissions from the SharePoint list in 3 bulk queries: yesterday's shifts, month-to-date (for star champions), and last 7 days (for AI trends).</p>
+          <span class="tech">SharePoint List</span>
+          <span class="tech">Microsoft Graph API</span>
+        </div>
+      </div>
+
+      <div class="step step4">
+        <div class="step-dot"></div>
+        <div class="step-number">5:02 AM</div>
+        <div class="step-card">
+          <h3>AI Analysis (per venue)</h3>
+          <p>For each venue, sends the filtered shift comments to Claude Haiku 4.5. Generates a concise executive summary covering key daily issues and 7-day operational trends.</p>
+          <span class="tech">Claude Haiku 4.5</span>
+          <span class="tech">Anthropic API</span>
+        </div>
+      </div>
+
+      <div class="step step5">
+        <div class="step-dot"></div>
+        <div class="step-number">5:03 AM</div>
+        <div class="step-card">
+          <h3>Build HTML Email</h3>
+          <p>Assembles a formatted email per venue: header with date, Star Champions leaderboard (Gold/Silver/Bronze), shift blocks with all feedback categories, and AI Insights summary.</p>
+          <span class="tech">Python</span>
+        </div>
+      </div>
+
+      <div class="step step6">
+        <div class="step-dot"></div>
+        <div class="step-number">5:05 AM</div>
+        <div class="step-card">
+          <h3>Send Emails</h3>
+          <p>Sends each venue's email from its own shared mailbox to configured recipients via Microsoft Graph API. Approximately 73 venue emails sent per day.</p>
+          <span class="tech">Microsoft 365 Exchange</span>
+          <span class="tech">Microsoft Graph API</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="systems">
+    <div class="sys-badge">
+      <div class="sys-icon" style="background:#0078d4;">A</div>
+      Azure Functions
+    </div>
+    <div class="sys-badge">
+      <div class="sys-icon" style="background:#036c5f;">S</div>
+      SharePoint Online
+    </div>
+    <div class="sys-badge">
+      <div class="sys-icon" style="background:#0078d4;">G</div>
+      Microsoft Graph API
+    </div>
+    <div class="sys-badge">
+      <div class="sys-icon" style="background:#d4763c;">C</div>
+      Claude AI (Haiku 4.5)
+    </div>
+    <div class="sys-badge">
+      <div class="sys-icon" style="background:#0078d4;">E</div>
+      Exchange Online
+    </div>
+    <div class="sys-badge">
+      <div class="sys-icon" style="background:#217346;">X</div>
+      Excel Config
+    </div>
+  </div>
+
+  <div class="footer">
+    Fully automated - no manual input required. Runs on Azure cloud infrastructure (Australia East).
+  </div>
+</div>
+</body>
+</html>

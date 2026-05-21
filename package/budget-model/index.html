@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frozen Yoghurt QSR Budget Model</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>Frozen Yoghurt QSR — Budget Model</h1>
+            <div class="header-meta">
+                <span id="run-name-display"></span>
+                <span id="venue-count-display"></span>
+            </div>
+        </div>
+    </header>
+
+    <nav class="tabs">
+        <button class="tab active" data-tab="upload">Upload</button>
+        <button class="tab" data-tab="venues">Venues</button>
+        <button class="tab" data-tab="sales-forecast">Sales Forecast</button>
+        <button class="tab" data-tab="pnl">P&L Budget</button>
+        <button class="tab" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="export">Export</button>
+    </nav>
+
+    <main>
+        <!-- UPLOAD TAB -->
+        <section id="tab-upload" class="tab-content active">
+            <div class="upload-grid">
+                <div class="upload-card" data-template="sales_history">
+                    <div class="upload-icon">📊</div>
+                    <h3>1. Sales History</h3>
+                    <p>Daily sales by venue — last 24 months</p>
+                    <div class="drop-zone" id="drop-sales_history">
+                        <input type="file" accept=".xlsx,.xls" data-template="sales_history">
+                        <span>Drop .xlsx or click to upload</span>
+                    </div>
+                    <div class="upload-status" id="status-sales_history"></div>
+                </div>
+
+                <div class="upload-card" data-template="prior_pnl">
+                    <div class="upload-icon">📋</div>
+                    <h3>2. Prior P&L</h3>
+                    <p>12-month line-by-line P&L by venue</p>
+                    <div class="drop-zone" id="drop-prior_pnl">
+                        <input type="file" accept=".xlsx,.xls" data-template="prior_pnl">
+                        <span>Drop .xlsx or click to upload</span>
+                    </div>
+                    <div class="upload-status" id="status-prior_pnl"></div>
+                </div>
+
+                <div class="upload-card" data-template="venue_details">
+                    <div class="upload-icon">🏪</div>
+                    <h3>3. Venue Details</h3>
+                    <p>Venue info, state, opening date, ramp-up</p>
+                    <div class="drop-zone" id="drop-venue_details">
+                        <input type="file" accept=".xlsx,.xls" data-template="venue_details">
+                        <span>Drop .xlsx or click to upload</span>
+                    </div>
+                    <div class="upload-status" id="status-venue_details"></div>
+                </div>
+
+                <div class="upload-card" data-template="avg_ticket">
+                    <div class="upload-icon">🎫</div>
+                    <h3>4. Average Ticket</h3>
+                    <p>Monthly average ticket by venue</p>
+                    <div class="drop-zone" id="drop-avg_ticket">
+                        <input type="file" accept=".xlsx,.xls" data-template="avg_ticket">
+                        <span>Drop .xlsx or click to upload</span>
+                    </div>
+                    <div class="upload-status" id="status-avg_ticket"></div>
+                </div>
+
+                <div class="upload-card" data-template="labour">
+                    <div class="upload-icon">👷</div>
+                    <h3>5. Labour</h3>
+                    <p>SPLH, hourly rates, on-costs, management</p>
+                    <div class="drop-zone" id="drop-labour">
+                        <input type="file" accept=".xlsx,.xls" data-template="labour">
+                        <span>Drop .xlsx or click to upload</span>
+                    </div>
+                    <div class="upload-status" id="status-labour"></div>
+                </div>
+
+                <div class="upload-card" data-template="cogs">
+                    <div class="upload-icon">📦</div>
+                    <h3>6. COGS</h3>
+                    <p>Food, packaging, retail, discounts %</p>
+                    <div class="drop-zone" id="drop-cogs">
+                        <input type="file" accept=".xlsx,.xls" data-template="cogs">
+                        <span>Drop .xlsx or click to upload</span>
+                    </div>
+                    <div class="upload-status" id="status-cogs"></div>
+                </div>
+
+                <div class="upload-card" data-template="rent">
+                    <div class="upload-icon">🏠</div>
+                    <h3>7. Rent</h3>
+                    <p>Base rent, outgoings, % rent, marketing levy</p>
+                    <div class="drop-zone" id="drop-rent">
+                        <input type="file" accept=".xlsx,.xls" data-template="rent">
+                        <span>Drop .xlsx or click to upload</span>
+                    </div>
+                    <div class="upload-status" id="status-rent"></div>
+                </div>
+
+                <div class="upload-card action-card">
+                    <div class="upload-icon">⚡</div>
+                    <h3>Run Budget</h3>
+                    <p>Process all assumptions and generate forecast</p>
+                    <div class="config-section">
+                        <label>Budget Run Name:
+                            <input type="text" id="run-name" placeholder="FY2027 Budget v1">
+                        </label>
+                        <label>Forecast Start:
+                            <input type="date" id="forecast-start" value="2026-07-01">
+                        </label>
+                        <label>Forecast End:
+                            <input type="date" id="forecast-end" value="2027-06-30">
+                        </label>
+                        <label>Forecast API URL (Render):
+                            <input type="text" id="api-url" placeholder="https://venu-cast-api.onrender.com">
+                        </label>
+                        <label><input type="checkbox" id="use-api-forecast" checked> Use Prophet/SARIMA API</label>
+                        <label><input type="checkbox" id="fetch-weather" checked> Fetch Weather Data</label>
+                    </div>
+                    <button id="btn-run-budget" class="btn-primary" disabled>Generate Budget</button>
+                    <div id="run-progress" class="progress-bar" style="display:none">
+                        <div class="progress-fill"></div>
+                        <span class="progress-text"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="upload-preview" class="preview-section" style="display:none">
+                <h3>Data Preview</h3>
+                <div id="preview-content"></div>
+            </div>
+        </section>
+
+        <!-- VENUES TAB -->
+        <section id="tab-venues" class="tab-content">
+            <div class="section-header">
+                <h2>Venue Register</h2>
+                <div class="filters">
+                    <select id="filter-state">
+                        <option value="">All States</option>
+                        <option value="NSW">NSW</option>
+                        <option value="VIC">VIC</option>
+                        <option value="QLD">QLD</option>
+                        <option value="SA">SA</option>
+                        <option value="WA">WA</option>
+                        <option value="TAS">TAS</option>
+                        <option value="NT">NT</option>
+                        <option value="ACT">ACT</option>
+                    </select>
+                    <select id="filter-maturity">
+                        <option value="">All Venues</option>
+                        <option value="mature">Mature (18m+)</option>
+                        <option value="ramping">Ramping Up</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-container">
+                <table id="venue-table">
+                    <thead>
+                        <tr>
+                            <th>Venue</th>
+                            <th>State</th>
+                            <th>Opening Date</th>
+                            <th>Months Open</th>
+                            <th>Status</th>
+                            <th>Current Ramp-Up</th>
+                            <th>Avg Daily Sales (L3M)</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- SALES FORECAST TAB -->
+        <section id="tab-sales-forecast" class="tab-content">
+            <div class="section-header">
+                <h2>Sales Forecast</h2>
+                <div class="filters">
+                    <select id="forecast-venue-filter">
+                        <option value="__all__">All Venues (Network)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="chart-grid">
+                <div class="chart-panel">
+                    <h3>Seasonality Pattern — Day of Week</h3>
+                    <canvas id="chart-dow"></canvas>
+                </div>
+                <div class="chart-panel">
+                    <h3>Seasonality Pattern — Monthly</h3>
+                    <canvas id="chart-monthly-season"></canvas>
+                </div>
+                <div class="chart-panel wide">
+                    <h3>Daily Sales Forecast vs History</h3>
+                    <canvas id="chart-daily-forecast"></canvas>
+                </div>
+                <div class="chart-panel">
+                    <h3>Weather Correlation — Temperature vs Sales</h3>
+                    <canvas id="chart-weather-corr"></canvas>
+                </div>
+                <div class="chart-panel">
+                    <h3>Forecast Monthly Summary</h3>
+                    <canvas id="chart-forecast-monthly"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- P&L BUDGET TAB -->
+        <section id="tab-pnl" class="tab-content">
+            <div class="section-header">
+                <h2>P&L Budget</h2>
+                <div class="filters">
+                    <select id="pnl-venue-filter">
+                        <option value="__all__">All Venues (Network)</option>
+                    </select>
+                    <select id="pnl-view">
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="annual">Annual</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-container">
+                <table id="pnl-table">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="pnl-comparison" style="display:none">
+                <h3>Budget vs Prior Year Variance</h3>
+                <table id="variance-table">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- DASHBOARD TAB -->
+        <section id="tab-dashboard" class="tab-content">
+            <div class="kpi-row">
+                <div class="kpi-card">
+                    <span class="kpi-label">Network Sales</span>
+                    <span class="kpi-value" id="kpi-sales">—</span>
+                    <span class="kpi-delta" id="kpi-sales-delta"></span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Gross Profit %</span>
+                    <span class="kpi-value" id="kpi-gp">—</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Labour %</span>
+                    <span class="kpi-value" id="kpi-labour">—</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Occupancy %</span>
+                    <span class="kpi-value" id="kpi-occupancy">—</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Venue Contribution %</span>
+                    <span class="kpi-value" id="kpi-contribution">—</span>
+                </div>
+            </div>
+            <div class="chart-grid">
+                <div class="chart-panel wide">
+                    <h3>Monthly Sales — Budget vs Prior Year</h3>
+                    <canvas id="chart-sales-comparison"></canvas>
+                </div>
+                <div class="chart-panel">
+                    <h3>Cost Structure (% of Sales)</h3>
+                    <canvas id="chart-cost-structure"></canvas>
+                </div>
+                <div class="chart-panel">
+                    <h3>Contribution by State</h3>
+                    <canvas id="chart-state-contribution"></canvas>
+                </div>
+                <div class="chart-panel wide">
+                    <h3>Venue Performance Heatmap</h3>
+                    <div id="venue-heatmap"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- EXPORT TAB -->
+        <section id="tab-export" class="tab-content">
+            <div class="export-grid">
+                <div class="export-card">
+                    <h3>Push to Supabase</h3>
+                    <p>Write all budget assumptions and forecast results to the database.</p>
+                    <div class="supabase-config">
+                        <label>Supabase URL:
+                            <input type="text" id="supabase-url" placeholder="https://xxxx.supabase.co">
+                        </label>
+                        <label>Supabase Anon Key:
+                            <input type="password" id="supabase-key" placeholder="eyJ...">
+                        </label>
+                        <button id="btn-test-connection" class="btn-secondary">Test Connection</button>
+                        <div id="connection-status"></div>
+                    </div>
+                    <button id="btn-push-supabase" class="btn-primary" disabled>Push to Supabase</button>
+                    <div id="push-progress" class="progress-bar" style="display:none">
+                        <div class="progress-fill"></div>
+                        <span class="progress-text"></span>
+                    </div>
+                </div>
+
+                <div class="export-card">
+                    <h3>Download Outputs</h3>
+                    <p>Export budget results as Excel workbooks.</p>
+                    <button id="btn-export-daily" class="btn-secondary" disabled>Daily Account Lines (.xlsx)</button>
+                    <button id="btn-export-monthly" class="btn-secondary" disabled>Monthly Account Lines (.xlsx)</button>
+                    <button id="btn-export-pnl" class="btn-secondary" disabled>P&L Account Lines (.xlsx)</button>
+                    <button id="btn-export-variance" class="btn-secondary" disabled>Variance Account Lines (.xlsx)</button>
+                </div>
+
+                <div class="export-card">
+                    <h3>Download Templates</h3>
+                    <p>Download blank Excel templates to fill in assumptions.</p>
+                    <button id="btn-dl-templates" class="btn-secondary">Download All Templates (.xlsx)</button>
+                </div>
+
+                <div class="export-card">
+                    <h3>Supabase Schema</h3>
+                    <p>SQL to create required database tables.</p>
+                    <button id="btn-copy-schema" class="btn-secondary">Copy Schema SQL</button>
+                    <button id="btn-run-schema" class="btn-secondary" disabled>Run Schema on Supabase</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <span>Frozen Yoghurt QSR Budget Model</span>
+        <span id="calc-status"></span>
+    </footer>
+
+    <script src="js/config.js"></script>
+    <script src="js/calendars.js"></script>
+    <script src="js/supabase-client.js"></script>
+    <script src="js/excel-parser.js"></script>
+    <script src="js/weather.js"></script>
+    <script src="js/engine/sales-forecast.js"></script>
+    <script src="js/engine/labour-calc.js"></script>
+    <script src="js/engine/cogs-calc.js"></script>
+    <script src="js/engine/rent-calc.js"></script>
+    <script src="js/engine/pnl-builder.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/export.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

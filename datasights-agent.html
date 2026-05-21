@@ -1,0 +1,2150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataSights Query Agent — YoChi</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #242836;
+  --border: #2e3344;
+  --text: #e4e6ed;
+  --text2: #8b8fa3;
+  --accent: #6c5ce7;
+  --accent2: #a29bfe;
+  --green: #00cec9;
+  --orange: #fdcb6e;
+  --red: #ff7675;
+  --blue: #74b9ff;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI',system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); display:flex; height:100vh; overflow:hidden; }
+.sidebar { width:320px; min-width:320px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+.sidebar-header { padding:16px; border-bottom:1px solid var(--border); }
+.sidebar-header h2 { font-size:14px; color:var(--accent2); letter-spacing:0.5px; text-transform:uppercase; margin-bottom:8px; }
+.sidebar-header .client { font-size:11px; color:var(--text2); }
+.search-box { width:100%; padding:8px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; outline:none; margin-top:8px; }
+.search-box:focus { border-color:var(--accent); }
+.source-filter { display:flex; flex-wrap:wrap; gap:4px; padding:8px 16px; border-bottom:1px solid var(--border); }
+.source-btn { padding:3px 8px; font-size:10px; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text2); cursor:pointer; transition:all .15s; }
+.source-btn:hover, .source-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.table-list { flex:1; overflow-y:auto; padding:8px; }
+.table-item { padding:8px 12px; border-radius:6px; cursor:pointer; margin-bottom:2px; transition:background .15s; }
+.table-item:hover { background:var(--surface2); }
+.table-item.active { background:var(--accent); }
+.table-item.active .table-source { color:rgba(255,255,255,.7); }
+.table-name { font-size:13px; font-weight:600; }
+.table-source { font-size:10px; color:var(--text2); margin-top:2px; }
+.main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.topbar { display:flex; align-items:center; padding:12px 20px; border-bottom:1px solid var(--border); gap:12px; background:var(--surface); }
+.topbar .view-name { font-size:16px; font-weight:700; flex:1; }
+.topbar .view-type { font-size:11px; padding:3px 8px; border-radius:4px; background:var(--surface2); color:var(--green); }
+.content-area { flex:1; display:flex; overflow:hidden; }
+.schema-panel { flex:1; overflow-y:auto; padding:20px; }
+.description-box { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:16px; line-height:1.6; font-size:13px; color:var(--text2); }
+.columns-table { width:100%; border-collapse:collapse; font-size:12px; }
+.columns-table th { text-align:left; padding:8px 12px; background:var(--surface); color:var(--accent2); font-size:11px; text-transform:uppercase; letter-spacing:.5px; border-bottom:2px solid var(--border); position:sticky; top:0; }
+.columns-table td { padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+.columns-table tr:hover td { background:var(--surface2); }
+.col-name { font-weight:600; color:var(--text); font-family:'Cascadia Code','Fira Code',monospace; }
+.col-type { color:var(--orange); font-family:'Cascadia Code','Fira Code',monospace; font-size:11px; }
+.col-desc { color:var(--text2); font-size:11px; line-height:1.4; }
+.query-panel { width:100%; border-top:1px solid var(--border); background:var(--surface); display:flex; flex-direction:column; }
+.query-panel.collapsed { height:48px; }
+.query-panel.collapsed .query-body { display:none; }
+.query-header { display:flex; align-items:center; padding:12px 20px; gap:12px; cursor:pointer; user-select:none; }
+.query-header h3 { font-size:13px; flex:1; }
+.query-body { display:flex; flex-direction:column; flex:1; min-height:0; }
+.query-editor { flex:1; min-height:120px; max-height:200px; padding:12px 20px; background:var(--bg); font-family:'Cascadia Code','Fira Code',monospace; font-size:13px; color:var(--text); border:none; resize:vertical; outline:none; }
+.query-actions { display:flex; align-items:center; gap:8px; padding:8px 20px; }
+.btn { padding:6px 16px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; border:none; transition:all .15s; }
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-primary:hover { background:var(--accent2); }
+.btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+.btn-secondary:hover { border-color:var(--accent); }
+.query-status { flex:1; font-size:11px; color:var(--text2); text-align:right; }
+.results-panel { overflow:auto; max-height:300px; border-top:1px solid var(--border); }
+.results-table { width:100%; border-collapse:collapse; font-size:11px; font-family:'Cascadia Code','Fira Code',monospace; }
+.results-table th { padding:6px 10px; background:var(--surface2); color:var(--accent2); text-align:left; position:sticky; top:0; font-size:10px; text-transform:uppercase; border-bottom:1px solid var(--border); white-space:nowrap; }
+.results-table td { padding:5px 10px; border-bottom:1px solid var(--border); white-space:nowrap; max-width:300px; overflow:hidden; text-overflow:ellipsis; }
+.results-table tr:hover td { background:var(--surface2); }
+.results-count { padding:6px 20px; font-size:11px; color:var(--text2); background:var(--surface); border-top:1px solid var(--border); }
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text2); gap:12px; }
+.empty-state h3 { color:var(--text); font-size:18px; }
+.empty-state p { font-size:13px; max-width:400px; text-align:center; line-height:1.6; }
+.sample-queries { margin-top:12px; display:flex; flex-direction:column; gap:6px; }
+.sample-query { padding:8px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:12px; font-family:'Cascadia Code','Fira Code',monospace; transition:border-color .15s; text-align:left; color:var(--text); }
+.sample-query:hover { border-color:var(--accent); }
+.copy-toast { position:fixed; bottom:20px; right:20px; background:var(--green); color:#000; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:600; opacity:0; transition:opacity .3s; pointer-events:none; }
+.copy-toast.show { opacity:1; }
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text2); }
+.col-click { cursor:pointer; }
+.col-click:hover { color:var(--accent2); text-decoration:underline; }
+.badge { display:inline-block; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:600; }
+.badge-xero { background:#1a3a2a; color:#00b894; }
+.badge-redcat { background:#3a2a1a; color:#fdcb6e; }
+.badge-tanda { background:#1a2a3a; color:#74b9ff; }
+.badge-stripe { background:#2a1a3a; color:#a29bfe; }
+.badge-review { background:#3a1a2a; color:#fd79a8; }
+.badge-opcentral { background:#2a3a1a; color:#55efc4; }
+.badge-maintainx { background:#3a3a1a; color:#ffeaa7; }
+.badge-other { background:#2a2a2a; color:#dfe6e9; }
+.resize-handle { height:4px; cursor:ns-resize; background:var(--border); opacity:0; transition:opacity .2s; }
+.resize-handle:hover { opacity:1; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h2>DataSights Agent</h2>
+    <div class="client">Client: YoChi</div>
+    <input type="text" class="search-box" id="searchBox" placeholder="Search tables & columns...">
+  </div>
+  <div class="source-filter" id="sourceFilter"></div>
+  <div class="table-list" id="tableList"></div>
+</div>
+
+<div class="main">
+  <div class="topbar" id="topbar" style="display:none;">
+    <div class="view-name" id="viewName"></div>
+    <div class="view-type" id="viewType"></div>
+  </div>
+  <div class="content-area" id="contentArea">
+    <div class="schema-panel" id="schemaPanel">
+      <div class="empty-state" id="emptyState">
+        <h3>YoChi Data Explorer</h3>
+        <p>Select a table from the sidebar to view its schema, or write a SQL query below. Click any column name to insert it into your query.</p>
+        <div class="sample-queries">
+          <button class="sample-query" onclick="setQuery('SELECT TOP 100 * FROM Venue_Master')">SELECT TOP 100 * FROM Venue_Master</button>
+          <button class="sample-query" onclick="setQuery('SELECT TOP 50 StoreName, TxnDate, NetSales, GrossSales, SaleCount\nFROM PolygonRedcatAggregateSalesReport\nORDER BY TxnDate DESC')">Aggregate Sales — last 50 rows</button>
+          <button class="sample-query" onclick="setQuery('SELECT * FROM XeroConsolidationGroupAndEntitiesContext')">Group & Entity Context</button>
+          <button class="sample-query" onclick="setQuery('SELECT TOP 100 workplace_name, audit_name, percentage, result, submitted_at\nFROM OpCentralAuditResults\nORDER BY submitted_at DESC')">Recent Audit Results</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="resize-handle" id="resizeHandle"></div>
+  <div class="query-panel" id="queryPanel">
+    <div class="query-header" onclick="toggleQuery()">
+      <h3>SQL Query</h3>
+      <span id="toggleIcon">▼</span>
+    </div>
+    <div class="query-body">
+      <textarea class="query-editor" id="queryEditor" placeholder="SELECT TOP 100 * FROM Venue_Master" spellcheck="false"></textarea>
+      <div class="query-actions">
+        <button class="btn btn-primary" onclick="copyQuery()">Copy Query</button>
+        <button class="btn btn-secondary" onclick="clearQuery()">Clear</button>
+        <button class="btn btn-secondary" onclick="formatQuery()">Format</button>
+        <span class="query-status" id="queryStatus">Paste query into Claude to execute via DataSights MCP</span>
+      </div>
+      <div class="results-panel" id="resultsPanel"></div>
+    </div>
+  </div>
+</div>
+
+<div class="copy-toast" id="copyToast">Copied to clipboard!</div>
+
+<script>
+const TABLES = [
+  {
+    name:"Accounts", display:"Xero Accounts (raw)", source:"Xero", type:"table",
+    desc:"Chart of accounts from each connected Xero organisation. Raw Xero data with numeric type/class/status codes.",
+    columns:[
+      {name:"accountid",type:"nvarchar",desc:"Xero account GUID"},
+      {name:"bankaccountnumber",type:"nvarchar",desc:"Bank account number"},
+      {name:"bankaccounttype",type:"nvarchar",desc:"Bank type (0=Bank,1=CreditCard,3=Paypal)"},
+      {name:"class",type:"nvarchar",desc:"Class (0=Asset,1=Liability,2=Expense,3=Revenue,4=Equity)"},
+      {name:"code",type:"nvarchar",desc:"Account code"},
+      {name:"currencycode",type:"nvarchar",desc:"Currency code"},
+      {name:"description",type:"nvarchar",desc:"Account description"},
+      {name:"enablepaymentstoaccount",type:"bit",desc:"Payments enabled"},
+      {name:"hasattachments",type:"bit",desc:"Has attachments"},
+      {name:"name",type:"nvarchar",desc:"Account name"},
+      {name:"reportingcode",type:"nvarchar",desc:"Reporting code"},
+      {name:"reportingcodename",type:"nvarchar",desc:"Reporting code name"},
+      {name:"showinexpenseclaims",type:"bit",desc:"Show in expense claims"},
+      {name:"status",type:"nvarchar",desc:"Status (0=Active,1=Archived)"},
+      {name:"systemaccount",type:"nvarchar",desc:"System account type"},
+      {name:"taxtype",type:"nvarchar",desc:"Default tax code"},
+      {name:"type",type:"nvarchar",desc:"Account type numeric code"},
+      {name:"typeId",type:"int",desc:"Account type ID"},
+      {name:"updateddateutc",type:"datetime",desc:"Last updated"},
+      {name:"accountcodeandorganisationid",type:"nvarchar",desc:"Composite key"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"AccountType", display:"Account Types", source:"Xero", type:"table",
+    desc:"Lookup mapping numeric account type codes to display names and report groupings.",
+    columns:[
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"AccountTypeId",type:"int",desc:"Numeric account type code"},
+      {name:"Description",type:"nvarchar",desc:"Account type name (Bank/Revenue/Expense etc)"},
+      {name:"XeroUserAccountType",type:"nvarchar",desc:"Xero UI label"},
+      {name:"AccountTypeOrder",type:"int",desc:"Sort order"},
+      {name:"IsDebitAccount",type:"bit",desc:"Natural debit balance"},
+      {name:"AccountGroupType",type:"nvarchar",desc:"High-level grouping"},
+      {name:"ReportType",type:"nvarchar",desc:"BalanceSheet or ProfitAndLoss"}
+    ]
+  },
+  {
+    name:"Invoices", display:"Invoices", source:"Xero", type:"table",
+    desc:"All sales and purchase invoices with amounts, GST/VAT, payment status.",
+    columns:[
+      {name:"amountcredited",type:"decimal",desc:"Credits applied"},
+      {name:"amountdue",type:"decimal",desc:"Outstanding amount"},
+      {name:"amountpaid",type:"decimal",desc:"Amount paid"},
+      {name:"brandingthemeid",type:"nvarchar",desc:"Branding theme"},
+      {name:"contact_contactid",type:"nvarchar",desc:"Contact ID"},
+      {name:"contact_name",type:"nvarchar",desc:"Contact name"},
+      {name:"creditnotes_total",type:"decimal",desc:"Credit notes total"},
+      {name:"currencycode",type:"nvarchar",desc:"Currency"},
+      {name:"currencyrate",type:"decimal",desc:"FX rate"},
+      {name:"date",type:"datetime",desc:"Issue date"},
+      {name:"duedate",type:"datetime",desc:"Due date"},
+      {name:"fullypaidondate",type:"datetime",desc:"Fully paid date"},
+      {name:"invoiceid",type:"nvarchar",desc:"Invoice ID"},
+      {name:"invoicenumber",type:"nvarchar",desc:"Invoice number"},
+      {name:"reference",type:"nvarchar",desc:"Reference"},
+      {name:"status",type:"int",desc:"Status code"},
+      {name:"invoicetypedescribed",type:"nvarchar",desc:"AR or AP"},
+      {name:"subtotal",type:"decimal",desc:"Subtotal ex-GST"},
+      {name:"total",type:"decimal",desc:"Total inc-GST"},
+      {name:"totaltax",type:"decimal",desc:"GST/VAT"},
+      {name:"type",type:"int",desc:"ACCREC or ACCPAY"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"Url",type:"nvarchar",desc:"Invoice URL"}
+    ]
+  },
+  {
+    name:"LineItems", display:"LineItems", source:"Xero", type:"table",
+    desc:"Line items for purchase orders, invoices, bank transactions, credit notes, overpayments.",
+    columns:[
+      {name:"purchaseorderid",type:"nvarchar",desc:"PO ID"},
+      {name:"lineamounttype",type:"int",desc:"Inc/exc GST"},
+      {name:"accountcode",type:"nvarchar",desc:"GL account code"},
+      {name:"accountId",type:"nvarchar",desc:"Account ID"},
+      {name:"date",type:"datetime",desc:"Transaction date"},
+      {name:"description",type:"nvarchar",desc:"Line description"},
+      {name:"invoiceid",type:"nvarchar",desc:"Invoice ID"},
+      {name:"invoicetype",type:"int",desc:"Invoice type"},
+      {name:"invoicetypedescribed",type:"nvarchar",desc:"Type description"},
+      {name:"invoicestatus",type:"int",desc:"Invoice status"},
+      {name:"bankTransactionId",type:"nvarchar",desc:"Bank txn ID"},
+      {name:"overpaymentsid",type:"nvarchar",desc:"Overpayment ID"},
+      {name:"banktransactionisreconciled",type:"bit",desc:"Reconciled flag"},
+      {name:"banktransactiontype",type:"int",desc:"Bank txn type"},
+      {name:"banktransactiontypedescribed",type:"nvarchar",desc:"Bank txn type desc"},
+      {name:"creditnoteid",type:"nvarchar",desc:"Credit note ID"},
+      {name:"creditnotestatus",type:"int",desc:"CN status"},
+      {name:"itemcode",type:"nvarchar",desc:"Item code"},
+      {name:"currencycode",type:"nvarchar",desc:"Currency"},
+      {name:"currencyrate",type:"decimal",desc:"FX rate"},
+      {name:"lineamount",type:"decimal",desc:"Line amount"},
+      {name:"lineamountadjusted",type:"decimal",desc:"Adjusted amount"},
+      {name:"hasfxadjustment",type:"bit",desc:"FX adjustment flag"},
+      {name:"lineitemid",type:"nvarchar",desc:"Line item ID"},
+      {name:"quantity",type:"decimal",desc:"Quantity"},
+      {name:"taxamount",type:"decimal",desc:"Tax amount"},
+      {name:"taxtype",type:"nvarchar",desc:"Tax type"},
+      {name:"tracking_name",type:"nvarchar",desc:"Tracking category"},
+      {name:"tracking_option",type:"nvarchar",desc:"Tracking option"},
+      {name:"tracking_trackingcategoryid",type:"nvarchar",desc:"Tracking ID"},
+      {name:"unitamount",type:"decimal",desc:"Unit price"},
+      {name:"DiscountAmount",type:"decimal",desc:"Discount"},
+      {name:"accountcodeandorganisationid",type:"nvarchar",desc:"Composite key"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"MaintainXWorkOrders", display:"MaintainXWorkOrders", source:"MaintainX", type:"table",
+    desc:"Work orders — asset details, scheduling, completion status, vendor involvement.",
+    columns:[
+      {name:"workOrderId",type:"int",desc:"Work order ID"},
+      {name:"sequentialId",type:"int",desc:"Sequential number"},
+      {name:"assetId",type:"int",desc:"Asset ID"},
+      {name:"createdAt",type:"datetime",desc:"Created timestamp"},
+      {name:"creatorId",type:"int",desc:"Creator ID"},
+      {name:"description",type:"nvarchar",desc:"Description"},
+      {name:"dueDate",type:"datetime",desc:"Due date"},
+      {name:"locationId",type:"int",desc:"Location ID"},
+      {name:"organizationId",type:"int",desc:"Org ID"},
+      {name:"priority",type:"nvarchar",desc:"Priority level"},
+      {name:"startDate",type:"datetime",desc:"Start date"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"title",type:"nvarchar",desc:"Title"},
+      {name:"type",type:"nvarchar",desc:"Type (corrective/preventive)"},
+      {name:"updatedAt",type:"datetime",desc:"Updated timestamp"},
+      {name:"categories",type:"nvarchar",desc:"Categories"},
+      {name:"vendorIds",type:"nvarchar",desc:"Vendor IDs"},
+      {name:"estimatedTime",type:"int",desc:"Estimated duration"},
+      {name:"completedAt",type:"datetime",desc:"Completed timestamp"},
+      {name:"completerId",type:"int",desc:"Completer ID"},
+      {name:"previousId",type:"int",desc:"Previous WO ID"},
+      {name:"recurrenceInfoType",type:"nvarchar",desc:"Recurrence type"},
+      {name:"recurrenceInfoInterval",type:"int",desc:"Recurrence interval"},
+      {name:"recurrenceInfoDay",type:"int",desc:"Recurrence day"},
+      {name:"Id",type:"bigint",desc:"Row ID"},
+      {name:"MaintainXOrganisationId",type:"int",desc:"MaintainX org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"MaintainXWorkRequests", display:"MaintainXWorkRequests", source:"MaintainX", type:"table",
+    desc:"Maintenance work requests — asset, creator, location, status, priority.",
+    columns:[
+      {name:"workRequestId",type:"int",desc:"Request ID"},
+      {name:"assetId",type:"int",desc:"Asset ID"},
+      {name:"creatorId",type:"int",desc:"Creator ID"},
+      {name:"description",type:"nvarchar",desc:"Description"},
+      {name:"locationId",type:"int",desc:"Location ID"},
+      {name:"workOrderId",type:"int",desc:"Related WO ID"},
+      {name:"organizationId",type:"int",desc:"Org ID"},
+      {name:"priority",type:"nvarchar",desc:"Priority"},
+      {name:"requestStatus",type:"nvarchar",desc:"Status"},
+      {name:"title",type:"nvarchar",desc:"Title"},
+      {name:"creatorContactInfoType",type:"nvarchar",desc:"Contact type"},
+      {name:"creatorContactInfoValue",type:"nvarchar",desc:"Contact value"},
+      {name:"createdAt",type:"datetime",desc:"Created timestamp"},
+      {name:"updatedAt",type:"datetime",desc:"Updated timestamp"},
+      {name:"Id",type:"bigint",desc:"Row ID"},
+      {name:"MaintainXOrganisationId",type:"int",desc:"MaintainX org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"OpCentralAuditResults", display:"OpCentralAuditResults", source:"OpCentral", type:"table",
+    desc:"Audit results by workplace — scores, submission details, action items.",
+    columns:[
+      {name:"audit_result_id",type:"int",desc:"Audit result ID"},
+      {name:"workplace_id",type:"int",desc:"Workplace ID"},
+      {name:"country",type:"nvarchar",desc:"Country"},
+      {name:"workplace_name",type:"nvarchar",desc:"Workplace name"},
+      {name:"audit_name",type:"nvarchar",desc:"Audit title"},
+      {name:"submitted_at",type:"datetime",desc:"Submission timestamp"},
+      {name:"start_date",type:"datetime",desc:"Start date"},
+      {name:"end_date",type:"datetime",desc:"End date"},
+      {name:"submitter_full_name",type:"nvarchar",desc:"Submitter name"},
+      {name:"percentage",type:"decimal",desc:"Score percentage"},
+      {name:"action_item_count",type:"int",desc:"Action items"},
+      {name:"result",type:"nvarchar",desc:"Pass/Fail"},
+      {name:"banded_result",type:"nvarchar",desc:"Result band"},
+      {name:"mode",type:"nvarchar",desc:"Audit mode"},
+      {name:"OpCentralOrganisationId",type:"int",desc:"OpCentral org ID"}
+    ]
+  },
+  {
+    name:"OpCentralTrainingAllResults", display:"OpCentralTrainingAllResults", source:"OpCentral", type:"table",
+    desc:"User training results — participation, completion, timestamps.",
+    columns:[
+      {name:"user_id",type:"int",desc:"User ID"},
+      {name:"username",type:"nvarchar",desc:"Username"},
+      {name:"user_full_name",type:"nvarchar",desc:"Full name"},
+      {name:"employee_id",type:"int",desc:"Employee ID"},
+      {name:"Id",type:"bigint",desc:"Record ID"},
+      {name:"OpCentralOrganisationId",type:"int",desc:"OpCentral org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"OpCentralTrainingResultPrograms", display:"OpCentralTrainingResultPrograms", source:"OpCentral", type:"table",
+    desc:"Training programme results — names, categories, locked status.",
+    columns:[
+      {name:"user_id",type:"int",desc:"User ID"},
+      {name:"program_id",type:"int",desc:"Program ID"},
+      {name:"program_name",type:"nvarchar",desc:"Program name"},
+      {name:"locked_status",type:"nvarchar",desc:"Locked/editable"},
+      {name:"categories",type:"nvarchar",desc:"Categories"},
+      {name:"Id",type:"bigint",desc:"Record ID"},
+      {name:"OpCentralOrganisationId",type:"int",desc:"OpCentral org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"OpCentralTrainingResults", display:"OpCentralTrainingResults", source:"OpCentral", type:"table",
+    desc:"Training results — user identity, organisation, timestamps.",
+    columns:[
+      {name:"user_id",type:"int",desc:"User ID"},
+      {name:"username",type:"nvarchar",desc:"Username"},
+      {name:"user_full_name",type:"nvarchar",desc:"Full name"},
+      {name:"employee_id",type:"int",desc:"Employee ID"},
+      {name:"Id",type:"bigint",desc:"Record ID"},
+      {name:"OpCentralOrganisationId",type:"int",desc:"OpCentral org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"Organisations", display:"Xero Entities", source:"Xero", type:"table",
+    desc:"Master list of connected Xero organisations with legal name, currency, country, FY end, tax settings.",
+    columns:[
+      {name:"addresses_addressline1",type:"nvarchar",desc:"Address line 1"},
+      {name:"addresses_addressline2",type:"nvarchar",desc:"Address line 2"},
+      {name:"addresses_addresstype",type:"nvarchar",desc:"Address type"},
+      {name:"addresses_attentionto",type:"nvarchar",desc:"Attention to"},
+      {name:"addresses_city",type:"nvarchar",desc:"City"},
+      {name:"addresses_country",type:"nvarchar",desc:"Country"},
+      {name:"addresses_postalcode",type:"nvarchar",desc:"Postcode"},
+      {name:"addresses_region",type:"nvarchar",desc:"Region"},
+      {name:"basecurrency",type:"nvarchar",desc:"Base currency"},
+      {name:"countrycode",type:"nvarchar",desc:"Country code"},
+      {name:"createddateutc",type:"datetime",desc:"Created date"},
+      {name:"defaultpurchasestax",type:"nvarchar",desc:"Default purchase tax"},
+      {name:"defaultsalestax",type:"nvarchar",desc:"Default sales tax"},
+      {name:"financialyearendday",type:"bigint",desc:"FY end day"},
+      {name:"financialyearendmonth",type:"bigint",desc:"FY end month"},
+      {name:"isdemocompany",type:"nvarchar",desc:"Demo company flag"},
+      {name:"legalname",type:"nvarchar",desc:"Legal name"},
+      {name:"name",type:"nvarchar",desc:"Org name"},
+      {name:"organisationentitytype",type:"nvarchar",desc:"Entity type"},
+      {name:"organisationstatus",type:"nvarchar",desc:"Status"},
+      {name:"organisationtype",type:"nvarchar",desc:"Legal structure"},
+      {name:"paystax",type:"nvarchar",desc:"GST/VAT registered"},
+      {name:"periodlockdate",type:"datetime",desc:"Period lock date"},
+      {name:"phones_phoneareacode",type:"nvarchar",desc:"Phone area code"},
+      {name:"phones_phonenumber",type:"nvarchar",desc:"Phone number"},
+      {name:"phones_phonetype",type:"nvarchar",desc:"Phone type"},
+      {name:"registrationnumber",type:"nvarchar",desc:"Registration number"},
+      {name:"salestaxbasis",type:"nvarchar",desc:"Tax basis"},
+      {name:"salestaxperiod",type:"nvarchar",desc:"Tax return frequency"},
+      {name:"shortcode",type:"nvarchar",desc:"Xero short code"},
+      {name:"taxnumber",type:"nvarchar",desc:"ABN/VAT number"},
+      {name:"timezone",type:"nvarchar",desc:"Timezone"},
+      {name:"version",type:"nvarchar",desc:"Region (UK/AU/NZ)"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"},
+      {name:"organisationId",type:"nvarchar",desc:"Xero GUID"}
+    ]
+  },
+  {
+    name:"PolygonRedcatAggregateSalesReport", display:"Aggregate Sales", source:"Redcat", type:"table",
+    desc:"Aggregate sales by date/time/store — net & gross sales, GST, covers, averages.",
+    columns:[
+      {name:"TxnDateTime",type:"datetime",desc:"Transaction date+time"},
+      {name:"TxnDate",type:"nvarchar",desc:"Transaction date"},
+      {name:"TxnTime",type:"nvarchar",desc:"Transaction time"},
+      {name:"TxnHour",type:"nvarchar",desc:"Hour (0-23)"},
+      {name:"TxnFifteenMinute",type:"nvarchar",desc:"15-min interval"},
+      {name:"NetSales",type:"decimal",desc:"Net sales ex-GST"},
+      {name:"GrossSales",type:"decimal",desc:"Gross sales inc-GST"},
+      {name:"GST",type:"decimal",desc:"GST amount"},
+      {name:"Covers",type:"decimal",desc:"Customer count"},
+      {name:"SaleCount",type:"decimal",desc:"Transaction count"},
+      {name:"AveragePerSale",type:"decimal",desc:"Avg net per sale"},
+      {name:"AverageGrossPerSale",type:"decimal",desc:"Avg gross per sale"},
+      {name:"AverageCovers",type:"decimal",desc:"Avg covers per sale"},
+      {name:"AveragePerCover",type:"decimal",desc:"Avg net per cover"},
+      {name:"AverageGrossPerCover",type:"decimal",desc:"Avg gross per cover"},
+      {name:"StoreID",type:"nvarchar",desc:"Store ID"},
+      {name:"StoreName",type:"nvarchar",desc:"Store name"},
+      {name:"InputTypeLabel",type:"nvarchar",desc:"Input method"},
+      {name:"PolygonRedcatOrganisationId",type:"int",desc:"Redcat org ID"}
+    ]
+  },
+  {
+    name:"PolygonRedcatExceptionsReport", display:"POS Exceptions", source:"Redcat", type:"table",
+    desc:"POS transaction exceptions — type, severity, description, related transaction.",
+    columns:[
+      {name:"ExceptionId",type:"nvarchar",desc:"Exception ID"},
+      {name:"LocationID",type:"nvarchar",desc:"Location ID"},
+      {name:"TerminalID",type:"nvarchar",desc:"Terminal ID"},
+      {name:"POSUserID",type:"nvarchar",desc:"POS user ID"},
+      {name:"Store",type:"nvarchar",desc:"Store name"},
+      {name:"Date",type:"nvarchar",desc:"Date"},
+      {name:"Time",type:"nvarchar",desc:"Time"},
+      {name:"Amount",type:"decimal",desc:"Amount"},
+      {name:"Count",type:"decimal",desc:"Exception count"},
+      {name:"Qty",type:"decimal",desc:"Quantity"},
+      {name:"Type",type:"nvarchar",desc:"Exception type"},
+      {name:"User",type:"nvarchar",desc:"User name"},
+      {name:"Severity",type:"nvarchar",desc:"Severity level"},
+      {name:"Description",type:"nvarchar",desc:"Description"},
+      {name:"Item",type:"nvarchar",desc:"Item name"},
+      {name:"TableNo",type:"nvarchar",desc:"Table number"},
+      {name:"SaleID",type:"nvarchar",desc:"Sale ID"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"PolygonRedcatOrganisationId",type:"int",desc:"Redcat org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"PolygonRedcatMemberDetailsReport", display:"Member Details", source:"Redcat", type:"table",
+    desc:"Loyalty member details — personal info, status, points, money, dates, stores.",
+    columns:[
+      {name:"MemberCount",type:"decimal",desc:"Member count"},
+      {name:"MemberNo",type:"nvarchar",desc:"Member number"},
+      {name:"MemberID",type:"nvarchar",desc:"Member ID"},
+      {name:"Surname",type:"nvarchar",desc:"Last name"},
+      {name:"GivenNames",type:"nvarchar",desc:"First names"},
+      {name:"UserName",type:"nvarchar",desc:"Username"},
+      {name:"ActiveStatus",type:"nvarchar",desc:"Active status"},
+      {name:"WasPreviousMember",type:"nvarchar",desc:"Previous member"},
+      {name:"Registered",type:"nvarchar",desc:"Registered flag"},
+      {name:"Verified",type:"nvarchar",desc:"Verified flag"},
+      {name:"Referred",type:"nvarchar",desc:"Referred flag"},
+      {name:"Email",type:"nvarchar",desc:"Email"},
+      {name:"CardType",type:"nvarchar",desc:"Card type"},
+      {name:"FavouriteStoreName",type:"nvarchar",desc:"Favourite store"},
+      {name:"FavouriteStoreID",type:"nvarchar",desc:"Favourite store ID"},
+      {name:"IssuingStoreName",type:"nvarchar",desc:"Issuing store"},
+      {name:"IssuingStoreID",type:"nvarchar",desc:"Issuing store ID"},
+      {name:"DateOfBirth",type:"nvarchar",desc:"DOB"},
+      {name:"RegistrationDateTime",type:"datetime",desc:"Registration datetime"},
+      {name:"RegistrationDate",type:"nvarchar",desc:"Registration date"},
+      {name:"RegistrationTime",type:"nvarchar",desc:"Registration time"},
+      {name:"VerificationDateTime",type:"datetime",desc:"Verification datetime"},
+      {name:"VerificationDate",type:"nvarchar",desc:"Verification date"},
+      {name:"ExpiryDateTime",type:"nvarchar",desc:"Expiry datetime"},
+      {name:"ExpiryDate",type:"nvarchar",desc:"Expiry date"},
+      {name:"LastUpdateDate",type:"nvarchar",desc:"Last update date"},
+      {name:"LastUpdateDateTime",type:"datetime",desc:"Last update datetime"},
+      {name:"CreationDate",type:"nvarchar",desc:"Creation date"},
+      {name:"Sex",type:"nvarchar",desc:"Gender"},
+      {name:"SendEmail",type:"nvarchar",desc:"Email opt-in"},
+      {name:"SendSMS",type:"nvarchar",desc:"SMS opt-in"},
+      {name:"Phone",type:"nvarchar",desc:"Phone"},
+      {name:"Mobile",type:"nvarchar",desc:"Mobile"},
+      {name:"State",type:"nvarchar",desc:"State"},
+      {name:"PostCode",type:"nvarchar",desc:"Postcode"},
+      {name:"Address1",type:"nvarchar",desc:"Address 1"},
+      {name:"Address2",type:"nvarchar",desc:"Address 2"},
+      {name:"Suburb",type:"nvarchar",desc:"Suburb"},
+      {name:"Country",type:"nvarchar",desc:"Country"},
+      {name:"DeviceID",type:"nvarchar",desc:"Device ID"},
+      {name:"DeviceType",type:"nvarchar",desc:"Device type"},
+      {name:"PackageName",type:"nvarchar",desc:"App package"},
+      {name:"GroupName",type:"nvarchar",desc:"Group name"},
+      {name:"GroupID",type:"nvarchar",desc:"Group ID"},
+      {name:"RegistrationCode",type:"nvarchar",desc:"Registration code"},
+      {name:"PointsAwarded",type:"decimal",desc:"Points awarded"},
+      {name:"PointsRedeemed",type:"decimal",desc:"Points redeemed"},
+      {name:"MoneyAwarded",type:"decimal",desc:"Money awarded"},
+      {name:"MoneyRedeemed",type:"decimal",desc:"Money redeemed"},
+      {name:"PointsBalance",type:"decimal",desc:"Points balance"},
+      {name:"MoneyBalance",type:"decimal",desc:"Money balance"},
+      {name:"LastTxnDate",type:"nvarchar",desc:"Last txn date"},
+      {name:"FirstTxnDate",type:"nvarchar",desc:"First txn date"},
+      {name:"LastTxnDateTime",type:"datetime",desc:"Last txn datetime"},
+      {name:"FirstTxnDateTime",type:"datetime",desc:"First txn datetime"},
+      {name:"LastAdminTxnDate",type:"nvarchar",desc:"Last admin txn date"},
+      {name:"FirstAdminTxnDate",type:"nvarchar",desc:"First admin txn date"},
+      {name:"LastAdminTxnDateTime",type:"datetime",desc:"Last admin txn datetime"},
+      {name:"FirstAdminTxnDateTime",type:"datetime",desc:"First admin txn datetime"},
+      {name:"VerificationType",type:"nvarchar",desc:"Verification type"},
+      {name:"AppToken",type:"nvarchar",desc:"App token"},
+      {name:"AppDeviceID",type:"nvarchar",desc:"App device ID"},
+      {name:"AppPlatform",type:"nvarchar",desc:"App platform"},
+      {name:"AppVersion",type:"nvarchar",desc:"App version"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"PolygonRedcatOrganisationId",type:"int",desc:"Redcat org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"PolygonRedcatMemberSalesByReport", display:"Member Sales By", source:"Redcat", type:"table",
+    desc:"Member sales by store/product/date — transaction timings, amounts, items.",
+    columns:[
+      {name:"TxnDateTime",type:"datetime",desc:"Transaction datetime"},
+      {name:"TxnDate",type:"nvarchar",desc:"Date"},
+      {name:"TxnTime",type:"nvarchar",desc:"Time"},
+      {name:"TxnHour",type:"nvarchar",desc:"Hour"},
+      {name:"TxnHalfHour",type:"nvarchar",desc:"Half-hour"},
+      {name:"Amount",type:"decimal",desc:"Amount inc-GST"},
+      {name:"Sold",type:"decimal",desc:"Sold flag"},
+      {name:"Price",type:"decimal",desc:"Unit price"},
+      {name:"Points",type:"decimal",desc:"Points earned/used"},
+      {name:"Qty",type:"decimal",desc:"Quantity"},
+      {name:"GST",type:"decimal",desc:"GST amount"},
+      {name:"POSSaleType",type:"nvarchar",desc:"POS sale type"},
+      {name:"POSFulfilmentType",type:"nvarchar",desc:"Fulfilment type"},
+      {name:"POSFulfilmentTypeDesc",type:"nvarchar",desc:"Fulfilment desc"},
+      {name:"POSSaleDescription",type:"nvarchar",desc:"Sale description"},
+      {name:"ClassID",type:"nvarchar",desc:"Class ID"},
+      {name:"ClassName",type:"nvarchar",desc:"Class name"},
+      {name:"CategoryID",type:"nvarchar",desc:"Category ID"},
+      {name:"CategoryName",type:"nvarchar",desc:"Category name"},
+      {name:"PLUCode",type:"nvarchar",desc:"PLU code"},
+      {name:"PLUItem",type:"nvarchar",desc:"Item name"},
+      {name:"StoreID",type:"nvarchar",desc:"Store ID"},
+      {name:"StoreName",type:"nvarchar",desc:"Store name"},
+      {name:"UserID",type:"nvarchar",desc:"Staff ID"},
+      {name:"UserName",type:"nvarchar",desc:"Staff name"},
+      {name:"MemberID",type:"nvarchar",desc:"Member ID"},
+      {name:"HeaderID",type:"nvarchar",desc:"Header ID"},
+      {name:"LineID",type:"nvarchar",desc:"Line ID"},
+      {name:"SalesID",type:"nvarchar",desc:"Sale ID"},
+      {name:"InputType",type:"nvarchar",desc:"Input type"},
+      {name:"MemberNo",type:"nvarchar",desc:"Member number"},
+      {name:"IssuingLocationID",type:"nvarchar",desc:"Issuing location ID"},
+      {name:"IssuingLocation",type:"nvarchar",desc:"Issuing location"},
+      {name:"CardType",type:"nvarchar",desc:"Card type"},
+      {name:"CardPrefix",type:"nvarchar",desc:"Card prefix"},
+      {name:"LastUpdateDate",type:"nvarchar",desc:"Last update date"},
+      {name:"LastUpdateDateTime",type:"datetime",desc:"Last update datetime"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"PolygonRedcatOrganisationId",type:"int",desc:"Redcat org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"PolygonRedcatMemberSalesReport", display:"Member Sales", source:"Redcat", type:"table",
+    desc:"Member sales transactions — financial figures, member details, store info.",
+    columns:[
+      {name:"TxnDatetime",type:"datetime",desc:"Transaction datetime"},
+      {name:"TxnDate",type:"nvarchar",desc:"Date"},
+      {name:"TxnTime",type:"nvarchar",desc:"Time"},
+      {name:"TxnHalfHour",type:"nvarchar",desc:"Half-hour"},
+      {name:"GrossSales",type:"decimal",desc:"Gross sales"},
+      {name:"NetSales",type:"decimal",desc:"Net sales"},
+      {name:"SaleCount",type:"decimal",desc:"Sale count"},
+      {name:"AverageGrossPerSale",type:"decimal",desc:"Avg gross/sale"},
+      {name:"AverageNetPerSale",type:"decimal",desc:"Avg net/sale"},
+      {name:"StoreName",type:"nvarchar",desc:"Store name"},
+      {name:"StoreID",type:"nvarchar",desc:"Store ID"},
+      {name:"GroupNameAtSale",type:"nvarchar",desc:"Group at sale"},
+      {name:"GroupID",type:"nvarchar",desc:"Group ID"},
+      {name:"GroupIDAtSale",type:"nvarchar",desc:"Group ID at sale"},
+      {name:"POSSaleType",type:"decimal",desc:"POS sale type"},
+      {name:"TransactionType",type:"decimal",desc:"Transaction type"},
+      {name:"InputType",type:"decimal",desc:"Input type"},
+      {name:"InputTypeLabel",type:"decimal",desc:"Input label"},
+      {name:"MemberID",type:"nvarchar",desc:"Member ID"},
+      {name:"MemberNo",type:"nvarchar",desc:"Member number"},
+      {name:"GivenNames",type:"nvarchar",desc:"First names"},
+      {name:"Surname",type:"nvarchar",desc:"Surname"},
+      {name:"Mobile",type:"nvarchar",desc:"Mobile"},
+      {name:"Email",type:"nvarchar",desc:"Email"},
+      {name:"HeaderID",type:"nvarchar",desc:"Header ID"},
+      {name:"SaleID",type:"nvarchar",desc:"Sale ID"},
+      {name:"CardsetPrefix",type:"nvarchar",desc:"Cardset prefix"},
+      {name:"CardsetType",type:"nvarchar",desc:"Cardset type"},
+      {name:"DeliveryProvider",type:"nvarchar",desc:"Delivery provider"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"PolygonRedcatOrganisationId",type:"int",desc:"Redcat org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"PolygonRedcatOrganisation", display:"Redcat Organisation", source:"Redcat", type:"table",
+    desc:"Organisations integrated with Polygon Redcat — domain, auth, sync status.",
+    columns:[
+      {name:"Id",type:"int",desc:"Org ID"},
+      {name:"Name",type:"nvarchar",desc:"Org name"},
+      {name:"Domain",type:"nvarchar",desc:"Domain"},
+      {name:"AccessToken",type:"nvarchar",desc:"Access token"},
+      {name:"SyncStatus",type:"nvarchar",desc:"Sync status"},
+      {name:"LastSyncedDateTimeUtc",type:"datetime",desc:"Last synced"},
+      {name:"ApiCallCount",type:"int",desc:"API calls"},
+      {name:"EnableSalesMedia",type:"bit",desc:"Sales media enabled"},
+      {name:"SkipCache",type:"bit",desc:"Skip cache"}
+    ]
+  },
+  {
+    name:"PolygonRedcatReportEndpoints", display:"Report Endpoints", source:"Redcat", type:"table",
+    desc:"Report endpoint configuration and sync settings.",
+    columns:[
+      {name:"Id",type:"int",desc:"Endpoint ID"},
+      {name:"Name",type:"nvarchar",desc:"Endpoint name"},
+      {name:"Endpoint",type:"nvarchar",desc:"API URL"},
+      {name:"ConstraintFieldName",type:"nvarchar",desc:"Filter field"},
+      {name:"Fields",type:"nvarchar",desc:"Fields list"},
+      {name:"NumberOfDaysForLooping",type:"int",desc:"Days for looping"},
+      {name:"TableToSaveTo",type:"nvarchar",desc:"Target table"},
+      {name:"HistoricalStartDate",type:"datetime",desc:"Start date"},
+      {name:"RefreshNumberOfDaysBack",type:"int",desc:"Refresh days back"},
+      {name:"RefreshNumberOfDaysBackOnSunday",type:"int",desc:"Sunday refresh days"},
+      {name:"FieldUseToDelete",type:"nvarchar",desc:"Delete field"},
+      {name:"IsActive",type:"bit",desc:"Active flag"},
+      {name:"IdColumnName",type:"nvarchar",desc:"PK column"},
+      {name:"ChangeTable",type:"bit",desc:"Change tracking"},
+      {name:"PolygonRedcatOrganisationId",type:"int",desc:"Redcat org ID"},
+      {name:"SyncStatus",type:"nvarchar",desc:"Sync status"},
+      {name:"LastSyncedDateTimeUtc",type:"datetime",desc:"Last synced"},
+      {name:"ApiCallCount",type:"int",desc:"API calls"},
+      {name:"NumberOfHoursForLooping",type:"int",desc:"Hours for looping"},
+      {name:"ConstraintTimeFieldName",type:"nvarchar",desc:"Time filter field"},
+      {name:"ClearDuplicates",type:"bit",desc:"Clear duplicates"}
+    ]
+  },
+  {
+    name:"PolygonRedcatSalesMedia", display:"Sales Media", source:"Redcat", type:"table",
+    desc:"Media sales transactions — dates, locations, media items, amounts.",
+    columns:[
+      {name:"Date",type:"datetime",desc:"Sale date"},
+      {name:"Location",type:"nvarchar",desc:"Location"},
+      {name:"SubLocation",type:"nvarchar",desc:"Sub-location"},
+      {name:"MediaName",type:"nvarchar",desc:"Media item name"},
+      {name:"Amount",type:"nvarchar",desc:"Sale amount"},
+      {name:"TransactionCount",type:"nvarchar",desc:"Transaction count"},
+      {name:"Id",type:"bigint",desc:"Row ID"},
+      {name:"PolygonRedcatOrganisationId",type:"int",desc:"Redcat org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"PolygonRedcatSalesReport", display:"Sales Report (Detail)", source:"Redcat", type:"table",
+    desc:"Detailed POS sales — item-level with times, amounts, categories, GST.",
+    columns:[
+      {name:"TxnDateTime",type:"datetime",desc:"Transaction date+time"},
+      {name:"TxnDate",type:"nvarchar",desc:"Date"},
+      {name:"TxnTime",type:"nvarchar",desc:"Time"},
+      {name:"TxnHour",type:"nvarchar",desc:"Hour"},
+      {name:"Amount",type:"decimal",desc:"Net amount ex-GST"},
+      {name:"NetAmount",type:"decimal",desc:"Net value"},
+      {name:"GrossAmount",type:"decimal",desc:"Total inc-GST"},
+      {name:"Sold",type:"decimal",desc:"Qty sold"},
+      {name:"TxnCount",type:"decimal",desc:"Transaction count"},
+      {name:"Price",type:"decimal",desc:"Unit price"},
+      {name:"GST",type:"decimal",desc:"GST amount"},
+      {name:"ClassName",type:"nvarchar",desc:"Product class"},
+      {name:"CategoryName",type:"nvarchar",desc:"Category"},
+      {name:"PLUItem",type:"nvarchar",desc:"PLU item"},
+      {name:"StoreID",type:"nvarchar",desc:"Store ID"},
+      {name:"StoreName",type:"nvarchar",desc:"Store name"},
+      {name:"UserName",type:"nvarchar",desc:"Staff name"},
+      {name:"SaleID",type:"nvarchar",desc:"Sale ID"},
+      {name:"POSSaleTypeDesc",type:"nvarchar",desc:"Sale type"},
+      {name:"PolygonRedcatOrganisationId",type:"int",desc:"Redcat org ID"}
+    ]
+  },
+  {
+    name:"PolygonRedcatStoreAllHolidays", display:"Store Holidays", source:"Redcat", type:"table",
+    desc:"Public holidays per store.",
+    columns:[
+      {name:"StoreID",type:"int",desc:"Store ID"},
+      {name:"Date",type:"nvarchar",desc:"Holiday date"},
+      {name:"Name",type:"nvarchar",desc:"Holiday name"},
+      {name:"Id",type:"bigint",desc:"Row ID"},
+      {name:"PolygonRedcatOrganisationId",type:"int",desc:"Redcat org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"PolygonRedcatStores", display:"Stores", source:"Redcat", type:"table",
+    desc:"Store locations — hours, geography, ordering capabilities, status.",
+    columns:[
+      {name:"StoreID",type:"int",desc:"Store ID"},
+      {name:"ABN",type:"nvarchar",desc:"ABN/VAT number"},
+      {name:"ActiveStatus",type:"bit",desc:"Active flag"},
+      {name:"Address1",type:"nvarchar",desc:"Address 1"},
+      {name:"Address2",type:"nvarchar",desc:"Address 2"},
+      {name:"AvgOrderTime",type:"int",desc:"Avg order time"},
+      {name:"BrandID",type:"nvarchar",desc:"Brand ID"},
+      {name:"ClosingTimeToday",type:"datetime",desc:"Today closing"},
+      {name:"ClosingTimeTomorrow",type:"datetime",desc:"Tomorrow closing"},
+      {name:"ClosingTimeYesterday",type:"datetime",desc:"Yesterday closing"},
+      {name:"Country",type:"nvarchar",desc:"Country"},
+      {name:"CurrentTime",type:"datetime",desc:"Current local time"},
+      {name:"GuestOrderingEnabled",type:"bit",desc:"Guest ordering"},
+      {name:"HiddenStore",type:"bit",desc:"Hidden flag"},
+      {name:"IsHoliday",type:"bit",desc:"Holiday flag"},
+      {name:"Latitude",type:"decimal",desc:"Latitude"},
+      {name:"LocationName",type:"nvarchar",desc:"Location name"},
+      {name:"Longitude",type:"decimal",desc:"Longitude"},
+      {name:"NextOpen",type:"datetime",desc:"Next open time"},
+      {name:"OpenNow",type:"bit",desc:"Open now flag"},
+      {name:"OpeningHoursMondayClosingTime",type:"nvarchar",desc:"Mon close"},
+      {name:"OpeningHoursMondayOpeningTime",type:"nvarchar",desc:"Mon open"},
+      {name:"OpeningHoursTuesdayClosingTime",type:"nvarchar",desc:"Tue close"},
+      {name:"OpeningHoursTuesdayOpeningTime",type:"nvarchar",desc:"Tue open"},
+      {name:"OpeningHoursWednesdayClosingTime",type:"nvarchar",desc:"Wed close"},
+      {name:"OpeningHoursWednesdayOpeningTime",type:"nvarchar",desc:"Wed open"},
+      {name:"OpeningHoursThursdayClosingTime",type:"nvarchar",desc:"Thu close"},
+      {name:"OpeningHoursThursdayOpeningTime",type:"nvarchar",desc:"Thu open"},
+      {name:"OpeningHoursFridayClosingTime",type:"nvarchar",desc:"Fri close"},
+      {name:"OpeningHoursFridayOpeningTime",type:"nvarchar",desc:"Fri open"},
+      {name:"OpeningHoursSaturdayClosingTime",type:"nvarchar",desc:"Sat close"},
+      {name:"OpeningHoursSaturdayOpeningTime",type:"nvarchar",desc:"Sat open"},
+      {name:"OpeningHoursSundayClosingTime",type:"nvarchar",desc:"Sun close"},
+      {name:"OpeningHoursSundayOpeningTime",type:"nvarchar",desc:"Sun open"},
+      {name:"OpeningHoursPublicholidayClosingTime",type:"nvarchar",desc:"Holiday close"},
+      {name:"OpeningHoursPublicholidayOpeningTime",type:"nvarchar",desc:"Holiday open"},
+      {name:"OpeningTimeToday",type:"datetime",desc:"Today opening"},
+      {name:"OpeningTimeTomorrow",type:"datetime",desc:"Tomorrow opening"},
+      {name:"OpeningTimeYesterday",type:"datetime",desc:"Yesterday opening"},
+      {name:"OrderAfterHours",type:"bit",desc:"After-hours ordering"},
+      {name:"OrderingEnabled",type:"bit",desc:"Ordering enabled"},
+      {name:"PaymentGatewayCustomerID",type:"nvarchar",desc:"Payment gateway ID"},
+      {name:"PaymentGatewayPublicKey",type:"nvarchar",desc:"Payment gateway key"},
+      {name:"Phone",type:"nvarchar",desc:"Phone"},
+      {name:"PosType",type:"nvarchar",desc:"POS type"},
+      {name:"Postcode",type:"nvarchar",desc:"Postcode"},
+      {name:"State",type:"nvarchar",desc:"State"},
+      {name:"StoreStatus",type:"nvarchar",desc:"Store status"},
+      {name:"Suburb",type:"nvarchar",desc:"Suburb"},
+      {name:"Timezone",type:"nvarchar",desc:"Timezone"},
+      {name:"UTCOffset",type:"int",desc:"UTC offset"},
+      {name:"Id",type:"bigint",desc:"Row ID"},
+      {name:"PolygonRedcatOrganisationId",type:"int",desc:"Redcat org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"Redcat_PY_Sales", display:"PY Sales", source:"Redcat", type:"table",
+    desc:"Historical daily sales totals by store.",
+    columns:[
+      {name:"Id",type:"bigint",desc:"Row ID"},
+      {name:"StoreName",type:"nvarchar",desc:"Store name"},
+      {name:"TxnDate",type:"nvarchar",desc:"Transaction date"},
+      {name:"NetSales",type:"nvarchar",desc:"Net sales ex-GST"},
+      {name:"SaleCount",type:"nvarchar",desc:"Sale count"},
+      {name:"ATV",type:"nvarchar",desc:"Avg transaction value"}
+    ]
+  },
+  {
+    name:"Redcat_PY_Sales_Mar_26", display:"PY Sales (Mar 26)", source:"Redcat", type:"table",
+    desc:"Sales by store/date — net amounts ex-GST.",
+    columns:[
+      {name:"Id",type:"bigint",desc:"Row ID"},
+      {name:"StoreName",type:"nvarchar",desc:"Store name"},
+      {name:"TxnDate",type:"datetime",desc:"Transaction date"},
+      {name:"NetSales",type:"decimal",desc:"Net sales ex-GST"}
+    ]
+  },
+  {
+    name:"Redcat_Sales_PY", display:"Sales PY", source:"Redcat", type:"table",
+    desc:"Historical sales — net, count, ATV by store.",
+    columns:[
+      {name:"Id",type:"bigint",desc:"Row ID"},
+      {name:"StoreName",type:"nvarchar",desc:"Store name"},
+      {name:"TxnDate",type:"datetime",desc:"Transaction date"},
+      {name:"NetSales",type:"decimal",desc:"Net sales ex-GST"},
+      {name:"SaleCount",type:"decimal",desc:"Sale count"},
+      {name:"ATV",type:"decimal",desc:"Avg transaction value"}
+    ]
+  },
+  {
+    name:"ReviewTrackersAccounts", display:"RT Accounts", source:"ReviewTrackers", type:"table",
+    desc:"Customer accounts — status, billing, contact info, plan details.",
+    columns:[
+      {name:"account_id",type:"nvarchar",desc:"Account ID"},
+      {name:"name",type:"nvarchar",desc:"Account name"},
+      {name:"active",type:"bit",desc:"Active flag"},
+      {name:"auto",type:"bit",desc:"Auto flag"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"created_at",type:"datetime",desc:"Created"},
+      {name:"activated_at",type:"datetime",desc:"Activated"},
+      {name:"completed_at",type:"datetime",desc:"Completed"},
+      {name:"confirmed_at",type:"datetime",desc:"Confirmed"},
+      {name:"updated_at",type:"datetime",desc:"Updated"},
+      {name:"trial_ended_at",type:"datetime",desc:"Trial ended"},
+      {name:"trial_started_at",type:"datetime",desc:"Trial started"},
+      {name:"deleted_at",type:"datetime",desc:"Deleted"},
+      {name:"completed",type:"bit",desc:"Setup completed"},
+      {name:"confirmed",type:"bit",desc:"Confirmed"},
+      {name:"account_vertical_code",type:"nvarchar",desc:"Vertical code"},
+      {name:"account_vertical_id",type:"nvarchar",desc:"Vertical ID"},
+      {name:"account_vertical_name",type:"nvarchar",desc:"Vertical name"},
+      {name:"billing_customer_id",type:"nvarchar",desc:"Billing customer ID"},
+      {name:"billing_product_id",type:"nvarchar",desc:"Billing product ID"},
+      {name:"billing_provider",type:"nvarchar",desc:"Billing provider"},
+      {name:"billing_setting_id",type:"nvarchar",desc:"Billing setting ID"},
+      {name:"billing_subscription_id",type:"nvarchar",desc:"Subscription ID"},
+      {name:"contact_email",type:"nvarchar",desc:"Contact email"},
+      {name:"contact_id",type:"nvarchar",desc:"Contact ID"},
+      {name:"customer_success_manager_id",type:"nvarchar",desc:"CSM ID"},
+      {name:"customer_success_manager_name",type:"nvarchar",desc:"CSM name"},
+      {name:"plan_code",type:"nvarchar",desc:"Plan code"},
+      {name:"plan_id",type:"nvarchar",desc:"Plan ID"},
+      {name:"plan_name",type:"nvarchar",desc:"Plan name"},
+      {name:"resource",type:"nvarchar",desc:"Resource"},
+      {name:"review_status_label_id",type:"nvarchar",desc:"Review status label"},
+      {name:"sales_account_owner_id",type:"nvarchar",desc:"Sales owner ID"},
+      {name:"sales_account_owner_name",type:"nvarchar",desc:"Sales owner name"},
+      {name:"segment",type:"nvarchar",desc:"Segment"},
+      {name:"total_locations",type:"int",desc:"Total locations"},
+      {name:"is_parent",type:"bit",desc:"Parent flag"},
+      {name:"parent_id",type:"nvarchar",desc:"Parent ID"},
+      {name:"Id",type:"bigint",desc:"Row ID"},
+      {name:"ReviewTrackersOrganisationId",type:"int",desc:"RT org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"ReviewTrackersCompetitorReviews", display:"Competitor Reviews", source:"ReviewTrackers", type:"table",
+    desc:"Competitor reviews — content, ratings, dates, locations.",
+    columns:[
+      {name:"competitor_review_id",type:"int",desc:"Review ID"},
+      {name:"url_id",type:"int",desc:"URL ID"},
+      {name:"content",type:"nvarchar",desc:"Review content"},
+      {name:"author",type:"nvarchar",desc:"Author"},
+      {name:"exact_rating",type:"nvarchar",desc:"Exact rating"},
+      {name:"rating",type:"int",desc:"Rating"},
+      {name:"published_at",type:"datetime",desc:"Published date"},
+      {name:"canonical_id",type:"nvarchar",desc:"Canonical ID"},
+      {name:"permalink",type:"nvarchar",desc:"Permalink"},
+      {name:"created_at",type:"datetime",desc:"Created"},
+      {name:"updated_at",type:"datetime",desc:"Updated"},
+      {name:"deleted_at",type:"nvarchar",desc:"Deleted"},
+      {name:"competitor_id",type:"int",desc:"Competitor ID"},
+      {name:"source",type:"nvarchar",desc:"Source platform"},
+      {name:"competitor_name",type:"nvarchar",desc:"Competitor name"},
+      {name:"rtx_location_id",type:"nvarchar",desc:"RT location ID"},
+      {name:"rtx_account_id",type:"nvarchar",desc:"RT account ID"},
+      {name:"account_id",type:"nvarchar",desc:"Account ID"},
+      {name:"Id",type:"bigint",desc:"Row ID"},
+      {name:"ReviewTrackersOrganisationId",type:"int",desc:"RT org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"ReviewTrackersReviews", display:"Reviews", source:"ReviewTrackers", type:"table",
+    desc:"Customer reviews — sentiment, ratings, responses, source platforms.",
+    columns:[
+      {name:"review_id",type:"nvarchar",desc:"Review ID"},
+      {name:"account_id",type:"nvarchar",desc:"Account ID"},
+      {name:"name",type:"nvarchar",desc:"Review title"},
+      {name:"author",type:"nvarchar",desc:"Author"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"content",type:"nvarchar",desc:"Review text"},
+      {name:"exact_rating",type:"nvarchar",desc:"Exact rating"},
+      {name:"rating",type:"decimal",desc:"Star rating"},
+      {name:"location_name",type:"nvarchar",desc:"Location name"},
+      {name:"location_city",type:"nvarchar",desc:"City"},
+      {name:"location_state",type:"nvarchar",desc:"State"},
+      {name:"source_name",type:"nvarchar",desc:"Source platform"},
+      {name:"published_at",type:"datetime",desc:"Published date"},
+      {name:"permalink",type:"nvarchar",desc:"Permalink URL"},
+      {name:"ReviewTrackersOrganisationId",type:"int",desc:"RT org ID"}
+    ]
+  },
+  {
+    name:"StripeBalanceTransactions", display:"Stripe Transactions", source:"Stripe", type:"table",
+    desc:"All Stripe balance transactions — payments, fees, net amounts.",
+    columns:[
+      {name:"transaction_id",type:"nvarchar",desc:"Transaction ID"},
+      {name:"available_on",type:"datetime",desc:"Funds available date"},
+      {name:"created",type:"datetime",desc:"Created timestamp"},
+      {name:"currency",type:"nvarchar",desc:"Currency code"},
+      {name:"description",type:"nvarchar",desc:"Description"},
+      {name:"amount",type:"decimal",desc:"Amount (cents)"},
+      {name:"fee",type:"decimal",desc:"Stripe fees"},
+      {name:"net",type:"decimal",desc:"Net after fees"},
+      {name:"reporting_category",type:"nvarchar",desc:"Category (charge/refund/payout)"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"type",type:"nvarchar",desc:"Type (payment/refund/transfer)"},
+      {name:"StripeOrganisationId",type:"int",desc:"Stripe org ID"}
+    ]
+  },
+  {
+    name:"StripeInvoices", display:"Stripe Invoices", source:"Stripe", type:"table",
+    desc:"Stripe invoices — payment amounts, customer info, discounts, taxes, status.",
+    columns:[
+      {name:"invoice_id",type:"nvarchar",desc:"Invoice ID"},
+      {name:"account_country",type:"nvarchar",desc:"Account country"},
+      {name:"account_name",type:"nvarchar",desc:"Account name"},
+      {name:"amount_due",type:"decimal",desc:"Amount due"},
+      {name:"amount_paid",type:"decimal",desc:"Amount paid"},
+      {name:"amount_remaining",type:"decimal",desc:"Amount remaining"},
+      {name:"amount_shipping",type:"decimal",desc:"Shipping amount"},
+      {name:"application",type:"nvarchar",desc:"Connected app ID"},
+      {name:"application_fee_amount",type:"decimal",desc:"App fee"},
+      {name:"attempt_count",type:"int",desc:"Payment attempts"},
+      {name:"attempted",type:"bit",desc:"Payment attempted"},
+      {name:"auto_advance",type:"bit",desc:"Auto advance"},
+      {name:"automatic_tax_enabled",type:"bit",desc:"Auto tax enabled"},
+      {name:"automatic_tax_status",type:"nvarchar",desc:"Auto tax status"},
+      {name:"automatically_finalizes_at",type:"datetime",desc:"Auto finalize date"},
+      {name:"billing_reason",type:"nvarchar",desc:"Billing reason"},
+      {name:"charge",type:"nvarchar",desc:"Charge ID"},
+      {name:"collection_method",type:"nvarchar",desc:"Collection method"},
+      {name:"created",type:"datetime",desc:"Created"},
+      {name:"currency",type:"nvarchar",desc:"Currency"},
+      {name:"customer",type:"nvarchar",desc:"Customer ID"},
+      {name:"customer_email",type:"nvarchar",desc:"Customer email"},
+      {name:"customer_name",type:"nvarchar",desc:"Customer name"},
+      {name:"customer_phone",type:"nvarchar",desc:"Customer phone"},
+      {name:"customer_tax_exempt",type:"nvarchar",desc:"Tax exempt status"},
+      {name:"default_payment_method",type:"nvarchar",desc:"Payment method"},
+      {name:"default_source",type:"nvarchar",desc:"Payment source"},
+      {name:"description",type:"nvarchar",desc:"Description"},
+      {name:"discount_id",type:"nvarchar",desc:"Discount ID"},
+      {name:"discount_start",type:"datetime",desc:"Discount start"},
+      {name:"discount_end",type:"datetime",desc:"Discount end"},
+      {name:"discount_promotion_code",type:"nvarchar",desc:"Promo code"},
+      {name:"discount_subscription",type:"nvarchar",desc:"Discount subscription"},
+      {name:"discount_coupon_id",type:"nvarchar",desc:"Coupon ID"},
+      {name:"discount_coupon_amount_off",type:"decimal",desc:"Coupon amount off"},
+      {name:"discount_coupon_created",type:"datetime",desc:"Coupon created"},
+      {name:"discount_coupon_currency",type:"nvarchar",desc:"Coupon currency"},
+      {name:"discount_coupon_duration",type:"nvarchar",desc:"Coupon duration"},
+      {name:"discount_coupon_duration_in_months",type:"int",desc:"Coupon months"},
+      {name:"discount_coupon_livemode",type:"bit",desc:"Coupon livemode"},
+      {name:"discount_coupon_max_redemptions",type:"int",desc:"Max redemptions"},
+      {name:"discount_coupon_name",type:"nvarchar",desc:"Coupon name"},
+      {name:"discount_coupon_percent_off",type:"decimal",desc:"Percent off"},
+      {name:"discount_coupon_redeem_by",type:"datetime",desc:"Redeem by"},
+      {name:"discount_coupon_times_redeemed",type:"int",desc:"Times redeemed"},
+      {name:"discount_coupon_valid",type:"bit",desc:"Coupon valid"},
+      {name:"due_date",type:"datetime",desc:"Due date"},
+      {name:"effective_at",type:"datetime",desc:"Effective date"},
+      {name:"ending_balance",type:"decimal",desc:"Ending balance"},
+      {name:"footer",type:"nvarchar",desc:"Footer text"},
+      {name:"hosted_invoice_url",type:"nvarchar",desc:"Hosted URL"},
+      {name:"invoice_pdf",type:"nvarchar",desc:"PDF URL"},
+      {name:"issuer_type",type:"nvarchar",desc:"Issuer type"},
+      {name:"issuer_account",type:"nvarchar",desc:"Issuer account"},
+      {name:"livemode",type:"bit",desc:"Live mode"},
+      {name:"next_payment_attempt",type:"datetime",desc:"Next payment attempt"},
+      {name:"number",type:"nvarchar",desc:"Invoice number"},
+      {name:"on_behalf_of",type:"nvarchar",desc:"On behalf of"},
+      {name:"paid",type:"bit",desc:"Paid flag"},
+      {name:"paid_out_of_band",type:"bit",desc:"Paid out of band"},
+      {name:"payment_intent",type:"nvarchar",desc:"Payment intent"},
+      {name:"period_end",type:"datetime",desc:"Period end"},
+      {name:"period_start",type:"datetime",desc:"Period start"},
+      {name:"post_payment_credit_notes_amount",type:"decimal",desc:"Post-payment CN amount"},
+      {name:"pre_payment_credit_notes_amount",type:"decimal",desc:"Pre-payment CN amount"},
+      {name:"quote",type:"nvarchar",desc:"Quote ID"},
+      {name:"receipt_number",type:"nvarchar",desc:"Receipt number"},
+      {name:"starting_balance",type:"decimal",desc:"Starting balance"},
+      {name:"statement_descriptor",type:"nvarchar",desc:"Statement descriptor"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"status_transitions_finalized_at",type:"datetime",desc:"Finalized at"},
+      {name:"status_transitions_marked_uncollectible_at",type:"datetime",desc:"Marked uncollectible"},
+      {name:"status_transitions_paid_at",type:"datetime",desc:"Paid at"},
+      {name:"status_transitions_voided_at",type:"datetime",desc:"Voided at"},
+      {name:"subscription",type:"nvarchar",desc:"Subscription ID"},
+      {name:"subtotal",type:"decimal",desc:"Subtotal"},
+      {name:"subtotal_excluding_tax",type:"decimal",desc:"Subtotal ex-tax"},
+      {name:"tax",type:"decimal",desc:"Tax amount"},
+      {name:"tax_percent",type:"decimal",desc:"Tax percent"},
+      {name:"total",type:"decimal",desc:"Total"},
+      {name:"total_excluding_tax",type:"decimal",desc:"Total ex-tax"},
+      {name:"webhooks_delivered_at",type:"datetime",desc:"Webhooks delivered"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"StripeOrganisationId",type:"int",desc:"Stripe org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"StripeRefunds", display:"Stripe Refunds", source:"Stripe", type:"table",
+    desc:"Stripe refund transactions — amounts, charges, card info.",
+    columns:[
+      {name:"refund_id",type:"nvarchar",desc:"Refund ID"},
+      {name:"amount",type:"decimal",desc:"Refund amount (cents)"},
+      {name:"balance_transaction",type:"nvarchar",desc:"Balance txn ID"},
+      {name:"charge",type:"nvarchar",desc:"Original charge ID"},
+      {name:"created",type:"datetime",desc:"Created timestamp"},
+      {name:"currency",type:"nvarchar",desc:"Currency"},
+      {name:"destination_type",type:"nvarchar",desc:"Destination type"},
+      {name:"destination_card_reference",type:"nvarchar",desc:"Card reference"},
+      {name:"destination_card_reference_status",type:"nvarchar",desc:"Card ref status"},
+      {name:"destination_card_reference_type",type:"nvarchar",desc:"Card ref type"},
+      {name:"destination_card_type",type:"nvarchar",desc:"Card brand"},
+      {name:"payment_intent",type:"nvarchar",desc:"Payment intent ID"},
+      {name:"reason",type:"nvarchar",desc:"Refund reason"},
+      {name:"receipt_number",type:"nvarchar",desc:"Receipt number"},
+      {name:"source_transfer_reversal",type:"nvarchar",desc:"Source transfer reversal"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"transfer_reversal",type:"nvarchar",desc:"Transfer reversal"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"StripeOrganisationId",type:"int",desc:"Stripe org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"TandaPayRuns", display:"Pay Runs", source:"Tanda", type:"table",
+    desc:"Payroll runs — periods, company files, pay groups, dates, status.",
+    columns:[
+      {name:"pay_run_id",type:"int",desc:"Pay run ID"},
+      {name:"company_file_name",type:"nvarchar",desc:"Company file"},
+      {name:"company_file_id",type:"int",desc:"Company file ID"},
+      {name:"pay_group_id",type:"int",desc:"Pay group ID"},
+      {name:"start_date",type:"datetime",desc:"Period start"},
+      {name:"finish_date",type:"datetime",desc:"Period end"},
+      {name:"payment_date",type:"datetime",desc:"Payment date"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"TandaRosters", display:"Rosters", source:"Tanda", type:"table",
+    desc:"Employee rosters — periods, costs, timestamps.",
+    columns:[
+      {name:"roster_id",type:"int",desc:"Roster ID"},
+      {name:"start",type:"datetime",desc:"Start datetime"},
+      {name:"finish",type:"datetime",desc:"End datetime"},
+      {name:"cost",type:"decimal",desc:"Total cost"},
+      {name:"updated_at",type:"datetime",desc:"Updated timestamp"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"TandaRosterScheduleBreaks", display:"Roster Breaks", source:"Tanda", type:"table",
+    desc:"Scheduled breaks within roster shifts — paid/unpaid, duration.",
+    columns:[
+      {name:"roster_id",type:"int",desc:"Roster ID"},
+      {name:"roster_schedule_id",type:"int",desc:"Schedule ID"},
+      {name:"start",type:"datetime",desc:"Break start"},
+      {name:"finish",type:"datetime",desc:"Break end"},
+      {name:"paid",type:"bit",desc:"Paid flag"},
+      {name:"length",type:"int",desc:"Duration (mins)"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"TandaRosterSchedules", display:"Roster Schedules", source:"Tanda", type:"table",
+    desc:"Rostered shifts — times, users, departments, costs, publish status.",
+    columns:[
+      {name:"roster_id",type:"int",desc:"Roster ID"},
+      {name:"date",type:"datetime",desc:"Shift date"},
+      {name:"roster_schedule_id",type:"int",desc:"Schedule ID"},
+      {name:"user_id",type:"int",desc:"Employee ID"},
+      {name:"start",type:"datetime",desc:"Start time"},
+      {name:"finish",type:"datetime",desc:"Finish time"},
+      {name:"automatic_break_length",type:"int",desc:"Auto break (mins)"},
+      {name:"department_id",type:"int",desc:"Department ID"},
+      {name:"shift_detail_id",type:"int",desc:"Shift detail ID"},
+      {name:"last_published_at",type:"datetime",desc:"Published timestamp"},
+      {name:"acceptance_status",type:"nvarchar",desc:"Acceptance status"},
+      {name:"last_acknowledged_at",type:"datetime",desc:"Acknowledged timestamp"},
+      {name:"time_zone",type:"nvarchar",desc:"Timezone"},
+      {name:"needs_acceptance",type:"bit",desc:"Acceptance required"},
+      {name:"utc_offset",type:"int",desc:"UTC offset"},
+      {name:"creation_method",type:"nvarchar",desc:"Creation method"},
+      {name:"creation_platform",type:"nvarchar",desc:"Platform"},
+      {name:"cost",type:"decimal",desc:"Shift cost"},
+      {name:"last_costed_at",type:"datetime",desc:"Last costed"},
+      {name:"updated_at",type:"datetime",desc:"Updated"},
+      {name:"record_id",type:"int",desc:"Record ID"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"TandaShiftAwardInterpretations", display:"Shift Awards", source:"Tanda", type:"table",
+    desc:"Shift award interpretations — hours, pay classifications, costs, rates.",
+    columns:[
+      {name:"shift_id",type:"int",desc:"Shift ID"},
+      {name:"units",type:"decimal",desc:"Hours/units"},
+      {name:"date",type:"datetime",desc:"Shift date"},
+      {name:"name",type:"nvarchar",desc:"Award name"},
+      {name:"export_name",type:"nvarchar",desc:"Export label"},
+      {name:"secondary_export_name",type:"nvarchar",desc:"Secondary export"},
+      {name:"pay_class",type:"nvarchar",desc:"Pay class"},
+      {name:"ordinary_hours",type:"bit",desc:"Ordinary hours flag"},
+      {name:"cost",type:"decimal",desc:"Segment cost"},
+      {name:"from",type:"datetime",desc:"Start time"},
+      {name:"to",type:"datetime",desc:"End time"},
+      {name:"base_rate_name",type:"nvarchar",desc:"Base rate name"},
+      {name:"base_rate_export_name",type:"nvarchar",desc:"Base rate export"},
+      {name:"base_rate",type:"decimal",desc:"Base rate value"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"TandaShiftBreaks", display:"Shift Breaks", source:"Tanda", type:"table",
+    desc:"Break records — start/finish, duration, paid status, auto-break rules.",
+    columns:[
+      {name:"shift_id",type:"int",desc:"Shift ID"},
+      {name:"break_id",type:"int",desc:"Break ID"},
+      {name:"start",type:"datetime",desc:"Break start"},
+      {name:"finish",type:"datetime",desc:"Break end"},
+      {name:"length",type:"int",desc:"Duration (mins)"},
+      {name:"paid",type:"bit",desc:"Paid flag"},
+      {name:"selected_automatic_break_id",type:"int",desc:"Auto break ID"},
+      {name:"selected_automatic_break_rule_id",type:"int",desc:"Auto break rule ID"},
+      {name:"updated_at",type:"datetime",desc:"Updated"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"TandaShifts", display:"Shifts", source:"Tanda", type:"table",
+    desc:"Employee work shifts — timing, department, approval, costs.",
+    columns:[
+      {name:"shift_id",type:"int",desc:"Shift ID"},
+      {name:"timesheet_id",type:"int",desc:"Timesheet ID"},
+      {name:"user_id",type:"int",desc:"Employee ID"},
+      {name:"date",type:"datetime",desc:"Shift date"},
+      {name:"start",type:"datetime",desc:"Start time"},
+      {name:"finish",type:"datetime",desc:"End time"},
+      {name:"break_length",type:"int",desc:"Break (mins)"},
+      {name:"department_id",type:"int",desc:"Department ID"},
+      {name:"tag",type:"nvarchar",desc:"Shift tag"},
+      {name:"status",type:"nvarchar",desc:"Approval status"},
+      {name:"cost",type:"decimal",desc:"Total cost"},
+      {name:"award_cost",type:"decimal",desc:"Award cost"},
+      {name:"allowance_cost",type:"decimal",desc:"Allowance cost"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"}
+    ]
+  },
+  {
+    name:"TandaTeams", display:"Teams", source:"Tanda", type:"table",
+    desc:"Team structures — names, locations, colours, groups.",
+    columns:[
+      {name:"team_id",type:"int",desc:"Team ID"},
+      {name:"location_id",type:"int",desc:"Location ID"},
+      {name:"name",type:"nvarchar",desc:"Team name"},
+      {name:"colour",type:"nvarchar",desc:"Colour"},
+      {name:"export_name",type:"nvarchar",desc:"Export name"},
+      {name:"team_group",type:"nvarchar",desc:"Group"},
+      {name:"updated_at",type:"datetime",desc:"Updated"},
+      {name:"record_id",type:"int",desc:"Record ID"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"TandaTimesheets", display:"Timesheets", source:"Tanda", type:"table",
+    desc:"Employee timesheets — hours, status, costs.",
+    columns:[
+      {name:"timesheet_id",type:"int",desc:"Timesheet ID"},
+      {name:"user_id",type:"int",desc:"Employee ID"},
+      {name:"start",type:"datetime",desc:"Shift start"},
+      {name:"finish",type:"datetime",desc:"Shift end"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"total_cost",type:"decimal",desc:"Total cost"},
+      {name:"updated_at",type:"datetime",desc:"Updated"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"TandaTimesheetShifts", display:"Timesheet Shifts", source:"Tanda", type:"table",
+    desc:"Timesheet shift details — times, breaks, departments, costs, approval.",
+    columns:[
+      {name:"timesheet_shift_id",type:"int",desc:"Shift ID"},
+      {name:"timesheet_id",type:"int",desc:"Timesheet ID"},
+      {name:"user_id",type:"int",desc:"Employee ID"},
+      {name:"date",type:"datetime",desc:"Shift date"},
+      {name:"start",type:"datetime",desc:"Start time"},
+      {name:"break_start",type:"datetime",desc:"Break start"},
+      {name:"break_finish",type:"datetime",desc:"Break end"},
+      {name:"break_length",type:"int",desc:"Break (mins)"},
+      {name:"finish",type:"datetime",desc:"Finish time"},
+      {name:"department_id",type:"int",desc:"Department ID"},
+      {name:"tag",type:"nvarchar",desc:"Tag"},
+      {name:"tag_id",type:"int",desc:"Tag ID"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"leave_request_id",type:"int",desc:"Leave request ID"},
+      {name:"approved_by",type:"int",desc:"Approved by"},
+      {name:"approved_at",type:"datetime",desc:"Approved at"},
+      {name:"cost",type:"decimal",desc:"Total cost"},
+      {name:"award_cost",type:"decimal",desc:"Award cost"},
+      {name:"allowance_cost",type:"decimal",desc:"Allowance cost"},
+      {name:"last_costed_at",type:"datetime",desc:"Last costed"},
+      {name:"updated_at",type:"datetime",desc:"Updated"},
+      {name:"record_id",type:"int",desc:"Record ID"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"TandaUsers", display:"Users", source:"Tanda", type:"table",
+    desc:"Employees — personal, employment, payroll, access details.",
+    columns:[
+      {name:"user_id",type:"int",desc:"User ID"},
+      {name:"name",type:"nvarchar",desc:"Full name"},
+      {name:"date_of_birth",type:"datetime",desc:"DOB"},
+      {name:"employment_start_date",type:"datetime",desc:"Start date"},
+      {name:"employment_end_date",type:"datetime",desc:"End date"},
+      {name:"employee_id",type:"nvarchar",desc:"Employee ID"},
+      {name:"passcode",type:"nvarchar",desc:"Passcode"},
+      {name:"user_levels",type:"nvarchar",desc:"Access level"},
+      {name:"preferred_hours",type:"decimal",desc:"Preferred hours"},
+      {name:"award_template_id",type:"int",desc:"Award template ID"},
+      {name:"award_template_organisation_id",type:"int",desc:"Award template org ID"},
+      {name:"report_department_id",type:"int",desc:"Report dept ID"},
+      {name:"active",type:"bit",desc:"Active flag"},
+      {name:"payroll_cessation_code",type:"nvarchar",desc:"Cessation code"},
+      {name:"enable_login",type:"bit",desc:"Login enabled"},
+      {name:"can_see_costs",type:"bit",desc:"Can see costs"},
+      {name:"email",type:"nvarchar",desc:"Email"},
+      {name:"photo",type:"nvarchar",desc:"Photo URL"},
+      {name:"phone",type:"nvarchar",desc:"Phone"},
+      {name:"normalised_phone",type:"nvarchar",desc:"Normalised phone"},
+      {name:"time_zone",type:"nvarchar",desc:"Timezone"},
+      {name:"utc_offset",type:"int",desc:"UTC offset"},
+      {name:"created_at",type:"datetime",desc:"Created"},
+      {name:"part_time_fixed_hours",type:"decimal",desc:"PT fixed hours"},
+      {name:"contracted_weekly_hours",type:"decimal",desc:"Contracted hours"},
+      {name:"next_pay_group_id",type:"int",desc:"Next pay group ID"},
+      {name:"last_synced_mobile_app",type:"datetime",desc:"Last mobile sync"},
+      {name:"automatic_break_rule_set_id",type:"int",desc:"Break rule set ID"},
+      {name:"position_title",type:"nvarchar",desc:"Position title"},
+      {name:"position_template",type:"nvarchar",desc:"Position template"},
+      {name:"hourly_rate",type:"decimal",desc:"Hourly rate"},
+      {name:"minimum_base_hours",type:"decimal",desc:"Min base hours"},
+      {name:"salary",type:"decimal",desc:"Salary"},
+      {name:"updated_at",type:"datetime",desc:"Updated"},
+      {name:"record_id",type:"int",desc:"Record ID"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TandaOrganisationId",type:"int",desc:"Tanda org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Last updated"}
+    ]
+  },
+  {
+    name:"Venue_Master", display:"Venue Master", source:"Core", type:"table",
+    desc:"Master venue list — identifiers, location, ownership, categories, franchise status.",
+    columns:[
+      {name:"Id",type:"bigint",desc:"Venue ID"},
+      {name:"RC_Loc_ID",type:"nvarchar",desc:"Location ID"},
+      {name:"RC_Loc_Name",type:"nvarchar",desc:"Location name"},
+      {name:"Store",type:"nvarchar",desc:"Store code"},
+      {name:"Address_State",type:"nvarchar",desc:"State"},
+      {name:"Address_Country",type:"nvarchar",desc:"Country"},
+      {name:"Cat_Cluster",type:"nvarchar",desc:"Cluster"},
+      {name:"Cat_Cluster_Type",type:"nvarchar",desc:"Cluster type"},
+      {name:"Cat_Region",type:"nvarchar",desc:"Region"},
+      {name:"Cat_OwnerType",type:"nvarchar",desc:"Ownership model"},
+      {name:"Franchise",type:"nvarchar",desc:"Franchise flag"},
+      {name:"Date_Open",type:"nvarchar",desc:"Open date"},
+      {name:"Open_Closed",type:"nvarchar",desc:"Status"},
+      {name:"Date_Closed",type:"nvarchar",desc:"Close date"},
+      {name:"Reporting",type:"nvarchar",desc:"Reporting flag"},
+      {name:"[Reporting+YOY]",type:"nvarchar",desc:"YOY reporting flag"},
+      {name:"Xero_Track_Name",type:"nvarchar",desc:"Xero tracking name"},
+      {name:"Name",type:"nvarchar",desc:"Venue name"},
+      {name:"State",type:"nvarchar",desc:"State"},
+      {name:"Area_Leaders",type:"nvarchar",desc:"Area leaders"},
+      {name:"State_Leaders",type:"nvarchar",desc:"State leaders"}
+    ]
+  },
+  {
+    name:"XeroAccountTransactionsMasterView", display:"Account Transactions", source:"Xero", type:"view",
+    desc:"Financial transactions — invoices, payments, amounts, GST/VAT, tracking categories.",
+    columns:[
+      {name:"Date",type:"date",desc:"Transaction date"},
+      {name:"Source",type:"varchar",desc:"Source type"},
+      {name:"[Source Code]",type:"nvarchar",desc:"Source code"},
+      {name:"Account",type:"nvarchar",desc:"Account name"},
+      {name:"[Account Code]",type:"nvarchar",desc:"Account code"},
+      {name:"[Account Type]",type:"nvarchar",desc:"Account classification"},
+      {name:"Contact",type:"nvarchar",desc:"Contact name"},
+      {name:"Description",type:"nvarchar",desc:"Memo"},
+      {name:"[Invoice Number]",type:"nvarchar",desc:"Invoice number"},
+      {name:"[Net Amount]",type:"decimal",desc:"Amount ex-GST"},
+      {name:"[Tax Amount]",type:"decimal",desc:"GST/VAT"},
+      {name:"[Gross Amount]",type:"decimal",desc:"Amount inc-GST"},
+      {name:"TransactionCurrency",type:"nvarchar",desc:"Transaction currency"},
+      {name:"BaseCurrency",type:"nvarchar",desc:"Base currency"},
+      {name:"TrackingCategory1",type:"nvarchar",desc:"TC1 name"},
+      {name:"TrackingCategoryOption1",type:"nvarchar",desc:"TC1 value"},
+      {name:"TrackingCategory2",type:"nvarchar",desc:"TC2 name"},
+      {name:"TrackingCategoryOption2",type:"nvarchar",desc:"TC2 value"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"XeroOrganisationName",type:"nvarchar",desc:"Xero org name"}
+    ]
+  },
+  {
+    name:"XeroBillsView", display:"Xero Bills", source:"Xero", type:"view",
+    desc:"Bills with amounts, payment status, dates, line items, tracking categories.",
+    columns:[
+      {name:"amountcredited",type:"decimal",desc:"Credits applied"},
+      {name:"amountdue",type:"decimal",desc:"Outstanding amount"},
+      {name:"amountpaid",type:"decimal",desc:"Amount paid"},
+      {name:"brandingthemeid",type:"nvarchar",desc:"Branding theme"},
+      {name:"contact_contactid",type:"nvarchar",desc:"Contact ID"},
+      {name:"contact_hasvalidationerrors",type:"int",desc:"Validation errors"},
+      {name:"contact_name",type:"nvarchar",desc:"Contact name"},
+      {name:"creditnotes_total",type:"decimal",desc:"Credit notes total"},
+      {name:"currencycode",type:"nvarchar",desc:"Currency"},
+      {name:"currencyrate",type:"decimal",desc:"FX rate"},
+      {name:"date",type:"datetime",desc:"Issue date"},
+      {name:"dateint",type:"int",desc:"Date integer"},
+      {name:"datestring",type:"nvarchar",desc:"Date string"},
+      {name:"duedate",type:"datetime",desc:"Due date"},
+      {name:"duedateint",type:"int",desc:"Due date integer"},
+      {name:"duedatestring",type:"nvarchar",desc:"Due date string"},
+      {name:"fullypaidondate",type:"datetime",desc:"Fully paid date"},
+      {name:"hasattachments",type:"bit",desc:"Has attachments"},
+      {name:"haserrors",type:"int",desc:"Has errors"},
+      {name:"invoiceid",type:"nvarchar",desc:"Invoice ID"},
+      {name:"invoicenumber",type:"nvarchar",desc:"Invoice number"},
+      {name:"isdiscounted",type:"bit",desc:"Discounted flag"},
+      {name:"TotalDiscount",type:"decimal",desc:"Total discount"},
+      {name:"lineamounttypes",type:"int",desc:"Line amount types"},
+      {name:"payments_amount",type:"decimal",desc:"Payments total"},
+      {name:"reference",type:"nvarchar",desc:"Reference"},
+      {name:"senttocontact",type:"bit",desc:"Sent to contact"},
+      {name:"status",type:"int",desc:"Status"},
+      {name:"subtotal",type:"decimal",desc:"Subtotal"},
+      {name:"total",type:"decimal",desc:"Total"},
+      {name:"totaltax",type:"decimal",desc:"Total tax"},
+      {name:"type",type:"int",desc:"Type"},
+      {name:"invoicetypedescribed",type:"nvarchar",desc:"Type description"},
+      {name:"updateddateutc",type:"datetime",desc:"Updated UTC"},
+      {name:"expectedpaymentdate",type:"datetime",desc:"Expected payment"},
+      {name:"plannedpaymentdate",type:"datetime",desc:"Planned payment"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"XeroOrganisationName",type:"nvarchar",desc:"Org name"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"},
+      {name:"Url",type:"nvarchar",desc:"Bill URL"},
+      {name:"lineamounttype",type:"int",desc:"Line amount type"},
+      {name:"accountcode",type:"nvarchar",desc:"Account code"},
+      {name:"LineItemDate",type:"datetime",desc:"Line item date"},
+      {name:"LineItemDescription",type:"nvarchar",desc:"Line description"},
+      {name:"invoicetype",type:"int",desc:"Invoice type"},
+      {name:"LineItemInvoiceTypeDescribed",type:"nvarchar",desc:"Line type desc"},
+      {name:"invoicestatus",type:"int",desc:"Invoice status"},
+      {name:"itemcode",type:"nvarchar",desc:"Item code"},
+      {name:"LineItemCurrencyCode",type:"nvarchar",desc:"Line currency"},
+      {name:"LineItemCurrencyRate",type:"decimal",desc:"Line FX rate"},
+      {name:"lineamount",type:"decimal",desc:"Line amount"},
+      {name:"lineamountadjusted",type:"decimal",desc:"Adjusted amount"},
+      {name:"hasfxadjustment",type:"bit",desc:"FX adjustment"},
+      {name:"lineitemid",type:"nvarchar",desc:"Line item ID"},
+      {name:"quantity",type:"decimal",desc:"Quantity"},
+      {name:"taxamount",type:"decimal",desc:"Tax amount"},
+      {name:"taxtype",type:"nvarchar",desc:"Tax type"},
+      {name:"unitamount",type:"decimal",desc:"Unit price"},
+      {name:"DiscountAmount",type:"decimal",desc:"Discount"},
+      {name:"LineItemLastUpdatedDateTimeUtc",type:"datetime",desc:"Line updated"},
+      {name:"LineItemAccountId",type:"nvarchar",desc:"Line account ID"},
+      {name:"TrackCategoryItemId",type:"int",desc:"Track category item ID"},
+      {name:"source_id",type:"nvarchar",desc:"Source ID"},
+      {name:"source_type",type:"nvarchar",desc:"Source type"},
+      {name:"tracking_category_id",type:"nvarchar",desc:"Tracking category ID"},
+      {name:"tracking_category_name",type:"nvarchar",desc:"Tracking category name"},
+      {name:"option_name",type:"nvarchar",desc:"Tracking option"},
+      {name:"TrackingCategoriesItems_Id",type:"int",desc:"TC item ID"},
+      {name:"option_id",type:"nvarchar",desc:"Option ID"}
+    ]
+  },
+  {
+    name:"XeroBudgetLineBalances", display:"Budget Line Balances", source:"Xero", type:"table",
+    desc:"Budget line items per account/period — amounts, notes.",
+    columns:[
+      {name:"BudgetID",type:"nvarchar",desc:"Budget ID"},
+      {name:"AccountID",type:"nvarchar",desc:"Account ID"},
+      {name:"AccountCode",type:"nvarchar",desc:"Account code"},
+      {name:"Period",type:"datetime",desc:"Financial period"},
+      {name:"Amount",type:"decimal",desc:"Budgeted amount"},
+      {name:"Notes",type:"nvarchar",desc:"Notes"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"XeroConsolidationAgedPayableDetailReportView", display:"Aged Payables (Detail)", source:"Xero", type:"view",
+    desc:"All AP transactions across entities. SUM(NetAmount) for outstanding balance.",
+    columns:[
+      {name:"XeroOrganisationId",type:"int",desc:"Entity ID"},
+      {name:"XeroOrganisationName",type:"nvarchar",desc:"Entity name"},
+      {name:"ContactName",type:"nvarchar",desc:"Supplier name"},
+      {name:"Date",type:"datetime",desc:"Transaction date"},
+      {name:"InvoiceDate",type:"datetime",desc:"Invoice date"},
+      {name:"DueDate",type:"datetime",desc:"Due date"},
+      {name:"SourceType",type:"varchar",desc:"Fine-grained type"},
+      {name:"SourceCode",type:"varchar",desc:"System source code"},
+      {name:"Source",type:"varchar",desc:"Document category"},
+      {name:"SourceId",type:"nvarchar",desc:"Document GUID"},
+      {name:"InvoiceId",type:"nvarchar",desc:"Invoice GUID"},
+      {name:"InvoiceNumber",type:"nvarchar",desc:"Bill number"},
+      {name:"Reference",type:"nvarchar",desc:"Reference"},
+      {name:"NetAmount",type:"decimal",desc:"Amount (signed)"},
+      {name:"NetAmountConverted",type:"decimal",desc:"Amount in base currency"},
+      {name:"EntityCurrency",type:"nvarchar",desc:"Entity base currency"},
+      {name:"InvoiceCurrency",type:"nvarchar",desc:"Invoice currency"},
+      {name:"InvoiceCurrencyRate",type:"decimal",desc:"FX rate"},
+      {name:"InvoiceUrl",type:"nvarchar",desc:"Xero URL"}
+    ]
+  },
+  {
+    name:"XeroConsolidationAgedReceivableDetailReportView", display:"Aged Receivables (Detail)", source:"Xero", type:"view",
+    desc:"All AR transactions across entities. SUM(NetAmount) for outstanding balance.",
+    columns:[
+      {name:"XeroOrganisationId",type:"int",desc:"Entity ID"},
+      {name:"XeroOrganisationName",type:"nvarchar",desc:"Entity name"},
+      {name:"ContactName",type:"nvarchar",desc:"Customer name"},
+      {name:"Date",type:"datetime",desc:"Transaction date"},
+      {name:"InvoiceDate",type:"datetime",desc:"Invoice date"},
+      {name:"DueDate",type:"datetime",desc:"Due date"},
+      {name:"SourceType",type:"varchar",desc:"Fine-grained type"},
+      {name:"SourceCode",type:"varchar",desc:"System source code"},
+      {name:"Source",type:"varchar",desc:"Document category"},
+      {name:"SourceId",type:"nvarchar",desc:"Document GUID"},
+      {name:"InvoiceId",type:"nvarchar",desc:"Invoice GUID"},
+      {name:"InvoiceNumber",type:"nvarchar",desc:"Invoice number"},
+      {name:"Reference",type:"nvarchar",desc:"Reference"},
+      {name:"NetAmount",type:"decimal",desc:"Amount (signed)"},
+      {name:"NetAmountConverted",type:"decimal",desc:"Amount in base currency"},
+      {name:"EntityCurrency",type:"nvarchar",desc:"Entity base currency"},
+      {name:"InvoiceCurrency",type:"nvarchar",desc:"Invoice currency"},
+      {name:"InvoiceCurrencyRate",type:"decimal",desc:"FX rate"},
+      {name:"InvoiceUrl",type:"nvarchar",desc:"Xero URL"}
+    ]
+  },
+  {
+    name:"XeroConsolidationBalanceSheetGroupReportViewWithFX", display:"Consolidated BS (FX)", source:"Xero", type:"view",
+    desc:"Preferred balance sheet with FX. MANDATORY: GroupId + ReportId. GROUP BY AccountGroupName.",
+    columns:[
+      {name:"RecordType",type:"varchar",desc:"Always BalanceSheet"},
+      {name:"Date",type:"datetime",desc:"Period end date"},
+      {name:"XeroConsolidationGroupId",type:"int",desc:"MANDATORY group ID"},
+      {name:"XeroConsolidationGroupName",type:"nvarchar",desc:"Group name"},
+      {name:"XeroConsolidationReportId",type:"int",desc:"MANDATORY report ID"},
+      {name:"XeroConsolidationReportName",type:"nvarchar",desc:"Report name"},
+      {name:"EntityCurrency",type:"nvarchar",desc:"Entity currency"},
+      {name:"ReportingCurrency",type:"nvarchar",desc:"Reporting currency"},
+      {name:"XeroOrganisationName",type:"nvarchar",desc:"Entity name"},
+      {name:"AccountName",type:"nvarchar",desc:"Account name"},
+      {name:"AccountCode",type:"nvarchar",desc:"Account code"},
+      {name:"AccountType",type:"nvarchar",desc:"BS category"},
+      {name:"AccountGroupName",type:"nvarchar",desc:"Report group (GROUP BY this)"},
+      {name:"ParentAccountGroupName",type:"nvarchar",desc:"Parent group"},
+      {name:"Amount",type:"decimal",desc:"Local currency balance"},
+      {name:"ConsolidatedAmount",type:"decimal",desc:"Consolidated local"},
+      {name:"ConsolidatedAmountConverted",type:"decimal",desc:"Consolidated reporting currency"}
+    ]
+  },
+  {
+    name:"XeroConsolidationBudgetGroupReportViewWithFX", display:"Consolidated Budget (FX)", source:"Xero", type:"view",
+    desc:"Consolidated budget + actual with FX. MANDATORY: GroupId + ReportId. GROUP BY AccountGroupName.",
+    columns:[
+      {name:"RecordType",type:"varchar",desc:"Budget or actual"},
+      {name:"Date",type:"datetime",desc:"Reporting date"},
+      {name:"XeroConsolidationGroupId",type:"int",desc:"MANDATORY group ID"},
+      {name:"XeroConsolidationGroupName",type:"nvarchar",desc:"Group name"},
+      {name:"XeroConsolidationReportId",type:"int",desc:"MANDATORY report ID"},
+      {name:"XeroConsolidationReportName",type:"nvarchar",desc:"Report name"},
+      {name:"EntityCurrency",type:"nvarchar",desc:"Entity currency"},
+      {name:"ReportingCurrency",type:"nvarchar",desc:"Reporting currency"},
+      {name:"ReportingCurrencyRate",type:"decimal",desc:"FX rate"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"XeroOrganisationName",type:"nvarchar",desc:"Entity name"},
+      {name:"BudgetName",type:"nvarchar",desc:"Budget name"},
+      {name:"AccountId",type:"nvarchar",desc:"Account ID"},
+      {name:"AccountName",type:"nvarchar",desc:"Account name"},
+      {name:"AccountCode",type:"nvarchar",desc:"Account code"},
+      {name:"AccountTypeId",type:"nvarchar",desc:"Account type ID"},
+      {name:"AccountOrderNumber",type:"int",desc:"Sort order"},
+      {name:"AccountType",type:"nvarchar",desc:"Account type"},
+      {name:"AccountDebitType",type:"bit",desc:"Debit type"},
+      {name:"TrackingCategoryId",type:"nvarchar",desc:"TC ID"},
+      {name:"TrackingCategoryName",type:"nvarchar",desc:"TC name"},
+      {name:"TrackingCategoryOption",type:"nvarchar",desc:"TC option"},
+      {name:"AccountGroupId",type:"int",desc:"Account group ID"},
+      {name:"AccountGroupName",type:"nvarchar",desc:"Report group (GROUP BY this)"},
+      {name:"ParentAccountGroupId",type:"int",desc:"Parent group ID"},
+      {name:"ParentAccountGroupName",type:"nvarchar",desc:"Parent group name"},
+      {name:"Amount",type:"decimal",desc:"Entity amount"},
+      {name:"CombinedPreElimAmount",type:"decimal",desc:"Pre-elimination"},
+      {name:"AutoEliminationAmount",type:"decimal",desc:"Auto elimination"},
+      {name:"ConsolidationJournalsAmount",type:"int",desc:"Journal amount"},
+      {name:"ConsolidatedAmount",type:"decimal",desc:"Consolidated local"},
+      {name:"AmountConverted",type:"decimal",desc:"Reporting currency amount"},
+      {name:"CombinedPreElimAmountConverted",type:"decimal",desc:"Pre-elim converted"},
+      {name:"AutoEliminationAmountConverted",type:"decimal",desc:"Elimination converted"},
+      {name:"ConsolidationJournalsAmountConverted",type:"int",desc:"Journal converted"},
+      {name:"ConsolidatedAmountConverted",type:"decimal",desc:"Consolidated reporting currency"}
+    ]
+  },
+  {
+    name:"XeroConsolidationGroupAndEntitiesContext", display:"Group & Entity Context", source:"Xero", type:"view",
+    desc:"QUERY FIRST. Groups, entities, currencies, FY ends, sync status.",
+    columns:[
+      {name:"XeroConsolidationGroupId",type:"int",desc:"Group ID for filtering"},
+      {name:"XeroConsolidationGroupName",type:"nvarchar",desc:"Group name"},
+      {name:"xeroorganisationid",type:"int",desc:"Entity ID"},
+      {name:"XeroOrganisationName",type:"nvarchar",desc:"Entity name"},
+      {name:"entitytype",type:"nvarchar",desc:"Entity type"},
+      {name:"ownershipinterestpercentage",type:"decimal",desc:"Ownership %"},
+      {name:"syncstatus",type:"nvarchar",desc:"Sync status"},
+      {name:"lastsynceddatetimeutc",type:"datetime",desc:"Last sync"},
+      {name:"XeroOrganisationCountryCode",type:"nvarchar",desc:"Country code"},
+      {name:"legalname",type:"nvarchar",desc:"Legal name"},
+      {name:"basecurrency",type:"nvarchar",desc:"Base currency"},
+      {name:"XeroFinancialYearEndMonth",type:"bigint",desc:"Entity FY end month"},
+      {name:"GroupFinancialYearEndMonth",type:"nvarchar",desc:"Group FY end month"},
+      {name:"GroupReportingCurrency",type:"nvarchar",desc:"Group reporting currency"}
+    ]
+  },
+  {
+    name:"XeroConsolidationGroups", display:"Consolidation Groups", source:"Xero", type:"table",
+    desc:"Consolidation group definitions.",
+    columns:[
+      {name:"Id",type:"int",desc:"Group ID"},
+      {name:"GroupName",type:"nvarchar",desc:"Group name"},
+      {name:"LastModifierUserId",type:"bigint",desc:"Last modifier"},
+      {name:"LastModificationTime",type:"datetime",desc:"Last modified"},
+      {name:"UpdateMappingStatus",type:"nvarchar",desc:"Mapping status"},
+      {name:"CustomFXRatesEnabled",type:"bit",desc:"Custom FX enabled"},
+      {name:"ManagementReportStatus",type:"nvarchar",desc:"Management report status"},
+      {name:"TransactionsReportStatus",type:"nvarchar",desc:"Transactions report status"}
+    ]
+  },
+  {
+    name:"XeroConsolidationGroupStructure", display:"Group Entity Structure", source:"Xero", type:"table",
+    desc:"Which entities belong to each group — entity type, ownership %.",
+    columns:[
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroConsolidationGroupId",type:"int",desc:"Group ID"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"EntityType",type:"nvarchar",desc:"Entity type (Company)"},
+      {name:"OwnershipInterestPercentage",type:"decimal",desc:"Ownership %"},
+      {name:"LastModifierUserId",type:"bigint",desc:"Last modifier"},
+      {name:"LastModificationTime",type:"datetime",desc:"Last modified"}
+    ]
+  },
+  {
+    name:"XeroConsolidationProfitAndLossGroupReportViewWithFX", display:"Consolidated P&L (FX)", source:"Xero", type:"view",
+    desc:"Preferred P&L with FX. MANDATORY: GroupId + ReportId. GROUP BY AccountGroupName.",
+    columns:[
+      {name:"RecordType",type:"varchar",desc:"ProfitAndLoss or JournalAdjustment"},
+      {name:"Date",type:"datetime",desc:"Period end date"},
+      {name:"XeroConsolidationGroupId",type:"int",desc:"MANDATORY group ID"},
+      {name:"XeroConsolidationReportId",type:"int",desc:"MANDATORY report ID"},
+      {name:"XeroConsolidationReportName",type:"nvarchar",desc:"Report name"},
+      {name:"EntityCurrency",type:"nvarchar",desc:"Entity currency"},
+      {name:"ReportingCurrency",type:"nvarchar",desc:"Reporting currency"},
+      {name:"XeroOrganisationName",type:"nvarchar",desc:"Entity name"},
+      {name:"AccountName",type:"nvarchar",desc:"Account name"},
+      {name:"AccountCode",type:"nvarchar",desc:"Account code"},
+      {name:"AccountType",type:"nvarchar",desc:"Revenue/Expense etc"},
+      {name:"TrackingCategoryName",type:"nvarchar",desc:"TC dimension"},
+      {name:"TrackingCategoryOption",type:"nvarchar",desc:"TC value"},
+      {name:"AccountGroupName",type:"nvarchar",desc:"Report group (GROUP BY this)"},
+      {name:"ParentAccountGroupName",type:"nvarchar",desc:"Parent section"},
+      {name:"Amount",type:"decimal",desc:"Entity amount"},
+      {name:"ConsolidatedAmount",type:"decimal",desc:"After eliminations"},
+      {name:"ConsolidatedAmountConverted",type:"decimal",desc:"Consolidated reporting currency"}
+    ]
+  },
+  {
+    name:"XeroConsolidationReportAccountGroupMapping", display:"Report Account Mapping", source:"Xero", type:"table",
+    desc:"Mappings between report groups and account groups.",
+    columns:[
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroConsolidationGroupId",type:"int",desc:"Group ID"},
+      {name:"AccountGroupId",type:"int",desc:"Account group ID"},
+      {name:"AccountCode",type:"nvarchar",desc:"Account code"},
+      {name:"AccountName",type:"nvarchar",desc:"Account name"},
+      {name:"OrderNumber",type:"int",desc:"Display order"},
+      {name:"LastModifierUserId",type:"bigint",desc:"Last modifier"},
+      {name:"LastModificationTime",type:"datetime",desc:"Last modified"},
+      {name:"AccountType",type:"int",desc:"Account type"},
+      {name:"XeroConsolidationReportId",type:"int",desc:"Report ID"}
+    ]
+  },
+  {
+    name:"XeroConsolidationReports", display:"Report Templates", source:"Xero", type:"table",
+    desc:"Saved consolidation report templates.",
+    columns:[
+      {name:"Id",type:"int",desc:"Report ID"},
+      {name:"ReportName",type:"nvarchar",desc:"Report name"},
+      {name:"LastModifierUserId",type:"bigint",desc:"Last modifier"},
+      {name:"LastModificationTime",type:"datetime2",desc:"Last modified"},
+      {name:"XeroConsolidationMasterReportId",type:"int",desc:"Master report ID"},
+      {name:"ReportType",type:"nvarchar",desc:"ProfitAndLoss/BalanceSheet/CashflowSummary"},
+      {name:"IsDefault",type:"bit",desc:"Default flag"}
+    ]
+  },
+  {
+    name:"XeroConsolidationReportStructure", display:"Report Line Structure", source:"Xero", type:"table",
+    desc:"Report row layout — sections, line items, subtotals, formatting. ORDER BY OrderNumber.",
+    columns:[
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroConsolidationGroupId",type:"int",desc:"Group ID"},
+      {name:"AccountGroupId",type:"int",desc:"Account group ID"},
+      {name:"AccountGroupName",type:"nvarchar",desc:"Row label"},
+      {name:"ParentAccountGroupId",type:"int",desc:"Parent group ID"},
+      {name:"IsMainGroup",type:"bit",desc:"Section header flag"},
+      {name:"IsEmptyRow",type:"bit",desc:"Spacer flag"},
+      {name:"IsTotalColumn",type:"bit",desc:"Total flag"},
+      {name:"IsCalculatedColumn",type:"bit",desc:"Calculated flag"},
+      {name:"FormulaToCalculateTotal",type:"nvarchar",desc:"Formula expression"},
+      {name:"OrderNumber",type:"int",desc:"Sort position"},
+      {name:"LastModifierUserId",type:"bigint",desc:"Last modifier"},
+      {name:"LastModificationTime",type:"datetime",desc:"Last modified"},
+      {name:"IsRowFromMaster",type:"bit",desc:"From master template"},
+      {name:"DepthLevel",type:"int",desc:"Nesting depth"},
+      {name:"XeroConsolidationReportId",type:"int",desc:"Report ID"},
+      {name:"NumberDisplayType",type:"nvarchar",desc:"Percentage or null"},
+      {name:"FontWeight",type:"nvarchar",desc:"Bold or null"},
+      {name:"BackgroundColor",type:"nvarchar",desc:"Row background"},
+      {name:"FontColor",type:"nvarchar",desc:"Text colour"},
+      {name:"BorderBottomWidth",type:"nvarchar",desc:"Bottom border"},
+      {name:"AccountDisplayType",type:"nvarchar",desc:"Sign convention"},
+      {name:"Type",type:"nvarchar",desc:"Special row type"},
+      {name:"AccountTypeIncludes",type:"nvarchar",desc:"Account types to include"},
+      {name:"IsHidden",type:"bit",desc:"Hidden flag"},
+      {name:"AccountGroupOrderType",type:"nvarchar",desc:"Group ordering"},
+      {name:"AccountOrderType",type:"nvarchar",desc:"Account ordering"}
+    ]
+  },
+  {
+    name:"XeroConsolidationTrialBalanceGroupReportViewWithFX", display:"Consolidated TB (FX)", source:"Xero", type:"view",
+    desc:"Preferred trial balance with FX. MANDATORY: XeroConsolidationGroupId. GROUP BY AccountGroupName.",
+    columns:[
+      {name:"RecordType",type:"varchar",desc:"Always TrialBalance"},
+      {name:"Date",type:"datetime",desc:"Period end date"},
+      {name:"XeroConsolidationGroupId",type:"int",desc:"MANDATORY group ID"},
+      {name:"XeroConsolidationGroupName",type:"nvarchar",desc:"Group name"},
+      {name:"EntityCurrency",type:"nvarchar",desc:"Entity currency"},
+      {name:"ReportingCurrency",type:"nvarchar",desc:"Reporting currency"},
+      {name:"ReportingCurrencyRate",type:"decimal",desc:"FX rate"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"XeroOrganisationName",type:"nvarchar",desc:"Entity name"},
+      {name:"AccountId",type:"nvarchar",desc:"Account GUID"},
+      {name:"AccountName",type:"nvarchar",desc:"Account name"},
+      {name:"AccountCode",type:"nvarchar",desc:"Account code"},
+      {name:"AccountTypeId",type:"nvarchar",desc:"Account type ID"},
+      {name:"AccountType",type:"nvarchar",desc:"Account type"},
+      {name:"Amount",type:"decimal",desc:"Period movement"},
+      {name:"YTDDebit",type:"decimal",desc:"YTD debit"},
+      {name:"YTDCredit",type:"decimal",desc:"YTD credit"},
+      {name:"YTDAmount",type:"decimal",desc:"YTD net"},
+      {name:"CombinedPreElimAmount",type:"decimal",desc:"Pre-elimination"},
+      {name:"AutoEliminationAmount",type:"decimal",desc:"Elimination"},
+      {name:"ConsolidationJournalsAmount",type:"decimal",desc:"Journal adjustment"},
+      {name:"ConsolidatedAmount",type:"decimal",desc:"Consolidated local"},
+      {name:"AmountConverted",type:"decimal",desc:"Reporting currency movement"},
+      {name:"YTDDebitConverted",type:"decimal",desc:"YTD debit converted"},
+      {name:"YTDCreditConverted",type:"decimal",desc:"YTD credit converted"},
+      {name:"YTDAmountConverted",type:"decimal",desc:"YTD net converted"},
+      {name:"CombinedPreElimAmountConverted",type:"decimal",desc:"Pre-elim converted"},
+      {name:"AutoEliminationAmountConverted",type:"decimal",desc:"Elimination converted"},
+      {name:"ConsolidationJournalsAmountConverted",type:"decimal",desc:"Journal converted"},
+      {name:"ConsolidatedAmountConverted",type:"decimal",desc:"Consolidated reporting currency"}
+    ]
+  },
+  {
+    name:"XeroContacts", display:"Xero Contacts", source:"Xero", type:"table",
+    desc:"Customers and suppliers — names, addresses, phone, payment terms, status.",
+    columns:[
+      {name:"accountspayabletaxtype",type:"nvarchar",desc:"Default AP tax type"},
+      {name:"accountsreceivabletaxtype",type:"nvarchar",desc:"Default AR tax type"},
+      {name:"addresses_addressline1",type:"nvarchar",desc:"Address line 1"},
+      {name:"addresses_addressline2",type:"nvarchar",desc:"Address line 2"},
+      {name:"addresses_addressline3",type:"nvarchar",desc:"Address line 3"},
+      {name:"addresses_addressline4",type:"nvarchar",desc:"Address line 4"},
+      {name:"addresses_addresstype",type:"nvarchar",desc:"Address type"},
+      {name:"addresses_attentionto",type:"nvarchar",desc:"Attention to"},
+      {name:"addresses_city",type:"nvarchar",desc:"City"},
+      {name:"addresses_country",type:"nvarchar",desc:"Country"},
+      {name:"addresses_postalcode",type:"nvarchar",desc:"Postcode"},
+      {name:"addresses_region",type:"nvarchar",desc:"Region"},
+      {name:"bankaccountdetails",type:"nvarchar",desc:"Bank details"},
+      {name:"contactid",type:"nvarchar",desc:"Contact GUID"},
+      {name:"MergedToContactID",type:"nvarchar",desc:"Merged to contact"},
+      {name:"contactstatus",type:"nvarchar",desc:"Status (ACTIVE/ARCHIVED)"},
+      {name:"defaultcurrency",type:"nvarchar",desc:"Default currency"},
+      {name:"emailaddress",type:"nvarchar",desc:"Email"},
+      {name:"firstname",type:"nvarchar",desc:"First name"},
+      {name:"hasattachments",type:"bit",desc:"Has attachments"},
+      {name:"hasvalidationerrors",type:"bit",desc:"Has errors"},
+      {name:"iscustomer",type:"bit",desc:"Is customer"},
+      {name:"issupplier",type:"bit",desc:"Is supplier"},
+      {name:"lastname",type:"nvarchar",desc:"Last name"},
+      {name:"name",type:"nvarchar",desc:"Display name"},
+      {name:"phones_phoneareacode",type:"nvarchar",desc:"Phone area code"},
+      {name:"phones_phonecountrycode",type:"nvarchar",desc:"Phone country code"},
+      {name:"phones_phonenumber",type:"nvarchar",desc:"Phone number"},
+      {name:"phones_phonetype",type:"nvarchar",desc:"Phone type"},
+      {name:"skypeusername",type:"nvarchar",desc:"Skype"},
+      {name:"taxnumber",type:"nvarchar",desc:"ABN/VAT number"},
+      {name:"updateddateutc",type:"datetime",desc:"Updated"},
+      {name:"paymenttermsbillsdays",type:"int",desc:"Bill payment days"},
+      {name:"paymenttermsbillsterms",type:"nvarchar",desc:"Bill terms type"},
+      {name:"paymenttermssalesdays",type:"int",desc:"Sales payment days"},
+      {name:"paymenttermssalesterms",type:"nvarchar",desc:"Sales terms type"},
+      {name:"BankAccountNumber",type:"nvarchar",desc:"Bank account number"},
+      {name:"BankAccountName",type:"nvarchar",desc:"Bank account name"},
+      {name:"account_number",type:"nvarchar",desc:"Account number"},
+      {name:"contact_number",type:"nvarchar",desc:"Contact number"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"XeroContactsAuditHistory", display:"Contacts Audit History", source:"Xero", type:"table",
+    desc:"dataSights-exclusive audit trail of contact changes. Same columns as XeroContacts.",
+    columns:[
+      {name:"accountspayabletaxtype",type:"nvarchar",desc:"Default AP tax type"},
+      {name:"accountsreceivabletaxtype",type:"nvarchar",desc:"Default AR tax type"},
+      {name:"addresses_addressline1",type:"nvarchar",desc:"Address line 1"},
+      {name:"addresses_addressline2",type:"nvarchar",desc:"Address line 2"},
+      {name:"addresses_addressline3",type:"nvarchar",desc:"Address line 3"},
+      {name:"addresses_addressline4",type:"nvarchar",desc:"Address line 4"},
+      {name:"addresses_addresstype",type:"nvarchar",desc:"Address type"},
+      {name:"addresses_attentionto",type:"nvarchar",desc:"Attention to"},
+      {name:"addresses_city",type:"nvarchar",desc:"City"},
+      {name:"addresses_country",type:"nvarchar",desc:"Country"},
+      {name:"addresses_postalcode",type:"nvarchar",desc:"Postcode"},
+      {name:"addresses_region",type:"nvarchar",desc:"Region"},
+      {name:"bankaccountdetails",type:"nvarchar",desc:"Bank details"},
+      {name:"contactid",type:"nvarchar",desc:"Contact GUID"},
+      {name:"MergedToContactID",type:"nvarchar",desc:"Merged to contact"},
+      {name:"contactstatus",type:"nvarchar",desc:"Status"},
+      {name:"defaultcurrency",type:"nvarchar",desc:"Default currency"},
+      {name:"emailaddress",type:"nvarchar",desc:"Email"},
+      {name:"firstname",type:"nvarchar",desc:"First name"},
+      {name:"hasattachments",type:"bit",desc:"Has attachments"},
+      {name:"hasvalidationerrors",type:"bit",desc:"Has errors"},
+      {name:"iscustomer",type:"bit",desc:"Is customer"},
+      {name:"issupplier",type:"bit",desc:"Is supplier"},
+      {name:"lastname",type:"nvarchar",desc:"Last name"},
+      {name:"name",type:"nvarchar",desc:"Display name"},
+      {name:"phones_phoneareacode",type:"nvarchar",desc:"Phone area code"},
+      {name:"phones_phonecountrycode",type:"nvarchar",desc:"Phone country code"},
+      {name:"phones_phonenumber",type:"nvarchar",desc:"Phone number"},
+      {name:"phones_phonetype",type:"nvarchar",desc:"Phone type"},
+      {name:"skypeusername",type:"nvarchar",desc:"Skype"},
+      {name:"taxnumber",type:"nvarchar",desc:"ABN/VAT"},
+      {name:"updateddateutc",type:"datetime",desc:"Updated"},
+      {name:"paymenttermsbillsdays",type:"int",desc:"Bill payment days"},
+      {name:"paymenttermsbillsterms",type:"nvarchar",desc:"Bill terms"},
+      {name:"paymenttermssalesdays",type:"int",desc:"Sales payment days"},
+      {name:"paymenttermssalesterms",type:"nvarchar",desc:"Sales terms"},
+      {name:"BankAccountNumber",type:"nvarchar",desc:"Bank account number"},
+      {name:"BankAccountName",type:"nvarchar",desc:"Bank account name"},
+      {name:"account_number",type:"nvarchar",desc:"Account number"},
+      {name:"contact_number",type:"nvarchar",desc:"Contact number"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  },
+  {
+    name:"XeroInvoicesView", display:"Xero Invoices (View)", source:"Xero", type:"view",
+    desc:"Invoice data with line items, amounts, payment status, tax, tracking.",
+    columns:[
+      {name:"amountcredited",type:"decimal",desc:"Credits applied"},
+      {name:"amountdue",type:"decimal",desc:"Outstanding"},
+      {name:"amountpaid",type:"decimal",desc:"Paid"},
+      {name:"brandingthemeid",type:"nvarchar",desc:"Theme ID"},
+      {name:"contact_contactid",type:"nvarchar",desc:"Contact ID"},
+      {name:"contact_hasvalidationerrors",type:"int",desc:"Validation errors"},
+      {name:"contact_name",type:"nvarchar",desc:"Contact name"},
+      {name:"creditnotes_total",type:"decimal",desc:"CN total"},
+      {name:"currencycode",type:"nvarchar",desc:"Currency"},
+      {name:"currencyrate",type:"decimal",desc:"FX rate"},
+      {name:"date",type:"datetime",desc:"Issue date"},
+      {name:"dateint",type:"int",desc:"Date int"},
+      {name:"datestring",type:"nvarchar",desc:"Date string"},
+      {name:"duedate",type:"datetime",desc:"Due date"},
+      {name:"duedateint",type:"int",desc:"Due date int"},
+      {name:"duedatestring",type:"nvarchar",desc:"Due date string"},
+      {name:"fullypaidondate",type:"datetime",desc:"Paid date"},
+      {name:"hasattachments",type:"bit",desc:"Attachments"},
+      {name:"haserrors",type:"int",desc:"Errors"},
+      {name:"invoiceid",type:"nvarchar",desc:"Invoice ID"},
+      {name:"invoicenumber",type:"nvarchar",desc:"Invoice number"},
+      {name:"isdiscounted",type:"bit",desc:"Discounted"},
+      {name:"TotalDiscount",type:"decimal",desc:"Total discount"},
+      {name:"lineamounttypes",type:"int",desc:"Line amount types"},
+      {name:"payments_amount",type:"decimal",desc:"Payments"},
+      {name:"reference",type:"nvarchar",desc:"Reference"},
+      {name:"senttocontact",type:"bit",desc:"Sent"},
+      {name:"status",type:"int",desc:"Status"},
+      {name:"subtotal",type:"decimal",desc:"Subtotal"},
+      {name:"total",type:"decimal",desc:"Total"},
+      {name:"totaltax",type:"decimal",desc:"Total tax"},
+      {name:"type",type:"int",desc:"Type"},
+      {name:"invoicetypedescribed",type:"nvarchar",desc:"Type desc"},
+      {name:"updateddateutc",type:"datetime",desc:"Updated"},
+      {name:"expectedpaymentdate",type:"datetime",desc:"Expected payment"},
+      {name:"plannedpaymentdate",type:"datetime",desc:"Planned payment"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"XeroOrganisationName",type:"nvarchar",desc:"Org name"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"},
+      {name:"Url",type:"nvarchar",desc:"Invoice URL"},
+      {name:"lineamounttype",type:"int",desc:"Line amount type"},
+      {name:"accountcode",type:"nvarchar",desc:"Account code"},
+      {name:"LineItemDate",type:"datetime",desc:"Line date"},
+      {name:"LineItemDescription",type:"nvarchar",desc:"Line desc"},
+      {name:"invoicetype",type:"int",desc:"Invoice type"},
+      {name:"LineItemInvoiceTypeDescribed",type:"nvarchar",desc:"Line type desc"},
+      {name:"invoicestatus",type:"int",desc:"Invoice status"},
+      {name:"itemcode",type:"nvarchar",desc:"Item code"},
+      {name:"LineItemCurrencyCode",type:"nvarchar",desc:"Line currency"},
+      {name:"LineItemCurrencyRate",type:"decimal",desc:"Line FX rate"},
+      {name:"lineamount",type:"decimal",desc:"Line amount"},
+      {name:"lineamountadjusted",type:"decimal",desc:"Adjusted"},
+      {name:"hasfxadjustment",type:"bit",desc:"FX adjustment"},
+      {name:"lineitemid",type:"nvarchar",desc:"Line item ID"},
+      {name:"quantity",type:"decimal",desc:"Quantity"},
+      {name:"taxamount",type:"decimal",desc:"Tax amount"},
+      {name:"taxtype",type:"nvarchar",desc:"Tax type"},
+      {name:"unitamount",type:"decimal",desc:"Unit price"},
+      {name:"DiscountAmount",type:"decimal",desc:"Discount"},
+      {name:"LineItemLastUpdatedDateTimeUtc",type:"datetime",desc:"Line updated"},
+      {name:"LineItemAccountId",type:"nvarchar",desc:"Line account ID"},
+      {name:"TrackCategoryItemId",type:"int",desc:"TC item ID"},
+      {name:"source_id",type:"nvarchar",desc:"Source ID"},
+      {name:"source_type",type:"nvarchar",desc:"Source type"},
+      {name:"tracking_category_id",type:"nvarchar",desc:"TC ID"},
+      {name:"tracking_category_name",type:"nvarchar",desc:"TC name"},
+      {name:"option_name",type:"nvarchar",desc:"TC option"},
+      {name:"TrackingCategoriesItems_Id",type:"int",desc:"TCI ID"},
+      {name:"option_id",type:"nvarchar",desc:"Option ID"}
+    ]
+  },
+  {
+    name:"XeroMappingLookup", display:"Mapping Lookup", source:"Xero", type:"table",
+    desc:"Enum lookup — maps numeric codes to display values.",
+    columns:[
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"TableName",type:"nvarchar",desc:"Target table"},
+      {name:"FieldName",type:"nvarchar",desc:"Field being mapped"},
+      {name:"Number",type:"int",desc:"Numeric code"},
+      {name:"Value",type:"nvarchar",desc:"Display value"}
+    ]
+  },
+  {
+    name:"XeroPurchaseOrdersView", display:"Purchase Orders", source:"Xero", type:"view",
+    desc:"Purchase orders with supplier, dates, line items, amounts, tracking.",
+    columns:[
+      {name:"contact_contactid",type:"nvarchar",desc:"Supplier contact ID"},
+      {name:"contact_name",type:"nvarchar",desc:"Supplier name"},
+      {name:"updateddateutc",type:"datetime",desc:"Updated"},
+      {name:"purchaseorderdate",type:"datetime",desc:"PO date"},
+      {name:"deliverydate",type:"datetime",desc:"Delivery date"},
+      {name:"lineamounttypes",type:"int",desc:"Line amount types"},
+      {name:"purchaseordernumber",type:"nvarchar",desc:"PO number"},
+      {name:"reference",type:"nvarchar",desc:"Reference"},
+      {name:"currencycode",type:"nvarchar",desc:"Currency"},
+      {name:"currencyrate",type:"decimal",desc:"FX rate"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"deliveryaddress",type:"nvarchar",desc:"Delivery address"},
+      {name:"attentionto",type:"nvarchar",desc:"Attention to"},
+      {name:"telephone",type:"nvarchar",desc:"Phone"},
+      {name:"deliveryinstructions",type:"nvarchar",desc:"Delivery instructions"},
+      {name:"expectedarrivaldate",type:"datetime",desc:"Expected arrival"},
+      {name:"purchaseorderid",type:"nvarchar",desc:"PO ID"},
+      {name:"subtotal",type:"decimal",desc:"Subtotal"},
+      {name:"total",type:"decimal",desc:"Total"},
+      {name:"totaltax",type:"decimal",desc:"Total tax"},
+      {name:"totaldiscount",type:"decimal",desc:"Total discount"},
+      {name:"PurchaseOrders_Id",type:"int",desc:"PO row ID"},
+      {name:"PurchaseOrders_XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"PurchaseOrders_XeroOrganisationName",type:"nvarchar",desc:"Org name"},
+      {name:"PurchaseOrders_LastUpdatedDateTimeUtc",type:"datetime",desc:"PO updated"},
+      {name:"LineItems_purchaseorderid",type:"nvarchar",desc:"Line PO ID"},
+      {name:"lineamounttype",type:"int",desc:"Line amount type"},
+      {name:"accountcode",type:"nvarchar",desc:"Account code"},
+      {name:"lineitemdate",type:"datetime",desc:"Line date"},
+      {name:"description",type:"nvarchar",desc:"Line description"},
+      {name:"LineItems_currencycode",type:"nvarchar",desc:"Line currency"},
+      {name:"LineItems_currencyrate",type:"decimal",desc:"Line FX rate"},
+      {name:"lineamount",type:"decimal",desc:"Line amount"},
+      {name:"lineamountadjusted",type:"decimal",desc:"Adjusted amount"},
+      {name:"hasfxadjustment",type:"bit",desc:"FX adjustment"},
+      {name:"lineitemid",type:"nvarchar",desc:"Line item ID"},
+      {name:"quantity",type:"decimal",desc:"Quantity"},
+      {name:"taxamount",type:"decimal",desc:"Tax amount"},
+      {name:"taxtype",type:"nvarchar",desc:"Tax type"},
+      {name:"tracking_name",type:"nvarchar",desc:"Tracking name"},
+      {name:"tracking_option",type:"nvarchar",desc:"Tracking option"},
+      {name:"tracking_trackingcategoryid",type:"nvarchar",desc:"Tracking ID"},
+      {name:"unitamount",type:"decimal",desc:"Unit price"},
+      {name:"DiscountAmount",type:"decimal",desc:"Discount"},
+      {name:"accountcodeandorganisationid",type:"nvarchar",desc:"Composite key"},
+      {name:"LineItems_XeroOrganisationId",type:"int",desc:"Line org ID"},
+      {name:"LineItems_LastUpdatedDateTimeUtc",type:"datetime",desc:"Line updated"},
+      {name:"accountId",type:"nvarchar",desc:"Account ID"},
+      {name:"source_id",type:"nvarchar",desc:"Source ID"},
+      {name:"source_type",type:"nvarchar",desc:"Source type"},
+      {name:"tracking_category_id",type:"nvarchar",desc:"TC ID"},
+      {name:"tracking_category_name",type:"nvarchar",desc:"TC name"},
+      {name:"option_name",type:"nvarchar",desc:"TC option"},
+      {name:"TrackingCategoriesItems_Id",type:"int",desc:"TCI ID"},
+      {name:"TrackingCategoriesItems_XeroOrganisationId",type:"int",desc:"TCI org ID"},
+      {name:"TrackingCategoriesItems_LastUpdatedDateTimeUtc",type:"datetime",desc:"TCI updated"},
+      {name:"option_id",type:"nvarchar",desc:"Option ID"}
+    ]
+  },
+  {
+    name:"XeroTaxRates", display:"Tax Rates", source:"Xero", type:"table",
+    desc:"GST/VAT tax rates per Xero organisation.",
+    columns:[
+      {name:"name",type:"nvarchar",desc:"Tax rate name"},
+      {name:"taxtype",type:"nvarchar",desc:"Tax type code"},
+      {name:"reporttaxtype",type:"nvarchar",desc:"Reporting category"},
+      {name:"canapplytoassets",type:"bit",desc:"Applies to assets"},
+      {name:"canapplytoequity",type:"bit",desc:"Applies to equity"},
+      {name:"canapplytoexpenses",type:"bit",desc:"Applies to expenses"},
+      {name:"canapplytoliabilities",type:"bit",desc:"Applies to liabilities"},
+      {name:"CanApplyToRevenue",type:"bit",desc:"Applies to revenue"},
+      {name:"displaytaxrate",type:"decimal",desc:"Display rate"},
+      {name:"effectiverate",type:"decimal",desc:"Effective rate %"},
+      {name:"status",type:"nvarchar",desc:"Status"},
+      {name:"taxcomponent_name",type:"nvarchar",desc:"Component name"},
+      {name:"taxcomponent_rate",type:"decimal",desc:"Component rate"},
+      {name:"taxcomponent_iscompound",type:"bit",desc:"Compound flag"},
+      {name:"taxcomponent_isnonrecoverable",type:"bit",desc:"Non-recoverable flag"},
+      {name:"Id",type:"int",desc:"Row ID"},
+      {name:"XeroOrganisationId",type:"int",desc:"Xero org ID"},
+      {name:"LastUpdatedDateTimeUtc",type:"datetime",desc:"Sync timestamp"}
+    ]
+  }
+];
+
+const SOURCES = [...new Set(TABLES.map(t=>t.source))].sort();
+let activeSource = null;
+let activeTable = null;
+
+function getSourceBadgeClass(s) {
+  const map = {Xero:'badge-xero',Redcat:'badge-redcat',Tanda:'badge-tanda',Stripe:'badge-stripe',ReviewTrackers:'badge-review',OpCentral:'badge-opcentral',MaintainX:'badge-maintainx'};
+  return map[s]||'badge-other';
+}
+
+function renderSourceFilter() {
+  const el = document.getElementById('sourceFilter');
+  el.innerHTML = `<button class="source-btn ${!activeSource?'active':''}" onclick="filterSource(null)">All (${TABLES.length})</button>` +
+    SOURCES.map(s => {
+      const count = TABLES.filter(t=>t.source===s).length;
+      return `<button class="source-btn ${activeSource===s?'active':''}" onclick="filterSource('${s}')">${s} (${count})</button>`;
+    }).join('');
+}
+
+function filterSource(s) {
+  activeSource = s;
+  renderSourceFilter();
+  renderTableList();
+}
+
+function renderTableList(filter='') {
+  const el = document.getElementById('tableList');
+  const search = filter || document.getElementById('searchBox').value.toLowerCase();
+  let tables = TABLES;
+  if (activeSource) tables = tables.filter(t=>t.source===activeSource);
+  if (search) {
+    tables = tables.filter(t =>
+      t.name.toLowerCase().includes(search) ||
+      t.display.toLowerCase().includes(search) ||
+      t.desc.toLowerCase().includes(search) ||
+      t.source.toLowerCase().includes(search) ||
+      t.columns.some(c => c.name.toLowerCase().includes(search) || c.desc.toLowerCase().includes(search))
+    );
+  }
+  el.innerHTML = tables.map(t => `
+    <div class="table-item ${activeTable===t.name?'active':''}" onclick="selectTable('${t.name}')">
+      <div class="table-name">${t.display}</div>
+      <div class="table-source"><span class="badge ${getSourceBadgeClass(t.source)}">${t.source}</span> ${t.name}</div>
+    </div>
+  `).join('');
+}
+
+function selectTable(name) {
+  activeTable = name;
+  const t = TABLES.find(x=>x.name===name);
+  document.getElementById('topbar').style.display='flex';
+  document.getElementById('viewName').textContent = t.display;
+  document.getElementById('viewType').textContent = t.type.toUpperCase();
+  document.getElementById('emptyState').style.display='none';
+
+  const panel = document.getElementById('schemaPanel');
+  let html = `<div class="description-box">${t.desc}</div>`;
+
+  if (t.columns.length > 0) {
+    html += `<table class="columns-table">
+      <thead><tr><th>Column</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>${t.columns.map(c => `
+        <tr>
+          <td class="col-name col-click" onclick="insertColumn('${c.name}')" title="Click to insert into query">${c.name}</td>
+          <td class="col-type">${c.type}</td>
+          <td class="col-desc">${c.desc}</td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  } else {
+    html += `<div style="padding:20px;color:var(--text2);font-size:13px;">
+      Column schema not loaded — run <code style="background:var(--surface2);padding:2px 6px;border-radius:3px;">describe_view('${t.name}')</code> in Claude to fetch full schema.
+      <br><br>Quick query: <button class="sample-query" onclick="setQuery('SELECT TOP 10 * FROM ${t.name}')" style="margin-top:8px;">SELECT TOP 10 * FROM ${t.name}</button>
+    </div>`;
+  }
+  panel.innerHTML = html;
+  renderTableList();
+}
+
+function insertColumn(col) {
+  const editor = document.getElementById('queryEditor');
+  const pos = editor.selectionStart;
+  const text = editor.value;
+  const insert = col.startsWith('[') ? col : col;
+  editor.value = text.slice(0,pos) + insert + text.slice(pos);
+  editor.focus();
+  editor.selectionStart = editor.selectionEnd = pos + insert.length;
+  showToast('Inserted: ' + col);
+}
+
+function setQuery(sql) {
+  document.getElementById('queryEditor').value = sql;
+  document.getElementById('queryEditor').focus();
+}
+
+function copyQuery() {
+  const sql = document.getElementById('queryEditor').value.trim();
+  if (!sql) return;
+  navigator.clipboard.writeText(sql);
+  showToast('Query copied to clipboard!');
+}
+
+function clearQuery() {
+  document.getElementById('queryEditor').value = '';
+  document.getElementById('resultsPanel').innerHTML = '';
+  document.getElementById('queryEditor').focus();
+}
+
+function formatQuery() {
+  const editor = document.getElementById('queryEditor');
+  let sql = editor.value.trim();
+  const keywords = ['SELECT','FROM','WHERE','AND','OR','GROUP BY','ORDER BY','HAVING','JOIN','INNER JOIN','LEFT JOIN','RIGHT JOIN','ON','UNION','INSERT','UPDATE','DELETE','SET','VALUES','INTO','TOP','DISTINCT','AS','IN','NOT','NULL','IS','BETWEEN','LIKE','EXISTS','CASE','WHEN','THEN','ELSE','END','SUM','COUNT','AVG','MIN','MAX','COALESCE','CAST','CONVERT','DATEADD','DATEDIFF','EOMONTH','GETDATE','DATEFROMPARTS'];
+  keywords.forEach(kw => {
+    const regex = new RegExp('\\b' + kw.replace(/ /g,'\\s+') + '\\b','gi');
+    sql = sql.replace(regex, kw);
+  });
+  sql = sql.replace(/\s*(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|INNER JOIN|LEFT JOIN|RIGHT JOIN|JOIN|UNION)\s*/gi, (m,kw) => '\n' + kw.toUpperCase() + ' ');
+  sql = sql.replace(/\s*(AND|OR)\s*/gi, (m,kw) => '\n  ' + kw.toUpperCase() + ' ');
+  editor.value = sql.trim();
+}
+
+function toggleQuery() {
+  document.getElementById('queryPanel').classList.toggle('collapsed');
+  const icon = document.getElementById('toggleIcon');
+  icon.textContent = icon.textContent === '▼' ? '▲' : '▼';
+}
+
+function showToast(msg) {
+  const el = document.getElementById('copyToast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1500);
+}
+
+document.getElementById('searchBox').addEventListener('input', () => renderTableList());
+
+document.getElementById('queryEditor').addEventListener('keydown', e => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = e.target.selectionStart;
+    e.target.value = e.target.value.slice(0,start) + '  ' + e.target.value.slice(start);
+    e.target.selectionStart = e.target.selectionEnd = start + 2;
+  }
+});
+
+renderSourceFilter();
+renderTableList();
+</script>
+</body>
+</html>

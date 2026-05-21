@@ -213,13 +213,12 @@
             </div>
 
             <div id="weather_view" class="tab-content">
-                <h3>State-Based Weather, Public Holidays &amp; School Holidays</h3>
+                <h3>State-Based Weather &amp; Public Holidays</h3>
                 <p style="color:#666;margin-bottom:10px;font-size:13px;">
-                    Weather (temp, rainfall, wind) from <strong>Open-Meteo Archive API</strong> using a representative capital city per state.
-                    Future dates beyond today are filled with <strong>seasonal climatology</strong>.
-                    Public holidays from the <strong>holidays</strong> Python package — state-aware.
-                    School holidays from official state Department of Education calendars (2024-2028) split into autumn/winter/spring/summer.
-                    All three are fed into Prophet so it learns separate coefficients for each.
+                    Weather (daily max temperature) from <strong>Open-Meteo Archive API</strong> using a representative capital city per state.
+                    Future dates beyond today are filled with <strong>seasonal climatology</strong> (multi-year average for the same day-of-year).
+                    Public holidays from the <strong>holidays</strong> Python package — fully state-aware (VIC, NSW, QLD, etc.).
+                    Both are fed into Prophet as regressors / holiday calendar.
                 </p>
                 <div style="margin-bottom:12px;">
                     <button onclick="prefetchDataSources()">🌦️ Pre-fetch Weather &amp; Holidays For All States</button>
@@ -232,10 +231,6 @@
 
                 <h3 style="margin-top:18px;">Public Holidays by State</h3>
                 <div class="scroll-x"><table id="holidayTable"></table></div>
-
-                <h3 style="margin-top:18px;">🎒 School Holidays by State (2024-2028)</h3>
-                <p style="color:#666;font-size:12px;margin-bottom:8px;">Total school-holiday DAYS per state, plus first and last published periods (start → end).</p>
-                <div class="scroll-x"><table id="schoolHolidayTable"></table></div>
 
                 <h3 style="margin-top:18px;">State → City Mapping (Weather Anchor)</h3>
                 <div class="scroll-x"><table id="stateCityTable"></table></div>
@@ -305,7 +300,7 @@
             <div id="sdStatus" class="status"></div>
 
             <!-- Filter bar -->
-            <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:10px;margin-bottom:18px;align-items:end;">
+            <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:18px;align-items:end;">
                 <div>
                     <label style="font-size:12px;color:#666;">Sales Type</label>
                     <select id="sdSalesType" onchange="loadSalesDetail()">
@@ -343,62 +338,8 @@
                     </select>
                 </div>
                 <div>
-                    <label style="font-size:12px;color:#666;" title="Apply impact %s from Venue Details when a new venue opens nearby (cannibalisation). Fall-back: switch OFF to compare.">Cannibalisation</label>
-                    <select id="sdCannibalisation" onchange="loadSalesDetail()">
-                        <option value="on">ON (apply impacts)</option>
-                        <option value="off">OFF (ignore)</option>
-                    </select>
-                </div>
-                <div>
-                    <label style="font-size:12px;color:#666;" title="Softens Prophet's extreme predictions toward recent FY26 baseline. β=0.7 means 70% Prophet, 30% baseline (moderate). β=1 means no softening.">Soften Prophet</label>
-                    <select id="sdSoftening" onchange="ulSyncSoftening()">
-                        <option value="0.5">Heavy (β=0.5)</option>
-                        <option value="0.7" selected>Moderate (β=0.7)</option>
-                        <option value="0.85">Light (β=0.85)</option>
-                        <option value="1.0">OFF (raw Prophet)</option>
-                    </select>
-                </div>
-                <div>
                     <button onclick="loadSalesDetail()" style="width:100%;">🔄 Refresh</button>
                 </div>
-            </div>
-
-            <!-- UNIVERSAL LFL TARGET -->
-            <div style="background:#f5f7ff;border-left:4px solid #43a047;border-radius:6px;padding:14px 18px;margin-bottom:14px;">
-                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-                    <h3 style="margin:0;color:#43a047;font-size:15px;">🎯 Universal LFL Target — distributes a network-wide LFL growth target across months</h3>
-                    <div style="display:flex;gap:10px;align-items:center;font-size:12px;">
-                        <label><input type="checkbox" id="ulEnabled" onchange="ulSyncAndRefresh()"> Enable</label>
-                        <label>Target LFL %: <input type="number" id="ulTargetPct" value="3" step="0.5" style="width:65px;padding:4px;border:1px solid #ccc;border-radius:4px;"></label>
-                        <button onclick="ulSyncAndRefresh()" style="padding:6px 14px;font-size:12px;">💾 Apply</button>
-                    </div>
-                </div>
-                <p style="color:#555;font-size:12px;margin-top:6px;margin-bottom:8px;">
-                    Only applies to <strong>LFL venues (FY26 Existing cohort)</strong> without a per-venue scenario.
-                    Each month's % is the share of the growth gap delivered in that month. Auto-normalised to sum to 100%.
-                </p>
-                <div style="display:grid;grid-template-columns:repeat(13,1fr);gap:4px;align-items:end;font-size:11px;">
-                    <div style="font-weight:600;color:#555;text-align:right;padding-right:6px;">Month weight %</div>
-                    <div style="text-align:center;"><label>Jul</label><input type="number" class="ul-wt" data-m="0" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>Aug</label><input type="number" class="ul-wt" data-m="1" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>Sep</label><input type="number" class="ul-wt" data-m="2" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>Oct</label><input type="number" class="ul-wt" data-m="3" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>Nov</label><input type="number" class="ul-wt" data-m="4" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>Dec</label><input type="number" class="ul-wt" data-m="5" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>Jan</label><input type="number" class="ul-wt" data-m="6" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>Feb</label><input type="number" class="ul-wt" data-m="7" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>Mar</label><input type="number" class="ul-wt" data-m="8" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>Apr</label><input type="number" class="ul-wt" data-m="9" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>May</label><input type="number" class="ul-wt" data-m="10" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                    <div style="text-align:center;"><label>Jun</label><input type="number" class="ul-wt" data-m="11" step="0.5" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:3px;text-align:right;"></div>
-                </div>
-                <div style="display:flex;gap:14px;align-items:center;margin-top:8px;font-size:12px;">
-                    <span>Sum: <strong id="ulSum">0%</strong> <span id="ulSumNote" style="color:#888;">(auto-normalises to 100 on Apply)</span></span>
-                    <button onclick="ulPresetEven()" class="secondary" style="padding:4px 12px;font-size:11px;">Even spread (8.33% each)</button>
-                    <button onclick="ulPresetExample()" class="secondary" style="padding:4px 12px;font-size:11px;">Example: Q4-Q3 ramp</button>
-                    <button onclick="ulPresetReset()" class="secondary" style="padding:4px 12px;font-size:11px;">Clear</button>
-                </div>
-                <div id="ulSummary" style="font-size:12px;color:#555;margin-top:8px;"></div>
             </div>
 
             <!-- KPI Cards -->
@@ -417,8 +358,8 @@
 
             <!-- Events Strip: Holidays + Extreme Weather per month, FY26 vs FY27 -->
             <div style="background:#fafbff;border-radius:8px;padding:20px;margin-top:18px;">
-                <h3 style="margin-bottom:8px;">📅 Public Holidays &amp; 🎒 School Holidays &amp; ⚠️ Extreme Weather — FY26 vs FY27</h3>
-                <p style="color:#666;font-size:12px;margin-bottom:12px;">Hover any cell for details. Public holidays = unique events per state. School holidays = unique calendar dates in school break for any state in the filter. All three are fed into Prophet so it learns separate coefficients for each.</p>
+                <h3 style="margin-bottom:8px;">📅 Public Holidays &amp; ⚠️ Extreme Weather — FY26 vs FY27</h3>
+                <p style="color:#666;font-size:12px;margin-bottom:12px;">Hover any cell for details. Counts are unique events across the states in the current filter.</p>
                 <div class="scroll-x">
                     <table id="sdEventsTable" style="font-size:12px;">
                         <thead><tr id="sdEvtHeaderRow"></tr></thead>
@@ -479,61 +420,6 @@
                     <tbody></tbody>
                 </table>
             </div>
-        </div>
-
-        <!-- STEP 5b: PER-VENUE PER-MONTH ADJUSTMENTS — growth override or cannibalisation delta -->
-        <div class="section" id="venueMonthAdjustmentSection" style="display:none;">
-            <h2>📅 Per-Venue Per-Month Adjustments — overlay growth or cannibalisation</h2>
-            <p style="color:#666;font-size:13px;margin-bottom:12px;">
-                Apply <strong>Growth Override</strong> (replace a month's LFL with a specific %) or <strong>Cannibalisation Delta</strong> (add/subtract from LFL) for individual venue × month combinations. Adjustments are view-time only — applied after universal LFL, preserving the forecast structure. No /generate needed.
-            </p>
-            <div id="vmaStatus" class="status"></div>
-
-            <div style="background:#f5f7ff;border-left:4px solid #667eea;border-radius:6px;padding:14px 18px;margin-bottom:16px;">
-                <h3 style="margin:0 0 12px;color:#667eea;font-size:15px;">Add New Adjustment</h3>
-                <div style="display:grid;grid-template-columns:1.5fr 1fr 1.5fr 1.2fr 1.2fr 0.8fr;gap:12px;align-items:end;">
-                    <div>
-                        <label style="font-size:12px;color:#666;font-weight:600;">Venue</label>
-                        <select id="vmaVenue" style="width:100%;"></select>
-                    </div>
-                    <div>
-                        <label style="font-size:12px;color:#666;font-weight:600;">Month (YYYY-MM)</label>
-                        <input type="text" id="vmaMonth" placeholder="2026-07" style="width:100%;padding:8px;border:2px solid #e0e0e0;border-radius:6px;font-size:13px;">
-                    </div>
-                    <div>
-                        <label style="font-size:12px;color:#666;font-weight:600;">Adjustment Type</label>
-                        <select id="vmaType" style="width:100%;">
-                            <option value="growth">Growth Override (replace LFL %)</option>
-                            <option value="cannibalisation">Cannibalisation Delta (add/subtract %)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="font-size:12px;color:#666;font-weight:600;">Value %</label>
-                        <input type="number" id="vmaValue" placeholder="0.0" step="0.5" style="width:100%;padding:8px;border:2px solid #e0e0e0;border-radius:6px;font-size:13px;text-align:right;">
-                    </div>
-                    <div style="display:flex;gap:6px;">
-                        <button onclick="vmaApplyAdjustment()" style="flex:1;padding:8px 12px;font-size:13px;">➕ Add</button>
-                        <button class="secondary" onclick="vmaLoadAdjustments()" style="flex:0 0 auto;padding:8px 12px;font-size:13px;">🔄</button>
-                    </div>
-                </div>
-            </div>
-
-            <h3 style="margin-top:16px;margin-bottom:10px;">Active Adjustments</h3>
-            <div class="scroll-x">
-                <table id="vmaTable" style="font-size:12px;">
-                    <thead>
-                        <tr style="background:#f5f5f5;">
-                            <th>Venue</th>
-                            <th>Month</th>
-                            <th>Type</th>
-                            <th style="text-align:right;">Value %</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-            <p style="color:#888;font-size:11px;margin-top:10px;font-style:italic;">💡 Tip: Growth Override replaces the calculated LFL for that month. Cannibalisation Delta adds/subtracts from it. Both are applied after universal LFL, so the resolution order is: Scenario → Cannibalisation → Guardrails → Universal LFL → Per-Month Adjustments.</p>
         </div>
 
         <!-- STEP 6: VENUE-LEVEL DETAIL TABLE (grouped by State → Cluster) -->
@@ -684,13 +570,12 @@
             </div>
 
             <!-- Filters mirror Sales Detail -->
-            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:20px;align-items:end;">
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:20px;align-items:end;">
                 <div><label style="font-size:12px;color:#666;">State</label><select id="pState" onchange="loadPnl()"></select></div>
                 <div><label style="font-size:12px;color:#666;">Cluster</label><select id="pCluster" onchange="loadPnl()"></select></div>
                 <div><label style="font-size:12px;color:#666;">Store Cohort</label><select id="pCohort" onchange="loadPnl()"></select></div>
                 <div><label style="font-size:12px;color:#666;">Venue</label><select id="pVenue" onchange="loadPnl()"></select></div>
                 <div><label style="font-size:12px;color:#666;">Guardrails</label><select id="pGuardrails" onchange="loadPnl()"><option value="on">ON</option><option value="off">OFF</option></select></div>
-                <div><label style="font-size:12px;color:#666;">Cannibalisation</label><select id="pCannibalisation" onchange="loadPnl()"><option value="on">ON</option><option value="off">OFF</option></select></div>
             </div>
 
             <!-- Network P&L summary cards -->
@@ -1032,7 +917,7 @@
                         '</tbody>';
                 }
 
-                // Public holidays
+                // Holidays
                 const hlRows = Object.entries(data.holidays || {});
                 const hlTbody = document.getElementById('holidayTable');
                 if (hlRows.length === 0) {
@@ -1040,28 +925,6 @@
                 } else {
                     hlTbody.innerHTML = '<thead><tr><th>State Cache Key</th><th>Holiday Count</th><th>Sample (first 5)</th></tr></thead><tbody>' +
                         hlRows.map(([k, v]) => `<tr><td>${k}</td><td>${v.count}</td><td style="font-size:12px;">${v.examples.map(e => `${e[0]} — ${e[1]}`).join('<br>')}</td></tr>`).join('') +
-                        '</tbody>';
-                }
-
-                // School holidays
-                const shRows = Object.entries(data.school_holidays || {});
-                const shTbody = document.getElementById('schoolHolidayTable');
-                if (shRows.length === 0) {
-                    shTbody.innerHTML = '<tbody><tr><td colspan="6" style="color:#888;text-align:center;">No school holidays loaded.</td></tr></tbody>';
-                } else {
-                    shTbody.innerHTML = '<thead><tr><th>State</th><th>Total Days</th><th>Periods</th><th>Date Range</th><th>First 3 Periods (start → end)</th><th>Last 3 Periods (start → end)</th></tr></thead><tbody>' +
-                        shRows.map(([state, v]) => {
-                            const firstP = (v.first_periods || []).map(p => `${p[0]} → ${p[1]}`).join('<br>');
-                            const lastP = (v.last_periods || []).map(p => `${p[0]} → ${p[1]}`).join('<br>');
-                            return `<tr style="background:#f1f8f4;">
-                                <td style="font-weight:600;color:#2e7d32;">${state}</td>
-                                <td style="text-align:right;font-weight:600;">${v.total_days}</td>
-                                <td style="text-align:right;">${v.period_count}</td>
-                                <td>${v.min_date} → ${v.max_date}</td>
-                                <td style="font-size:12px;">${firstP}</td>
-                                <td style="font-size:12px;">${lastP}</td>
-                            </tr>`;
-                        }).join('') +
                         '</tbody>';
                 }
             } catch (err) {
@@ -1194,113 +1057,6 @@
             window.location.href = '/download-csv';
         }
 
-        // ─── PROPHET SOFTENING ─────────────────────────────────────────────
-        async function ulSyncSoftening() {
-            const beta = parseFloat(document.getElementById('sdSoftening').value) || 0.7;
-            const enabled = beta < 0.99;
-            try {
-                await fetch('/softening/set', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled, beta }),
-                });
-                await loadSalesDetail();
-            } catch (err) { console.error(err); }
-        }
-        async function ulFetchSoftening() {
-            try {
-                const r = await fetch('/softening/get');
-                const cfg = await r.json();
-                const sel = document.getElementById('sdSoftening');
-                if (!sel) return;
-                if (!cfg.enabled) { sel.value = '1.0'; return; }
-                const beta = cfg.beta;
-                if (beta <= 0.55) sel.value = '0.5';
-                else if (beta <= 0.75) sel.value = '0.7';
-                else if (beta <= 0.9) sel.value = '0.85';
-                else sel.value = '1.0';
-            } catch (err) { /* ignore */ }
-        }
-
-        // ─── UNIVERSAL LFL TARGET ──────────────────────────────────────────
-        async function ulFetchAndPaint() {
-            try {
-                const r = await fetch('/universal-lfl/get');
-                const cfg = await r.json();
-                document.getElementById('ulEnabled').checked = !!cfg.enabled;
-                document.getElementById('ulTargetPct').value = cfg.target_pct ?? 0;
-                const weights = cfg.monthly_weights || [0,0,0,0,0,0,0,0,0,0,0,0];
-                document.querySelectorAll('.ul-wt').forEach(inp => {
-                    inp.value = weights[parseInt(inp.dataset.m)] ?? 0;
-                });
-                ulRecalcSum();
-            } catch (e) { /* ignore */ }
-        }
-        function ulRecalcSum() {
-            const total = Array.from(document.querySelectorAll('.ul-wt'))
-                .reduce((s, inp) => s + (parseFloat(inp.value) || 0), 0);
-            const el = document.getElementById('ulSum');
-            el.textContent = total.toFixed(1) + '%';
-            el.style.color = Math.abs(total - 100) < 0.5 ? '#43a047' : '#fb8c00';
-        }
-        document.addEventListener('input', e => {
-            if (e.target?.classList?.contains('ul-wt')) ulRecalcSum();
-        });
-        function ulPresetEven() {
-            document.querySelectorAll('.ul-wt').forEach(i => i.value = (100/12).toFixed(2));
-            ulRecalcSum();
-        }
-        function ulPresetExample() {
-            const weights = [0,0,0,5,10,10,10,10,10,15,15,15];   // Q4-Q3 ramp
-            document.querySelectorAll('.ul-wt').forEach(i => i.value = weights[parseInt(i.dataset.m)]);
-            ulRecalcSum();
-        }
-        function ulPresetReset() {
-            document.querySelectorAll('.ul-wt').forEach(i => i.value = 0);
-            ulRecalcSum();
-        }
-        async function ulSyncAndRefresh() {
-            const enabled = document.getElementById('ulEnabled').checked;
-            const target_pct = parseFloat(document.getElementById('ulTargetPct').value) || 0;
-            const monthly_weights = Array.from(document.querySelectorAll('.ul-wt'))
-                .sort((a,b) => parseInt(a.dataset.m) - parseInt(b.dataset.m))
-                .map(i => parseFloat(i.value) || 0);
-            try {
-                await fetch('/universal-lfl/set', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled, target_pct, monthly_weights }),
-                });
-                // Re-paint with normalised values
-                await ulFetchAndPaint();
-                // Refresh all downstream views
-                if (typeof loadSalesDetail === 'function') await loadSalesDetail();
-            } catch (e) { console.error(e); }
-        }
-        function ulRenderSummary(summary) {
-            const el = document.getElementById('ulSummary');
-            if (!summary || !summary.enabled) { el.innerHTML = ''; return; }
-            const fm$ = v => '$' + Math.round(v).toLocaleString();
-            const fmP = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
-            if (summary.warning || !summary.venues_in_pool) {
-                el.innerHTML = `<div style="background:#fff3e0;border-left:4px solid #fb8c00;padding:10px 14px;border-radius:4px;color:#e65100;">
-                    ⚠️ <strong>Universal LFL did not apply</strong> — ${summary.warning || 'No LFL venues found.'}<br>
-                    <span style="font-size:11px;color:#555;">Fix: re-upload <strong>Venue Details.xlsx</strong> in the Upload step, then click Apply here again.</span>
-                </div>`;
-                return;
-            }
-            const gapColor = summary.gap >= 0 ? '#43a047' : '#e53935';
-            const basisLabels = { servings: 'Servings', retail: 'Retail', pos_discounts: 'POS Discounts', all: 'NET (All Combined)' };
-            const basis = basisLabels[summary.target_basis] || summary.target_basis || 'NET';
-            el.innerHTML = `
-                <strong>Target basis: ${basis}</strong> (matches the Sales Type dropdown above) ·
-                <strong>LFL pool:</strong> ${summary.venues_in_pool} venues ·
-                <strong>LFL FY26:</strong> ${fm$(summary.lfl_fy26_total)} ·
-                <strong>Pre-adjustment LFL FY27:</strong> ${fm$(summary.lfl_fy27_pre_total)} (${fmP(summary.current_growth_pct)}) ·
-                <strong>Target FY27:</strong> ${fm$(summary.lfl_fy27_target)} (${fmP(summary.target_pct)}) ·
-                <strong style="color:${gapColor};">Gap to bridge: ${fm$(summary.gap)}</strong>
-            `;
-        }
-
         // ─── SALES DETAIL DASHBOARD ─────────────────────────────────────────
         let sdData = null;
         let sdChart = null;
@@ -1320,8 +1076,6 @@
 
         async function initSalesDetail() {
             document.getElementById('salesDetailSection').style.display = 'block';
-            await ulFetchSoftening();
-            await ulFetchAndPaint();
             await loadSalesDetail(true);
         }
 
@@ -1332,11 +1086,10 @@
             const venue = document.getElementById('sdVenue')?.value || 'all';
             const salesType = document.getElementById('sdSalesType')?.value || 'servings';
             const guardrails = document.getElementById('sdGuardrails')?.value || 'on';
-            const cannibalisation = document.getElementById('sdCannibalisation')?.value || 'on';
 
             showStatus('sdStatus', '<span class="loading-spinner"></span> Loading sales detail…', 'loading');
             try {
-                const params = new URLSearchParams({state, cluster, cohort, venue, sales_type: salesType, guardrails, cannibalisation});
+                const params = new URLSearchParams({state, cluster, cohort, venue, sales_type: salesType, guardrails});
                 const res = await fetch('/sales-detail?' + params.toString());
                 const data = await res.json();
                 if (!res.ok) {
@@ -1366,7 +1119,6 @@
                 renderSalesDetailChart();
                 renderSalesDetailEvents();
                 renderSalesDetailTable();
-                ulRenderSummary(data.universal_lfl);
                 document.getElementById('sdStatus').style.display = 'none';
                 // Also load per-venue detail (uses same filters)
                 loadVenueDetail();
@@ -1602,7 +1354,6 @@
                 cohort: document.getElementById('pCohort').value || 'all',
                 venue: document.getElementById('pVenue').value || 'all',
                 guardrails: document.getElementById('pGuardrails').value || 'on',
-                cannibalisation: document.getElementById('pCannibalisation')?.value || 'on',
             });
             showStatus('expStatus', '<span class="loading-spinner"></span> Building P&L…', 'loading');
             try {
@@ -1706,7 +1457,6 @@
                 cohort: document.getElementById('pCohort').value || 'all',
                 venue: document.getElementById('pVenue').value || 'all',
                 guardrails: document.getElementById('pGuardrails').value || 'on',
-                cannibalisation: document.getElementById('pCannibalisation')?.value || 'on',
             });
             window.location.href = '/pnl/csv?' + params.toString();
         }
@@ -1858,19 +1608,13 @@
             const fmt$ = (v) => v === null || v === undefined ? '—' : '$' + Math.round(v).toLocaleString();
             const fmt$2 = (v) => v === null || v === undefined ? '—' : '$' + v.toFixed(0);
             const fmtPct = (v) => v === null || v === undefined ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
-            const months = ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'FY'];
-            const monthValues = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05', '2027-06', null];
-
             tbody.innerHTML = rows.map(v => {
                 const tGrowth = v.scenario_target_growth_pct;
                 const tAvgDaily = v.scenario_target_avg_daily;
                 const comment = v.scenario_comment || '';
                 const disabled = !active ? 'disabled style="background:#f5f5f5;color:#aaa;"' : '';
                 const spark = buildSparkline(v.monthly_fy25, v.monthly_fy26, v.monthly_fy27);
-                const venue = v.venue.replace(/"/g, '&quot;');
-
-                // Main venue row
-                let html = `<tr data-venue="${venue}" class="sc-venue-row">
+                return `<tr data-venue="${v.venue.replace(/"/g, '&quot;')}">
                     <td style="text-align:center;padding:4px;">${spark}</td>
                     <td><strong>${v.venue}</strong></td>
                     <td>${v.state}</td>
@@ -1884,24 +1628,6 @@
                     <td><input type="number" step="100" class="sc-target-avg" value="${tAvgDaily ?? ''}" placeholder="—" ${disabled} style="width:100px;padding:5px;border:1px solid #ccc;border-radius:4px;text-align:right;font-size:12px;"></td>
                     <td><input type="text" class="sc-comment" value="${(comment || '').replace(/"/g, '&quot;')}" ${disabled} placeholder="Movement note…" style="width:100%;padding:5px;border:1px solid #ccc;border-radius:4px;font-size:11px;"></td>
                 </tr>`;
-
-                // Monthly adjustments rows
-                html += `<tr class="sc-monthly-row" style="background:#f9fafc;border-top:none;">
-                    <td colspan="2" style="font-size:11px;color:#666;padding:8px 4px;font-weight:500;">Monthly adjustments (insert the months desired total LFL) - Current</td>
-                    ${months.map((m, i) => `<td style="padding:4px;border:1px solid #e8e8e8;"><input type="text" class="sc-monthly-current" data-month="${monthValues[i]}" placeholder="" style="width:45px;padding:3px;border:none;font-size:10px;text-align:center;background:transparent;" ${disabled}></td>`).join('')}
-                </tr>`;
-
-                html += `<tr class="sc-monthly-row" style="background:#f9fafc;">
-                    <td colspan="2" style="font-size:11px;color:#666;padding:8px 4px;font-weight:500;">Monthly adjustments (insert the months desired total LFL) - Proposed</td>
-                    ${months.map((m, i) => `<td style="padding:4px;border:1px solid #e8e8e8;"><input type="text" class="sc-monthly-proposed" data-month="${monthValues[i]}" placeholder="" style="width:45px;padding:3px;border:none;font-size:10px;text-align:center;background:transparent;" ${disabled}></td>`).join('')}
-                </tr>`;
-
-                html += `<tr class="sc-monthly-row" style="background:#f9fafc;">
-                    <td colspan="2" style="font-size:11px;color:#666;padding:8px 4px;font-weight:500;">Monthly adjustments (insert cannibalisation impact) Proposed</td>
-                    ${months.map((m, i) => `<td style="padding:4px;border:1px solid #e8e8e8;"><input type="text" class="sc-monthly-cannibal" data-month="${monthValues[i]}" placeholder="" style="width:45px;padding:3px;border:none;font-size:10px;text-align:center;background:transparent;" ${disabled}></td>`).join('')}
-                </tr>`;
-
-                return html;
             }).join('');
         }
 
@@ -1933,119 +1659,6 @@
         async function refreshAllDashboards() {
             // Re-fetch all the dependent views so the scenario takes effect everywhere
             await loadSalesDetail();   // also loads /venues-detail via the pipeline
-        }
-
-        // ─── PER-VENUE PER-MONTH ADJUSTMENTS ───────────────────────────────
-        let vmaData = {};
-
-        function vmaInit() {
-            // Populate venue dropdown from venueDetailData
-            if (!venueDetailData || !venueDetailData.venues) return;
-            const venues = venueDetailData.venues.map(v => v.venue).sort();
-            const vSel = document.getElementById('vmaVenue');
-            const cur = vSel.value;
-            vSel.innerHTML = `<option value="">-- Select Venue --</option>` +
-                venues.map(v => `<option value="${v}">${v}</option>`).join('');
-            if (cur && [...vSel.options].some(o => o.value === cur)) vSel.value = cur;
-            document.getElementById('venueMonthAdjustmentSection').style.display = 'block';
-            vmaLoadAdjustments();
-        }
-
-        async function vmaLoadAdjustments() {
-            try {
-                const res = await fetch('/venue-month-adjustment/list');
-                if (!res.ok) throw new Error(res.statusText);
-                vmaData = await res.json();
-                vmaBuildTable();
-            } catch (e) {
-                showStatus('vmaStatus', '⚠️ Failed to load adjustments: ' + e.message, 'error');
-            }
-        }
-
-        function vmaBuildTable() {
-            const tbody = document.querySelector('#vmaTable tbody');
-            const rows = [];
-            for (const [venue, months] of Object.entries(vmaData)) {
-                for (const [month, adj] of Object.entries(months)) {
-                    rows.push({
-                        venue,
-                        month,
-                        type: adj.adjustment_type,
-                        value: adj.value_pct,
-                    });
-                }
-            }
-            tbody.innerHTML = rows.map(r => {
-                const typeLabel = r.type === 'growth' ? 'Growth Override' : 'Cannibalisation Delta';
-                return `<tr>
-                    <td>${r.venue}</td>
-                    <td>${r.month}</td>
-                    <td>${typeLabel}</td>
-                    <td style="text-align:right;font-weight:600;">${r.value > 0 ? '+' : ''}${r.value.toFixed(1)}%</td>
-                    <td><button class="secondary" onclick="vmaDeleteAdjustment('${r.venue.replace(/'/g, "\\'")}', '${r.month}')" style="padding:4px 10px;font-size:12px;">🗑️ Delete</button></td>
-                </tr>`;
-            }).join('');
-            if (rows.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888;padding:14px;">No adjustments yet.</td></tr>';
-            }
-        }
-
-        async function vmaApplyAdjustment() {
-            const venue = document.getElementById('vmaVenue').value || '';
-            const month = document.getElementById('vmaMonth').value || '';
-            const type = document.getElementById('vmaType').value || 'growth';
-            const value = parseFloat(document.getElementById('vmaValue').value || '0');
-
-            if (!venue || !month) {
-                showStatus('vmaStatus', '⚠️ Select venue and month.', 'error');
-                return;
-            }
-
-            // Validate month format YYYY-MM
-            if (!/^\d{4}-\d{2}$/.test(month)) {
-                showStatus('vmaStatus', '⚠️ Month must be in YYYY-MM format.', 'error');
-                return;
-            }
-
-            showStatus('vmaStatus', '<span class="loading-spinner"></span> Saving adjustment…', 'loading');
-            try {
-                const res = await fetch('/venue-month-adjustment/set', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        venue,
-                        year_month: month,
-                        adjustment_type: type,
-                        value_pct: value,
-                    }),
-                });
-                if (!res.ok) throw new Error(res.statusText);
-                showStatus('vmaStatus', `✅ Adjustment saved. Refreshing…`, 'success');
-                document.getElementById('vmaMonth').value = '';
-                document.getElementById('vmaValue').value = '';
-                vmaLoadAdjustments();
-                await refreshAllDashboards();
-            } catch (e) {
-                showStatus('vmaStatus', '❌ Failed to save: ' + e.message, 'error');
-            }
-        }
-
-        async function vmaDeleteAdjustment(venue, month) {
-            if (!confirm(`Delete adjustment for ${venue} in ${month}?`)) return;
-            showStatus('vmaStatus', '<span class="loading-spinner"></span> Deleting…', 'loading');
-            try {
-                const res = await fetch('/venue-month-adjustment/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ venue, year_month: month }),
-                });
-                if (!res.ok) throw new Error(res.statusText);
-                showStatus('vmaStatus', '✅ Adjustment deleted. Refreshing…', 'success');
-                vmaLoadAdjustments();
-                await refreshAllDashboards();
-            } catch (e) {
-                showStatus('vmaStatus', '❌ Failed to delete: ' + e.message, 'error');
-            }
         }
 
         // ─── VENUE COMPARISON ──────────────────────────────────────────────
@@ -2222,9 +1835,8 @@
             const cohort = document.getElementById('sdCohort')?.value || 'all';
             const venue = document.getElementById('sdVenue')?.value || 'all';
             const guardrails = document.getElementById('sdGuardrails')?.value || 'on';
-            const cannibalisation = document.getElementById('sdCannibalisation')?.value || 'on';
             try {
-                const params = new URLSearchParams({state, cluster, cohort, venue, guardrails, cannibalisation});
+                const params = new URLSearchParams({state, cluster, cohort, venue, guardrails});
                 const res = await fetch('/venues-detail?' + params.toString());
                 if (!res.ok) return;
                 venueDetailData = await res.json();
@@ -2233,8 +1845,6 @@
                 renderVenueDetail();
                 // Initialize the venue comparison section now that we know the venues
                 vcInit();
-                // Initialize per-venue per-month adjustments section
-                vmaInit();
                 // Refresh scenarios pane (uses venueDetailData)
                 scenarioRefresh();
             } catch (err) { console.error(err); }
@@ -2352,11 +1962,6 @@
                     const bg = fy === 26 ? '#fff8e1' : '#fff3cd';
                     return `background:${bg};text-align:center;padding:8px;font-weight:600;color:#e65100;`;
                 }
-                if (kind === 'school') {
-                    // distinct green palette so school holidays don't blur into public holidays
-                    const bg = fy === 26 ? '#e8f5e9' : '#c8e6c9';
-                    return `background:${bg};text-align:center;padding:8px;font-weight:600;color:#2e7d32;`;
-                }
                 // extreme weather
                 const bg = fy === 26 ? '#ffebee' : '#ffcdd2';
                 return `background:${bg};text-align:center;padding:8px;font-weight:600;color:#c62828;`;
@@ -2365,33 +1970,22 @@
             const cell = (count, names, kind, fy) => {
                 if (!count) return `<td style="${cellStyle(0, kind, fy)}">–</td>`;
                 const tip = (names || []).slice(0, 12).join('\n');
-                const emoji = kind === 'holiday' ? '🎉' : (kind === 'school' ? '🎒' : '⚠️');
+                const emoji = kind === 'holiday' ? '🎉' : '⚠️';
                 return `<td style="${cellStyle(count, kind, fy)}" title="${tip.replace(/"/g, '&quot;')}">${emoji} ${count}</td>`;
             };
 
             const extremeNames = (detail) => (detail || []).map(d => `${d.date} — ${d.detail}`);
-            const schoolNames = (detail) => (detail || []).map(d => `${d.date} (${(d.states || []).join(', ')})`);
 
             const rows = [
                 {
-                    label: `FY26 Public Holidays`,
+                    label: `FY26 Holidays`,
                     color: '#e65100',
                     cells: monthly.map(m => cell(m.fy26_holiday_count, m.fy26_holidays, 'holiday', 26)),
                 },
                 {
-                    label: `FY27 Public Holidays`,
+                    label: `FY27 Holidays`,
                     color: '#e65100',
                     cells: monthly.map(m => cell(m.fy27_holiday_count, m.fy27_holidays, 'holiday', 27)),
-                },
-                {
-                    label: `FY26 School Holidays`,
-                    color: '#2e7d32',
-                    cells: monthly.map(m => cell(m.fy26_school_holiday_count, schoolNames(m.fy26_school_holiday_detail), 'school', 26)),
-                },
-                {
-                    label: `FY27 School Holidays`,
-                    color: '#2e7d32',
-                    cells: monthly.map(m => cell(m.fy27_school_holiday_count, schoolNames(m.fy27_school_holiday_detail), 'school', 27)),
                 },
                 {
                     label: `FY26 Extreme Wx`,

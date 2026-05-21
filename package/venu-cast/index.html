@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Venu Cast — AI Sales Forecast</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#07080f;--s:#0c0d1b;--c:#10111f;--b:#1a1d33;--b2:#252844;--t:#c5cde8;--m:#4d5673;--amb:#f59e0b;--bl:#3b82f6;--g:#34d399;--r:#f87171;--fn:'Syne',sans-serif;--fm:'DM Mono',monospace}
+html,body{background:var(--bg);color:var(--t);font-family:var(--fn);min-height:100vh}
+.w{padding:16px 22px;max-width:1400px;margin:0 auto}
+.sp{flex:1}
+.hdr{display:flex;align-items:center;gap:9px;padding-bottom:13px;margin-bottom:13px;border-bottom:1px solid var(--b);flex-wrap:wrap}
+.logo{font-size:18px;font-weight:800;background:linear-gradient(120deg,var(--amb),#fb923c);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo-sub{font-family:var(--fm);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--m);margin-top:2px}
+.chip{background:var(--s);border:1px solid var(--b);border-radius:5px;padding:2px 7px;font-family:var(--fm);font-size:10px;color:var(--m)}
+.chip b{color:var(--t);font-weight:500}
+.dvd{width:1px;height:18px;background:var(--b2);flex-shrink:0}
+button{padding:5px 11px;border-radius:7px;border:1px solid var(--b2);cursor:pointer;font-family:var(--fn);font-size:11px;font-weight:700;background:var(--c);color:var(--t);transition:all .15s;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+button:hover{background:var(--b2)}
+button.amb{background:var(--amb);color:#07080f;border-color:var(--amb)}
+button.amb:hover{background:#d97706}
+button.grn{background:#064e3b;color:var(--g);border-color:var(--g)}
+button.grn:hover{background:#065f46}
+button:disabled{opacity:.4;cursor:default;pointer-events:none}
+.drop{border:2px dashed var(--b2);border-radius:14px;padding:54px 28px;text-align:center;cursor:pointer;transition:all .2s;background:var(--s)}
+.drop.drag{border-color:var(--amb);background:#120e00}
+.drop:hover{border-color:var(--b)}
+.di{font-size:38px;margin-bottom:11px;display:block}
+.dt1{font-size:17px;font-weight:800;color:#dde1f5;margin-bottom:7px}
+.dt2{font-size:12px;color:var(--m);line-height:2}
+code{font-family:var(--fm);font-size:10px;background:var(--c);border:1px solid var(--b);border-radius:3px;padding:1px 5px;color:var(--amb)}
+.nav{display:flex;gap:2px;background:var(--s);border:1px solid var(--b);border-radius:8px;padding:2px;margin-bottom:11px;width:fit-content;flex-wrap:wrap}
+.ntb{padding:5px 13px;border:none;border-radius:5px;cursor:pointer;font-size:11px;font-weight:700;background:transparent;color:var(--m);font-family:var(--fn)}
+.ntb.on{background:var(--b2);color:var(--t)}
+.ntb:not(.on):hover{color:var(--t)}
+.ctrls{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:11px}
+.lbl{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--m);white-space:nowrap}
+.pills{display:flex;background:var(--s);border:1px solid var(--b);border-radius:7px;padding:2px;gap:2px}
+.pill{padding:4px 9px;border:none;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700;background:transparent;color:var(--m);font-family:var(--fn)}
+.pill.on{background:var(--amb);color:#07080f}
+.pill:not(.on):hover{color:var(--t);background:var(--b2)}
+select,input[type=number],input[type=text],input[type=date]{background:var(--s);border:1px solid var(--b);color:var(--t);border-radius:6px;outline:none;font-family:var(--fm);font-size:11px;padding:4px 8px;transition:border .15s}
+select:focus,input:focus{border-color:var(--amb)}
+input[type=number]{width:64px}
+.kgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:11px}
+@media(max-width:760px){.kgrid{grid-template-columns:repeat(2,1fr)}}
+.kc{background:var(--c);border:1px solid var(--b);border-radius:10px;padding:11px 13px;border-left:3px solid var(--b2)}
+.kc.bl{border-left-color:var(--bl)}.kc.ba{border-left-color:var(--amb)}.kc.bg{border-left-color:var(--g)}
+.kn{font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--m);margin-bottom:4px}
+.kv{font-family:var(--fm);font-size:20px;font-weight:500;color:#dde1f5}
+.kc.ba .kv{color:var(--amb)}.kc.bg .kv{color:var(--g)}
+.ks{font-family:var(--fm);font-size:9px;color:var(--m);margin-top:3px}
+.cc{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:13px 17px;margin-bottom:11px}
+.chdr{display:flex;align-items:center;gap:7px;margin-bottom:9px;flex-wrap:wrap}
+.ct{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--m)}
+.bdg{font-size:9px;font-family:var(--fm);padding:2px 7px;border-radius:3px;background:#f59e0b18;color:var(--amb);border:1px solid #f59e0b28}
+.bdg.b{background:#3b82f618;color:#93c5fd;border-color:#3b82f628}
+.bdg.g{background:#34d39918;color:var(--g);border-color:#34d39928}
+.bdg.r{background:#f8717118;color:var(--r);border-color:#f8717128}
+.minfo{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-left:auto}
+.mp{font-family:var(--fm);font-size:9px;color:var(--m)}
+.mp b{color:var(--amb);font-weight:500}
+.vtabs{display:flex;gap:2px;background:var(--s);border:1px solid var(--b);border-radius:7px;padding:2px;width:fit-content;margin-bottom:9px}
+.vtb{padding:4px 11px;border:none;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700;background:transparent;color:var(--m);font-family:var(--fn)}
+.vtb.on{background:var(--b2);color:var(--t)}.vtb:not(.on):hover{color:var(--t)}
+.dgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:4px}
+.dcell{text-align:center;background:var(--s);border:1px solid var(--b);border-radius:7px;padding:8px 3px}
+.ddl{font-size:9px;font-weight:700;color:var(--m);text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px}
+.dv{font-size:12px;font-weight:500;font-family:var(--fm);color:var(--t)}.dv.hi{color:var(--amb)}
+.dbar{height:2px;border-radius:2px;background:var(--b);margin-top:5px}
+.dfill{height:2px;border-radius:2px;background:linear-gradient(90deg,var(--bl),var(--amb))}
+.tbl{width:100%;border-collapse:collapse;font-size:11px}
+.tbl th{text-align:left;padding:7px 9px;font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--m);border-bottom:1px solid var(--b)}
+.tbl td{padding:5px 9px;border-bottom:1px solid var(--b);color:var(--t);font-family:var(--fm);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:var(--s)}
+.tbl select,.tbl input[type=text],.tbl input[type=number]{background:var(--s);border:1px solid var(--b);border-radius:4px;color:var(--t);font-size:10px;padding:2px 5px;font-family:var(--fm)}
+.wrow{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:11px}
+.wc{padding:5px 11px;background:var(--s);border:1px solid var(--b);border-radius:7px;font-family:var(--fm);font-size:10px;color:var(--t);display:flex;gap:6px;align-items:center}
+.wd{width:7px;height:7px;border-radius:50%;background:var(--m);flex-shrink:0}
+.wc.ok .wd{background:var(--g)}.wc.busy .wd{background:var(--amb);animation:pu .7s infinite}.wc.err .wd{background:var(--r)}
+@keyframes pu{0%,100%{opacity:1}50%{opacity:.2}}
+.info{background:var(--s);border:1px solid var(--b);border-radius:7px;padding:8px 12px;font-size:11px;color:var(--m);line-height:1.7;margin-bottom:11px}
+.info b{color:var(--t)}
+.sb{display:flex;align-items:center;gap:8px;padding:7px 12px;background:var(--s);border:1px solid var(--b);border-radius:7px;margin-bottom:10px;font-family:var(--fm);font-size:11px;flex-wrap:wrap}
+.sb.ok{border-color:var(--g)}.sb.err{border-color:var(--r)}.sb.busy{border-color:var(--amb)}
+.spin{display:inline-block;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.ep{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:13px 17px;margin-top:11px}
+.ep-hdr{display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap}
+.ep-title{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--m)}
+textarea{background:var(--s);border:1px solid var(--b);border-radius:7px;color:var(--t);font-family:var(--fm);font-size:10px;padding:9px;width:100%;resize:vertical;outline:none;line-height:1.6}
+textarea:focus{border-color:var(--amb)}
+.mxscroll{max-height:230px;overflow-y:auto}
+.comp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:640px){.comp-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="w">
+
+<div class="hdr">
+  <div><div class="logo">VENU CAST</div><div class="logo-sub">Prophet · SARIMA · AI Forecast</div></div>
+  <div id="hMeta" style="display:none;gap:7px;align-items:center;flex-wrap:wrap">
+    <div class="dvd"></div>
+    <span class="chip" id="cRec"></span><span class="chip" id="cVen"></span><span class="chip" id="cDt"></span>
+  </div>
+  <div class="sp"></div>
+  <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+    <span class="lbl">API URL</span>
+    <input type="text" id="apiUrl" placeholder="https://venu-cast-api.onrender.com" style="width:260px">
+    <button onclick="testApi()" id="testBtn">🔌 Test</button>
+  </div>
+  <div class="dvd"></div>
+  <div id="hBtns" style="display:none;gap:6px;align-items:center">
+    <button onclick="document.getElementById('fi').click()">↑ Re-import</button>
+    <button class="grn" onclick="openSaveDialog()" id="saveBtn" style="display:none">💾 Save Forecast</button>
+    <button class="amb" onclick="openExport()">↓ Export CSV</button>
+  </div>
+</div>
+
+<div id="apiSt" class="sb" style="display:none"></div>
+
+<div class="drop" id="dz"
+  ondragover="event.preventDefault();this.classList.add('drag')"
+  ondragleave="this.classList.remove('drag')"
+  ondrop="onDrop(event)"
+  onclick="document.getElementById('fi').click()">
+  <span class="di">📊</span>
+  <div class="dt1">Import Sales History CSV</div>
+  <div class="dt2">
+    Required: <code>venue</code> · <code>date</code> · <code>sales</code> · <code>guests</code> · <code>average_transaction_value</code><br>
+    Date formats: <code>DD/MM/YYYY</code> · <code>YYYY-MM-DD</code> · <code>MM/DD/YYYY</code>
+  </div>
+</div>
+<input id="fi" type="file" accept=".csv" style="display:none" onchange="onFI(this)">
+
+<div id="dash" style="display:none">
+  <div class="nav">
+    <button class="ntb on" onclick="navTo('fc',this)">📈 Forecast</button>
+    <button class="ntb" onclick="navTo('venues',this)">🗺 Venues</button>
+    <button class="ntb" onclick="navTo('wx',this)">🌤 Weather &amp; Events</button>
+    <button class="ntb" onclick="navTo('comps',this)">🔬 Model Components</button>
+    <button class="ntb" onclick="navTo('runs',this)" id="runsTab">📂 Saved Forecasts</button>
+  </div>
+
+  <!-- FORECAST -->
+  <div id="pfc">
+    <div class="ctrls">
+      <span class="lbl">Venue</span>
+      <select id="vSel" onchange="CRV=this.value;runForecast()"></select>
+      <span class="lbl">Metric</span>
+      <div class="pills" id="mP">
+        <button class="pill on" onclick="setM('sales',this)">Sales</button>
+        <button class="pill" onclick="setM('guests',this)">Guests</button>
+        <button class="pill" onclick="setM('atv',this)">Avg Txn</button>
+      </div>
+      <span class="lbl">Forecast</span>
+      <input type="number" id="fcN" value="30" min="1" max="730" onchange="runForecast()">
+      <div class="pills" id="uP">
+        <button class="pill on" onclick="setU('days',this)">Days</button>
+        <button class="pill" onclick="setU('months',this)">Months</button>
+      </div>
+      <button class="grn" onclick="runForecast()" id="runBtn">&#9654; Run Forecast</button>
+    </div>
+
+    <div id="fcSt" class="sb" style="display:none"></div>
+
+    <div class="kgrid">
+      <div class="kc bl"><div class="kn">Total Sales</div><div class="kv" id="kTS">—</div><div class="ks" id="kD">—</div></div>
+      <div class="kc bl"><div class="kn">Total Guests</div><div class="kv" id="kG">—</div><div class="ks">historical</div></div>
+      <div class="kc bl"><div class="kn">Avg Transaction</div><div class="kv" id="kA">—</div><div class="ks">per guest</div></div>
+      <div class="kc bl"><div class="kn">Daily Avg Sales</div><div class="kv" id="kDA">—</div><div class="ks">per day</div></div>
+      <div class="kc ba"><div class="kn">Forecast Total</div><div class="kv" id="kF">—</div><div class="ks" id="kFN">—</div></div>
+    </div>
+
+    <div id="adjInfo" class="info" style="display:none"></div>
+
+    <div class="vtabs">
+      <button class="vtb on" onclick="sv('ch',this)">📈 Forecast Chart</button>
+      <button class="vtb" onclick="sv('dow',this)">📅 Day-of-Week</button>
+    </div>
+    <div id="vCh">
+      <div class="cc">
+        <div class="chdr">
+          <span class="ct" id="cTtl">Sales — historical &amp; forecast</span>
+          <span class="bdg" id="mBdg">—</span>
+          <span class="bdg b" id="adjBdg" style="display:none">Weather + Holiday adjusted</span>
+          <span class="bdg b">90% CI</span>
+          <div class="minfo" id="mInfo"></div>
+        </div>
+        <canvas id="MC" style="max-height:380px"></canvas>
+      </div>
+    </div>
+    <div id="vDow" style="display:none">
+      <div class="cc">
+        <div class="chdr"><span class="ct">Day-of-week sales pattern</span><span class="bdg b">historical avg</span></div>
+        <div class="dgrid" id="dowG"></div>
+        <div style="margin-top:13px"><canvas id="DC" style="max-height:190px"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VENUES -->
+  <div id="pvenues" style="display:none">
+    <div class="info">
+      <b>Step 1:</b> Download the template CSV, fill in city details, re-upload.<br>
+      <b>Step 2:</b> Click <b>Fetch Weather &amp; Holidays</b> to pull live data.<br>
+      <b>Holiday Mult</b> = sales multiplier on public holidays (1.15 = +15%). <b>Temp Sensitivity</b> = leave blank to auto-estimate.
+    </div>
+    <div class="cc">
+      <div class="chdr">
+        <span class="ct">Venue → City Mapping</span>
+        <span class="bdg g" id="autoDetLbl" style="display:none"></span>
+        <div class="sp"></div>
+        <button onclick="dlVenueTemplate()">⬇ Template CSV</button>
+        <button onclick="exportVenueMapping()">⬇ Export Mapping</button>
+        <div class="dvd"></div>
+        <button class="grn" onclick="document.getElementById('vmFi').click()">⬆ Import Mapping CSV</button>
+        <input id="vmFi" type="file" accept=".csv" style="display:none" onchange="importVenueMapping(this)">
+        <div class="dvd"></div>
+        <button class="grn" onclick="fetchAll()">🌤 Fetch Weather &amp; Holidays</button>
+        <span id="fSt" style="font-family:var(--fm);font-size:10px;color:var(--m);margin-left:4px"></span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr><th>Venue</th><th>City</th><th>State</th><th>Country</th><th>Hol Mult</th><th>Temp Sens</th><th>Jan</th><th>Feb</th><th>Mar</th><th>Apr</th><th>May</th><th>Jun</th><th>Jul</th><th>Aug</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Dec</th><th>Jan</th><th>Feb</th><th>Mar</th><th>Apr</th><th>May</th><th>Jun</th><th>Jul</th><th>Aug</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Dec</th><th>Rec</th></tr></thead>
+          <tbody id="vTbd"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- WEATHER & EVENTS -->
+  <div id="pwx" style="display:none">
+    <div id="wRow" class="wrow"></div>
+    <div id="wxCard" class="cc" style="display:none">
+      <div class="chdr"><span class="ct">Temperature &amp; Precipitation — historical + 16-day forecast</span><span class="bdg g">Open-Meteo API</span></div>
+      <canvas id="WXC" style="max-height:190px"></canvas>
+    </div>
+    <div class="cc">
+      <div class="chdr">
+        <span class="ct">Public Holidays</span><span class="bdg" id="hCount">0 loaded</span><span class="bdg b">Nager.Date API</span>
+        <div class="sp"></div>
+        <button onclick="exportHolidays()">⬇ Export Holidays CSV</button>
+      </div>
+      <div class="mxscroll">
+        <table class="tbl">
+          <thead><tr><th>Date</th><th>Holiday</th><th>Country</th><th>Status</th></tr></thead>
+          <tbody id="hTbl"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="cc">
+      <div class="chdr">
+        <span class="ct">Custom Events &amp; Adjustments</span>
+        <div class="sp"></div>
+        <button onclick="exportEvents()">⬇ Export Events CSV</button>
+        <button onclick="addEv()">+ Add Event</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr><th>Event</th><th>Date</th><th>Type</th><th>Impact %</th><th>Venue Filter</th><th></th></tr></thead>
+          <tbody id="eTbl"></tbody>
+        </table>
+      </div>
+      <button onclick="addEv()" style="margin-top:9px">+ Add Event</button>
+    </div>
+  </div>
+
+  <!-- MODEL COMPONENTS -->
+  <div id="pcomps" style="display:none">
+    <div class="info"><b>Prophet model decomposition</b> — trend, weekly, yearly and holiday components. Only available after a Prophet forecast.</div>
+    <div id="compsCnt"><div style="text-align:center;padding:48px;color:var(--m);font-family:var(--fm)">Run a forecast with Prophet to see components.</div></div>
+  </div>
+
+  <!-- SAVED FORECASTS -->
+  <div id="pruns" style="display:none">
+    <div class="cc">
+      <div class="chdr">
+        <span class="ct">Saved Forecast Runs</span>
+        <span class="bdg b" id="runsDbStatus">checking...</span>
+        <div class="sp"></div>
+        <button onclick="loadRunsList()">↻ Refresh</button>
+      </div>
+      <div class="info" style="margin-bottom:9px">
+        Save a forecast after running it. Each saved run stores all per-venue daily forecast rows so you can reload it instantly without re-running Prophet.
+        <br>Requires <b>DATABASE_URL</b> set on Render — see setup instructions below.
+      </div>
+      <div id="runsSetupNote" style="display:none" class="info">
+        <b>Database not configured.</b> To enable saved forecasts:<br>
+        1. Go to <b>render.com</b> → your workspace → <b>New → PostgreSQL</b> → create a free database<br>
+        2. In your <b>venu-cast-api</b> service → <b>Environment</b> → Add variable: <code>DATABASE_URL</code> = the Internal Database URL from Render<br>
+        3. Click Save and wait for redeploy
+      </div>
+      <div style="overflow-x:auto">
+        <table class="tbl" id="runsTbl">
+          <thead><tr><th>Label</th><th>Saved</th><th>Venues</th><th>Horizon</th><th>Metric</th><th>Avg RMSE</th><th>Notes</th><th></th></tr></thead>
+          <tbody id="runsTbd"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SAVE DIALOG -->
+  <div id="saveDialog" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(7,8,15,0.85);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--c);border:1px solid var(--b2);border-radius:14px;padding:22px 26px;width:420px;max-width:90vw">
+      <div style="font-size:14px;font-weight:700;color:#dde1f5;margin-bottom:13px">💾 Save Forecast Run</div>
+      <div style="margin-bottom:9px">
+        <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--m);display:block;margin-bottom:4px">Label</label>
+        <input type="text" id="saveLabel" style="width:100%;padding:6px 10px;border-radius:6px" placeholder="e.g. March 2026 90-day forecast">
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--m);display:block;margin-bottom:4px">Notes (optional)</label>
+        <textarea id="saveNotes" rows="2" style="width:100%;padding:6px 10px;border-radius:6px;resize:vertical" placeholder="Any context about this run..."></textarea>
+      </div>
+      <div id="saveSt" style="display:none;font-family:var(--fm);font-size:11px;margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="document.getElementById('saveDialog').style.display='none'">Cancel</button>
+        <button class="grn" onclick="confirmSave()" id="confirmSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPORT PANEL -->
+  <div id="ep" style="display:none">
+    <div class="ep">
+      <div class="ep-hdr">
+        <span class="ep-title">Export Forecast</span>
+        <span class="bdg b" id="epScope"></span>
+        <div class="sp"></div>
+        <button onclick="dlCsv()">⬇ Download CSV</button>
+        <button class="amb" onclick="copyCsv()">📋 Copy CSV</button>
+        <span id="cpMsg" style="display:none;font-family:var(--fm);font-size:10px;color:var(--g)">✓ Copied!</span>
+        <button onclick="document.getElementById('ep').style.display='none'" style="padding:3px 8px">✕</button>
+      </div>
+      <div class="info" style="font-size:10px;margin-bottom:8px">
+        One row per <b>venue × date</b>. Columns: <code>venue</code> <code>date</code> <code>dow</code> <code>type</code> <code>sales</code> <code>guests</code> <code>atv</code> <code>forecast_sales</code> <code>lower_90</code> <code>upper_90</code> <code>forecast_guests</code> <code>forecast_atv</code> <code>is_holiday</code> <code>holiday_name</code> <code>temp_max_c</code> <code>adj_factor</code> <code>model</code>
+      </div>
+      <textarea id="csvTxt" rows="10" readonly></textarea>
+    </div>
+  </div>
+</div>
+
+</div>
+<script>
+var AR=[],VM={},WBC={},HS=new Set(),HD=[],EVS=[];
+var CM='sales',CU='days',CRV='__all__';
+var fcResultByVenue={},lastFcResult=null;
+var MC=null,DC=null,WXC=null,compCharts=[];
+var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var ETYPES=['Public Holiday','School Holiday','Local Event','Sport','Festival','Conference','Custom'];
+var CITIES={
+  'Sydney':        {s:'NSW',cc:'AU',lat:-33.87,lon:151.21},
+  'Melbourne':     {s:'VIC',cc:'AU',lat:-37.81,lon:144.96},
+  'Brisbane':      {s:'QLD',cc:'AU',lat:-27.47,lon:153.02},
+  'Gold Coast':    {s:'QLD',cc:'AU',lat:-28.00,lon:153.43},
+  'Perth':         {s:'WA', cc:'AU',lat:-31.95,lon:115.86},
+  'Adelaide':      {s:'SA', cc:'AU',lat:-34.93,lon:138.60},
+  'Canberra':      {s:'ACT',cc:'AU',lat:-35.28,lon:149.13},
+  'Darwin':        {s:'NT', cc:'AU',lat:-12.46,lon:130.84},
+  'Hobart':        {s:'TAS',cc:'AU',lat:-42.88,lon:147.33},
+  'Sunshine Coast':{s:'QLD',cc:'AU',lat:-26.65,lon:153.07},
+  'Cairns':        {s:'QLD',cc:'AU',lat:-16.92,lon:145.77},
+  'Singapore':     {s:'SGP',cc:'SG',lat:1.35,  lon:103.82},
+  'London':        {s:'ENG',cc:'GB',lat:51.51, lon:-0.13},
+  'New York':      {s:'NY', cc:'US',lat:40.71, lon:-74.01},
+  'Houston':       {s:'TX', cc:'US',lat:29.76, lon:-95.37},
+  'Austin':        {s:'TX', cc:'US',lat:30.27, lon:-97.74},
+};
+function pd(s){if(!s)return null;s=String(s).trim().replace(/[""]/g,'');var m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);// Fallback: append T00:00:00 so JS parses as local not UTC
+var d=new Date(s.length===10?s+'T00:00:00':s);return isNaN(d)?null:d}
+function iso(d){var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+day;}
+function addD(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r}
+function fd(s){if(!s)return'';var d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'2-digit'})}
+function fm(n,p){if(n==null||isNaN(n))return'n/a';p=p||'';if(Math.abs(n)>=1e6)return p+(n/1e6).toFixed(1)+'M';if(Math.abs(n)>=1e3)return p+(n/1e3).toFixed(1)+'K';return p+Math.round(n)}
+function avgs(a){return a.length?a.reduce((s,v)=>s+v,0)/a.length:0}
+function stdv(a){var m=avgs(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/a.length)||1}
+function getApiUrl(){return(document.getElementById('apiUrl').value||'').replace(/\/+$/,'')}
+function setSt(id,cls,html){var e=document.getElementById(id);e.style.display='flex';e.className='sb '+cls;e.innerHTML=html}
+function esc(s){return String(s).replace(/"/g,'""')}
+
+async function testApi(){
+  var url=getApiUrl();
+  if(!url){setSt('apiSt','err','(!) Enter your Render API URL first');return}
+  var btn=document.getElementById('testBtn');
+  btn.disabled=true;
+  for(var attempt=1;attempt<=3;attempt++){
+    setSt('apiSt','busy','<span class="spin">(*)</span>&nbsp;Waking up Render server... attempt '+attempt+'/3 (cold start can take 50s)');
+    try{
+      var r=await fetch(url+'/health',{signal:AbortSignal.timeout(55000)});
+      var d=await r.json();
+      var libs=Object.entries(d.libraries||{}).map(([k,v])=>'<span class="bdg '+(v==='ok'?'g':'r')+'">'+k+'</span>').join(' ');
+      setSt('apiSt','ok','(ok) API connected &nbsp;'+libs);
+      btn.disabled=false;return;
+    }catch(e){
+      if(attempt<3){await new Promise(r=>setTimeout(r,3000));}
+      else{setSt('apiSt','err','(x) Could not reach API. Open this URL directly in your browser to check: '+url+'/health');btn.disabled=false;}
+    }
+  }
+}
+
+function parseCSV(txt){
+  var ls=txt.trim().split(/\r?\n/).filter(l=>l.trim());if(ls.length<2)return[];
+  var raw=ls[0].split(',').map(h=>h.trim().replace(/[""]/g,''));
+  var nh=raw.map(h=>h.toLowerCase().replace(/[\s\-]+/g,'_').replace(/[^a-z0-9_]/g,''));
+  var fi=ks=>nh.findIndex(h=>ks.some(k=>h===k||h.includes(k)));
+  var iv=fi(['venue','location','store','site']),id_=fi(['date','day','transaction_date','trading']),
+      is_=fi(['sales','revenue','total_sales','gross']),ig=fi(['guests','covers','customers','transactions','pax']),
+      ia=fi(['average_transaction_value','atv','avg_transaction','avg_txn','avg_check']);
+  var rows=[];
+  for(var i=1;i<ls.length;i++){
+    var vs=ls[i].split(',').map(v=>v.trim().replace(/[""]/g,''));
+    var g=idx=>idx>=0?(vs[idx]||''):'';
+    var dt=pd(g(id_));if(!dt||isNaN(dt))continue;
+    var s=parseFloat(g(is_))||0,gu=parseFloat(g(ig))||0,at=parseFloat(g(ia))||0;
+    if(!at&&gu&&s)at=s/gu;
+    rows.push({venue:g(iv)||'Unknown',date:dt,dateStr:iso(dt),sales:s,guests:gu,atv:at,dow:dt.getDay()});
+  }
+  return rows.sort((a,b)=>a.date-b.date);
+}
+
+function getAgg(ven){
+  ven=ven===undefined?CRV:ven;
+  var src=ven==='__all__'?AR:AR.filter(r=>r.venue===ven),bd={};
+  src.forEach(({dateStr,sales,guests,atv,dow})=>{
+    if(!bd[dateStr])bd[dateStr]={sales:0,guests:0,atvS:0,atvN:0,dow};
+    bd[dateStr].sales+=sales;bd[dateStr].guests+=guests;bd[dateStr].atvS+=atv;bd[dateStr].atvN++;
+  });
+  return Object.entries(bd).sort(([a],[b])=>a.localeCompare(b))
+    .map(([ds,v])=>({dateStr:ds,sales:v.sales,guests:v.guests,atv:v.atvN?v.atvS/v.atvN:0,dow:v.dow}));
+}
+
+function getVMs(ven){
+  if(ven==='__all__')return Object.values(VM).filter(m=>m.city);
+  return VM[ven]&&VM[ven].city?[VM[ven]]:[];
+}
+function getTempForDate(ds,vms){
+  var ts=vms.map(vm=>{
+    var t=WBC[vm.city]?.[ds]?.tMax;
+    if(t==null){var d=new Date(ds+'T00:00:00'),doy=Math.floor((d-new Date(d.getFullYear(),0,0))/86400000),wd=WBC[vm.city]||{},byDOY={};Object.entries(wd).forEach(([s,{tMax}])=>{if(tMax==null)return;var d2=new Date(s+'T00:00:00'),dy=Math.floor((d2-new Date(d2.getFullYear(),0,0))/86400000);if(!byDOY[dy])byDOY[dy]=[];byDOY[dy].push(tMax)});t=(byDOY[doy]&&byDOY[doy].length)?avgs(byDOY[doy]):null}
+    return t;
+  }).filter(t=>t!=null);
+  return ts.length?avgs(ts):null;
+}
+function estTempSens(agg,vms){
+  if(!vms.length)return 0;
+  var pairs=agg.map(r=>{var t=getTempForDate(r.dateStr,vms);return t!=null?{s:r.sales,t}:null}).filter(Boolean);
+  if(pairs.length<14)return 0;
+  var sx=pairs.map(p=>p.t),sy=pairs.map(p=>p.s),mx=avgs(sx),my=avgs(sy),stx=stdv(sx),sty=stdv(sy),num=0;
+  pairs.forEach(p=>num+=(p.t-mx)*(p.s-my));
+  return Math.max(-0.4,Math.min(0.4,(num/(pairs.length*stx*sty))*0.25));
+}
+function getMthMultiplier(ds,vms){
+  // Returns the average monthly multiplier for this date across all relevant venues
+  if(!vms||!vms.length)return 1;
+  var month=new Date(ds+'T00:00:00').getMonth(); // 0=Jan, 11=Dec
+  var mults=vms.map(function(vm){
+    // vm might be a VM entry directly or a city-keyed object
+    var venEntry=vm.mthMults?vm:null;
+    if(!venEntry){
+      // look up by city
+      var matched=Object.values(VM).filter(function(v){return v.city===vm.city&&v.mthMults;});
+      if(matched.length)venEntry=matched[0];
+    }
+    return venEntry&&venEntry.mthMults&&venEntry.mthMults[month]!=null?venEntry.mthMults[month]:1.0;
+  });
+  return avgs(mults);
+}
+
+function getAdj(ds,vms,ts,tstat){
+  var factor=1;
+  // Temperature adjustment
+  if(vms.length&&ts!==0){var t=getTempForDate(ds,vms);if(t!=null){var dev=(t-tstat.mean)/tstat.std;factor*=Math.max(0.6,Math.min(1.8,1+ts*dev));}}
+  // Holiday adjustment
+  if(HS.has(ds)){var hm=vms.length?avgs(vms.map(function(vm){return parseFloat(vm.holidayMult||1.1);})):1.1;factor*=hm;}
+  // Monthly multiplier from venue mapping CSV
+  factor*=getMthMultiplier(ds,vms);
+  // Custom events
+  EVS.forEach(function(ev){if(ev.date===ds&&(!ev.venueFilter||ev.venueFilter===CRV||CRV==='__all__')){factor*=1+(parseFloat(ev.impact)||0)/100;}});
+  return factor;
+}
+
+
+// ── PER-VENUE MULTI-FORECAST ──────────────────────────────────────────────
+async function runForecastMulti(fcDays, url){
+  var venues=[...new Set(AR.map(r=>r.venue))].filter(v=>v&&v.trim()).sort();
+  var nV=venues.length;
+  var timeout=Math.max(180000, nV*65000, 5400000); // minimum 90 min for large networks
+  var localMeta={};
+  // Deduplicate: if same venue appears multiple times in AR (e.g. duplicate CSV rows),
+  // aggregate them before sending to API
+  var venueAggCache={};
+  venues.forEach(function(ven){
+    var agg=getAgg(ven);
+    venueAggCache[ven]=agg;
+  });
+
+  var apiPayload=venues.map(function(ven){
+    var agg=venueAggCache[ven]||getAgg(ven);
+    var vms=getVMs(ven);
+    var ts=estTempSens(agg,vms);
+    var allT=agg.map(r=>getTempForDate(r.dateStr,vms)).filter(t=>t!=null);
+    var tstat={mean:allT.length?avgs(allT):20,std:allT.length?stdv(allT):5};
+    var wxFlat={};
+    vms.forEach(function(vm){
+      if(WBC[vm.city])Object.entries(WBC[vm.city]).forEach(function(e){wxFlat[e[0]]={tMax:e[1].tMax,pr:e[1].pr};});
+    });
+    var lastD=agg.length?new Date(agg[agg.length-1].dateStr+'T00:00:00'):new Date();
+    localMeta[ven]={agg:agg,vms:vms,ts:ts,tstat:tstat,lastD:lastD};
+    return{name:ven,dates:agg.map(r=>r.dateStr),values:agg.map(r=>r[CM]),
+           forecast_days:fcDays,holiday_dates:[...HS],weather_map:wxFlat};
+  });
+
+  setSt('fcSt','busy','<span class="spin">(*)</span>&nbsp;Running Prophet for '+nV+' venues independently — est. '+Math.ceil(nV*40/60)+' min...');
+
+  var res=await fetch(url+'/forecast-multi',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({venues:apiPayload}),
+    signal:AbortSignal.timeout(timeout)
+  });
+  var data=await res.json();
+  if(data.error)throw new Error(data.error);
+
+  var fcDateSet=null;
+  var totalFc={},totalLo={},totalHi={},totalFitted={};
+  var modelsSeen=new Set(),rmseSum=0,rmseN=0;
+
+  venues.forEach(function(ven){
+    var vResult=data.venues[ven];
+    if(!vResult||vResult.error){console.warn('No result for',ven,vResult);return;}
+    var meta=localMeta[ven];
+    var agg=meta.agg,vms=meta.vms,ts=meta.ts,tstat=meta.tstat,lastD=meta.lastD;
+
+    var adjFc=vResult.forecast.map(function(v,i){
+      var ds=vResult.forecast_dates[i];
+      var adj=getAdj(ds,vms,ts,tstat);
+      return{fc:v*adj,lo:(vResult.lower_90[i]||v)*adj,hi:(vResult.upper_90[i]||v)*adj,
+             adj:adj,ds:ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)};
+    });
+
+    fcResultByVenue[ven]={agg:agg,adjFc:adjFc,d:vResult,fcDays:fcDays,vms:vms,ts:ts,tstat:tstat,lastD:lastD};
+
+    if(!fcDateSet)fcDateSet=vResult.forecast_dates;
+    vResult.forecast_dates.forEach(function(ds,i){
+      totalFc[ds]=(totalFc[ds]||0)+adjFc[i].fc;
+      totalLo[ds]=(totalLo[ds]||0)+adjFc[i].lo;
+      totalHi[ds]=(totalHi[ds]||0)+adjFc[i].hi;
+    });
+    vResult.fitted.forEach(function(v,i){totalFitted[i]=(totalFitted[i]||0)+(v||0);});
+    if(vResult.model)modelsSeen.add(vResult.model.split(' ')[0]);
+    rmseSum+=vResult.rmse||0;rmseN++;
+  });
+
+  if(fcDateSet){
+    var allAgg=getAgg('__all__');
+    var allVms=getVMs('__all__');
+    var allTs=estTempSens(allAgg,allVms);
+    var allT2=allAgg.map(r=>getTempForDate(r.dateStr,allVms)).filter(t=>t!=null);
+    var allTstat={mean:allT2.length?avgs(allT2):20,std:allT2.length?stdv(allT2):5};
+    var allLastD=allAgg.length?new Date(allAgg[allAgg.length-1].dateStr+'T00:00:00'):new Date();
+    var allAdjFc=fcDateSet.map(function(ds){
+      return{fc:totalFc[ds]||0,lo:totalLo[ds]||0,hi:totalHi[ds]||0,adj:1,ds:ds,t:getTempForDate(ds,allVms),isHol:HS.has(ds)};
+    });
+    var avgRmse=rmseN?rmseSum/rmseN:0;
+    var allMean=avgs(allAgg.map(r=>r[CM]))||1;
+    var modelLabel=[...modelsSeen].join('+')+' (per venue)';
+    fcResultByVenue['__all__']={
+      agg:allAgg,adjFc:allAdjFc,
+      d:{model:modelLabel,rmse:avgRmse,cv:avgRmse/allMean,
+         fitted:allAgg.map(function(_,i){return totalFitted[i]||0;}),
+         forecast_dates:fcDateSet,
+         forecast:fcDateSet.map(function(ds){return totalFc[ds]||0;}),
+         lower_90:fcDateSet.map(function(ds){return totalLo[ds]||0;}),
+         upper_90:fcDateSet.map(function(ds){return totalHi[ds]||0;}),
+         components:{}},
+      fcDays:fcDays,vms:allVms,ts:allTs,tstat:allTstat,lastD:allLastD
+    };
+  }
+  return data;
+}
+
+var fcRunning=false;
+async function runForecast(){
+  var agg=getAgg(CRV);if(!agg.length)return;
+  var fcNval=Math.max(1,Math.min(730,+document.getElementById('fcN').value||30));
+  var fcDays=CU==='months'?fcNval*30:fcNval;
+  var url=getApiUrl();
+  var vms=getVMs(CRV);
+  var wxFlat={};
+  vms.forEach(vm=>{if(WBC[vm.city])Object.entries(WBC[vm.city]).forEach(([ds,v])=>{wxFlat[ds]={tMax:v.tMax,pr:v.pr}})});
+  var ts=estTempSens(agg,vms);
+  var allT=agg.map(r=>getTempForDate(r.dateStr,vms)).filter(t=>t!=null);
+  var tstat={mean:allT.length?avgs(allT):20,std:allT.length?stdv(allT):5};
+  var lastD=new Date(agg[agg.length-1].dateStr+'T00:00:00');
+  var mL={sales:'Sales ($)',guests:'Guests',atv:'Avg Txn ($)'};
+  var tS=agg.reduce((s,r)=>s+r.sales,0),tG=agg.reduce((s,r)=>s+r.guests,0);
+  var avgA=tG?tS/tG:avgs(agg.map(r=>r.atv));
+  document.getElementById('kTS').textContent=fm(tS,'$');
+  document.getElementById('kD').textContent=agg.length+' days of data';
+  document.getElementById('kG').textContent=fm(tG);
+  document.getElementById('kA').textContent='$'+(avgA||0).toFixed(2);
+  document.getElementById('kDA').textContent=fm(tS/agg.length,'$');
+  document.getElementById('cTtl').textContent=mL[CM]+' n/a historical & forecast';
+  if(!url){setSt('fcSt','err','(!) No API URL set n/a enter your Render URL above and click Test.');renderHWFallback(agg,fcDays,lastD,vms,ts,tstat);return;}
+  if(fcRunning)return;
+  fcRunning=true;document.getElementById('runBtn').disabled=true;
+  try{
+    // ALL VENUES: run Prophet independently per venue
+    if(CRV==='__all__'){
+      try{
+        await runForecastMulti(fcDays,url);
+        var r2=fcResultByVenue['__all__'];
+        if(!r2)throw new Error('No multi result');
+        lastFcResult=r2;
+        var d2=r2.d,af2=r2.adjFc;
+        var ft2=af2.reduce(function(s,p){return s+p.fc;},0);
+        var fl2=af2.reduce(function(s,p){return s+p.lo;},0);
+        var fh2=af2.reduce(function(s,p){return s+p.hi;},0);
+        var pfx2=CM==='guests'?'':'$';
+        setSt('fcSt','ok','(ok) '+d2.model+'  avg RMSE='+d2.rmse.toFixed(2)+' <span style="background:#34d39918;color:#34d399;border:1px solid #34d39928;padding:2px 7px;border-radius:3px;font-size:9px">Per-venue forecasts</span>');
+        document.getElementById('saveBtn').style.display='';
+        document.getElementById('mBdg').textContent=d2.model;
+        document.getElementById('mInfo').innerHTML='<span class="mp">avg RMSE=<b>'+d2.rmse.toFixed(2)+'</b></span><span class="mp">per venue</span>';
+        document.getElementById('kF').textContent=CM==='guests'?fm(ft2):fm(ft2,'$');
+        document.getElementById('kFN').textContent=fcNval+' '+CU+' . '+fm(fl2,pfx2)+'-'+fm(fh2,pfx2)+' 90%CI';
+        document.getElementById('adjBdg').style.display='none';
+        document.getElementById('adjInfo').style.display='none';
+        drawMainChart(r2.agg,d2,af2,r2.vms);drawDOW(r2.agg);
+        fcRunning=false;document.getElementById('runBtn').disabled=false;
+        return;
+      }catch(e2){
+        setSt('fcSt','busy','<span class="spin">(*)</span>&nbsp;Per-venue failed ('+e2.message+'), trying aggregated...');
+      }
+    }
+    // SINGLE VENUE or fallback
+    setSt('fcSt','busy','<span class="spin">(*)</span>&nbsp;Running forecast ('+fcDays+' days)...');
+    var res=await fetch(url+'/forecast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dates:agg.map(r=>r.dateStr),values:agg.map(r=>r[CM]),forecast_days:fcDays,holiday_dates:[...HS],weather_map:wxFlat}),signal:AbortSignal.timeout(90000)});
+    var d=await res.json();if(d.error)throw new Error(d.error);
+    var adjFc=d.forecast.map((v,i)=>{var ds=d.forecast_dates[i],adj=getAdj(ds,vms,ts,tstat);return{fc:v*adj,lo:(d.lower_90[i]||v)*adj,hi:(d.upper_90[i]||v)*adj,adj,ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)}});
+    lastFcResult={agg,adjFc,d,fcDays,vms,ts,tstat,lastD};fcResultByVenue[CRV]=lastFcResult;
+    var warns=d.warnings||[],wHtml=warns.length?' n/a <span style="color:var(--m)">'+warns[warns.length-1]+'</span>':'';
+    setSt('fcSt','ok','(ok) '+d.model+'  RMSE='+d.rmse?.toFixed(2)+'  CV='+((d.cv||0)*100).toFixed(1)+'%'+wHtml);
+    document.getElementById('saveBtn').style.display='';
+    document.getElementById('mBdg').textContent=d.model;
+    document.getElementById('mInfo').innerHTML='<span class="mp">RMSE=<b>'+(d.rmse||0).toFixed(2)+'</b></span><span class="mp">CV=<b>'+((d.cv||0)*100).toFixed(1)+'%</b></span>';
+    var hasAdj=vms.some(vm=>WBC[vm.city])||HS.size||EVS.length;
+    document.getElementById('adjBdg').style.display=hasAdj?'':'none';
+    var ai=document.getElementById('adjInfo');
+    if(hasAdj){ai.style.display='';var pts=[];if(vms.some(vm=>WBC[vm.city]))pts.push('<b>Temperature</b> (sensitivity='+ts.toFixed(3)+')');if(HS.size)pts.push('<b>'+HS.size+' public holidays</b>');if(EVS.length)pts.push('<b>'+EVS.length+' custom events</b>');var adjN=adjFc.filter(p=>Math.abs(p.adj-1)>0.01).length;ai.innerHTML='<b>Adjustments applied:</b> '+pts.join(' . ')+' n/a '+adjN+' of '+fcDays+' forecast days adjusted';}else ai.style.display='none';
+    var fTot=adjFc.reduce((s,p)=>s+p.fc,0),fLo=adjFc.reduce((s,p)=>s+p.lo,0),fHi=adjFc.reduce((s,p)=>s+p.hi,0);
+    var pfx=CM==='guests'?'':'$';
+    document.getElementById('kF').textContent=CM==='guests'?fm(fTot):fm(fTot,'$');
+    document.getElementById('kFN').textContent=fcNval+' '+CU+' . '+fm(fLo,pfx)+'-'+fm(fHi,pfx)+' 90%CI';
+    drawMainChart(agg,d,adjFc,vms);drawDOW(agg);drawComponents(d,agg);
+  }catch(e){
+    setSt('fcSt','err','(x) API error: '+e.message+'. Showing Holt-Winters offline forecast.');
+    renderHWFallback(agg,fcDays,lastD,vms,ts,tstat);
+  }finally{fcRunning=false;document.getElementById('runBtn').disabled=false;}
+}
+
+function renderHWFallback(agg,fcDays,lastD,vms,ts,tstat){
+  var y=agg.map(r=>r[CM]),M=7,alpha=0.3,beta=0.05,gamma=0.6;
+  var n=y.length,L=avgs(y.slice(0,M))||1,T=0;
+  for(var i=0;i<M&&i+M<n;i++)T+=(y[M+i]-y[i])/(M*M);
+  var S=y.slice(0,M).map(v=>L?v/L:1),fi=[];
+  for(var t=0;t<n;t++){var si=t%M,pL=L;fi.push((L+T)*(S[si]||1));L=alpha*(y[t]/(S[si]||1))+(1-alpha)*(L+T);T=beta*(L-pL)+(1-beta)*T;S[si]=gamma*(y[t]/(L||1))+(1-gamma)*(S[si]||1);}
+  var fc=[],lo=[],hi=[],fdates=[];
+  var rmse=Math.sqrt(y.reduce((s,v,i)=>s+(v-fi[i])**2,0)/n)||1,cv=rmse/(avgs(y)||1);
+  for(var i=0;i<fcDays;i++){var v=Math.max(0,(L+(i+1)*T)*(S[(n+i)%M]||1)),ds=iso(addD(lastD,i+1)),adj=getAdj(ds,vms,ts,tstat),va=v*adj;fc.push(va);lo.push(Math.max(0,va*(1-1.645*cv)));hi.push(va*(1+1.645*cv));fdates.push(ds);}
+  var adjFc=fdates.map((ds,i)=>({fc:fc[i],lo:lo[i],hi:hi[i],adj:1,ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)}));
+  var fakeD={model:'Holt-Winters (offline)',rmse,cv,fitted:fi,forecast_dates:fdates,forecast:fc,lower_90:lo,upper_90:hi,components:{}};
+  lastFcResult={agg,adjFc,d:fakeD,fcDays,vms,ts,tstat,lastD};fcResultByVenue[CRV]=lastFcResult;
+  document.getElementById('mBdg').textContent='Holt-Winters (offline)';
+  document.getElementById('mInfo').innerHTML='<span class="mp">RMSE=<b>'+rmse.toFixed(2)+'</b></span>';
+  document.getElementById('kF').textContent=CM==='guests'?fm(fc.reduce((s,v)=>s+v,0)):fm(fc.reduce((s,v)=>s+v,0),'$');
+  document.getElementById('kFN').textContent=document.getElementById('fcN').value+' '+CU;
+  drawMainChart(agg,fakeD,adjFc,vms);drawDOW(agg);
+}
+
+var GC='rgba(255,255,255,0.06)',TC='rgba(197,205,232,0.5)';
+var hlPlugin={id:'hl',beforeDraw(chart){
+  var ctx=chart.ctx,ca=chart.chartArea,xs=chart.scales.x;if(!xs)return;
+  ctx.save();
+  chart._hlLabels&&chart._hlLabels.forEach((l,i)=>{if(!HS.has(l))return;var px=xs.getPixelForValue(i);if(px<ca.left||px>ca.right)return;ctx.beginPath();ctx.strokeStyle='rgba(245,158,11,0.28)';ctx.lineWidth=1;ctx.setLineDash([2,3]);ctx.moveTo(px,ca.top);ctx.lineTo(px,ca.bottom);ctx.stroke();});
+  if(chart._nowIdx!=null){var px=xs.getPixelForValue(chart._nowIdx);ctx.beginPath();ctx.strokeStyle='rgba(197,205,232,0.2)';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.moveTo(px,ca.top);ctx.lineTo(px,ca.bottom);ctx.stroke();ctx.fillStyle='rgba(197,205,232,0.4)';ctx.font='10px DM Mono,monospace';ctx.setLineDash([]);ctx.fillText('Now',px+3,ca.top+13);}
+  ctx.restore();
+}};
+
+function drawMainChart(agg,d,adjFc,vms){
+  var hL=agg.map(r=>r.dateStr),fL=d.forecast_dates||[],aL=[...hL,...fL];
+  var step=Math.max(1,Math.floor(aL.length/12));
+  var mL={sales:'Sales ($)',guests:'Guests',atv:'Avg Txn ($)'};
+  var actD=aL.map(l=>{var f=agg.find(r=>r.dateStr===l);return f?f[CM]:null});
+  var fitD=aL.map((l,i)=>i<hL.length?(d.fitted[i]??null):null);
+  var hwbD=aL.map(l=>{var i=fL.indexOf(l);return i>=0?(d.forecast[i]??null):null});
+  var adjD=aL.map(l=>{var i=fL.indexOf(l);return i>=0?adjFc[i].fc:null});
+  var hiD=aL.map(l=>{var i=fL.indexOf(l);return i>=0?adjFc[i].hi:null});
+  var loD=aL.map(l=>{var i=fL.indexOf(l);return i>=0?adjFc[i].lo:null});
+  var hasWx=vms.some(vm=>WBC[vm.city]);
+  var tD=hasWx?aL.map(ds=>getTempForDate(ds,vms)):null;
+  if(tD&&!tD.some(t=>t!=null))tD=null;
+  var dsets=[
+    {label:'Upper CI',data:hiD,borderWidth:0,fill:'+1',backgroundColor:'rgba(245,158,11,0.1)',pointRadius:0,tension:.3,spanGaps:false,order:6,yAxisID:'y'},
+    {label:'Lower CI',data:loD,borderWidth:0,fill:false,pointRadius:0,tension:.3,spanGaps:false,order:7,yAxisID:'y'},
+    {label:'Model Baseline',data:hwbD,borderColor:'rgba(59,130,246,0.3)',borderWidth:1.5,borderDash:[5,4],fill:false,pointRadius:0,tension:.3,spanGaps:false,order:4,yAxisID:'y'},
+    {label:'Adj. Forecast',data:adjD,borderColor:'#f59e0b',borderWidth:2.5,borderDash:[8,4],fill:false,pointRadius:0,tension:.3,spanGaps:false,order:3,yAxisID:'y'},
+    {label:'Fitted',data:fitD,borderColor:'rgba(59,130,246,0.38)',borderWidth:1.2,borderDash:[3,3],fill:false,pointRadius:0,tension:.3,spanGaps:false,order:2,yAxisID:'y'},
+    {label:'Actual',data:actD,borderColor:'#3b82f6',borderWidth:2,fill:false,pointRadius:0,tension:.3,spanGaps:false,order:1,yAxisID:'y'},
+  ];
+  if(tD)dsets.push({label:'Temp degC',data:tD,borderColor:'rgba(52,211,153,0.65)',borderWidth:1.5,fill:true,backgroundColor:'rgba(52,211,153,0.05)',pointRadius:0,tension:.4,spanGaps:true,order:8,yAxisID:'yT',borderDash:[2,2]});
+  if(MC)MC.destroy();
+  var ctx=document.getElementById('MC').getContext('2d');
+  var scales={x:{grid:{color:GC},ticks:{color:TC,font:{size:9,family:'DM Mono,monospace'},maxTicksLimit:12,callback:(v,i)=>i%step===0?fd(aL[i]):''}},y:{grid:{color:GC},title:{display:true,text:mL[CM],color:TC,font:{size:9}},ticks:{color:TC,font:{size:9,family:'DM Mono,monospace'},callback:v=>CM!=='guests'?'$'+(v>=1000?(v/1000).toFixed(0)+'k':v.toFixed(0)):v.toFixed(0)}}};
+  if(tD)scales.yT={position:'right',grid:{display:false},ticks:{color:'rgba(52,211,153,0.6)',font:{size:9},callback:v=>v+'deg'},title:{display:false}};
+  MC=new Chart(ctx,{type:'line',data:{labels:aL,datasets:dsets},plugins:[hlPlugin],options:{responsive:true,animation:{duration:350},interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:18,font:{size:9,family:'DM Mono,monospace'},color:TC,padding:9,filter:i=>!['Upper CI','Lower CI'].includes(i.text)}},tooltip:{callbacks:{title:([i])=>fd(i.label)+(HS.has(i.label)?' ':'')+' '+i.label,label:i=>{var v=i.raw;if(v==null||['Upper CI','Lower CI'].includes(i.dataset.label))return null;var p=i.dataset.label==='Temp degC'?'':CM!=='guests'?'$':'';return i.dataset.label+': '+p+v.toFixed(CM==='guests'?0:2)+(i.dataset.label==='Temp degC'?'degC':'')}}}},scales}});
+  MC._hlLabels=aL;MC._nowIdx=hL.length-1;
+}
+
+function drawDOW(agg){
+  var acc=Array.from({length:7},()=>({sum:0,n:0}));
+  agg.forEach(r=>{acc[r.dow].sum+=r[CM];acc[r.dow].n++});
+  var dov=acc.map((a,i)=>({day:DOW[i],avg:a.n?a.sum/a.n:0,n:a.n})),mx=Math.max(...dov.map(d=>d.avg),1);
+  document.getElementById('dowG').innerHTML=dov.map(d=>'<div class="dcell"><div class="ddl">'+d.day+'</div><div class="dv'+(d.avg===mx?' hi':'')+'">'+( CM!=='guests'?'$':'')+( d.avg>=1000?(d.avg/1000).toFixed(1)+'k':Math.round(d.avg))+'</div><div class="dbar"><div class="dfill" style="width:'+(d.avg/mx*100).toFixed(0)+'%"></div></div><div style="font-size:8px;color:var(--m);font-family:var(--fm);margin-top:3px">'+d.n+'d</div></div>').join('');
+  if(DC)DC.destroy();
+  var ctx=document.getElementById('DC').getContext('2d');
+  var mL={sales:'Sales ($)',guests:'Guests',atv:'Avg Txn ($)'};
+  DC=new Chart(ctx,{type:'bar',data:{labels:dov.map(d=>d.day),datasets:[{label:'Avg '+mL[CM],data:dov.map(d=>d.avg),backgroundColor:dov.map(d=>d.avg===mx?'#f59e0b':'rgba(59,130,246,0.65)'),borderRadius:4}]},options:{responsive:true,animation:{duration:200},plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>CM!=='guests'?'$'+i.raw.toFixed(2):i.raw.toFixed(0)}}},scales:{x:{grid:{color:GC},ticks:{color:TC,font:{size:10}}},y:{grid:{color:GC},ticks:{color:TC,font:{size:9},callback:v=>CM!=='guests'?'$'+(v>=1000?(v/1000).toFixed(0)+'k':v):v}}}}});
+}
+
+function drawComponents(d,agg){
+  compCharts.forEach(c=>c.destroy());compCharts=[];
+  var comps=d.components||{};
+  if(!Object.keys(comps).length){
+    document.getElementById('compsCnt').innerHTML='<div style="text-align:center;padding:48px;color:var(--m);font-family:var(--fm)">No components. Run with Prophet to see decomposition.</div>';
+    return;
+  }
+  var hDates=agg.map(r=>r.dateStr),fDates=d.forecast_dates||[];
+  document.getElementById('compsCnt').innerHTML='<div class="comp-grid" id="compGrid"></div>';
+  var grid=document.getElementById('compGrid');
+  Object.entries(comps).forEach(function(entry){
+    var name=entry[0],data=entry[1];
+    if(!data)return;
+    var histVals=data.hist||[],fcVals=data.forecast||[];
+    var allLabels=hDates.concat(fDates);
+    var allVals=histVals.concat(Array(fDates.length).fill(null));
+    var fcAllVals=Array(hDates.length).fill(null).concat(fcVals);
+    var id='comp_'+name;
+    var colors={trend:'#3b82f6',weekly:'#f59e0b',yearly:'#34d399',holidays:'#f87171'};
+    var col=colors[name]||'#c5cde8';
+    grid.innerHTML+='<div class="cc" style="margin-bottom:0"><div class="chdr"><span class="ct">'+name+' component</span><span class="bdg b">Prophet</span></div><canvas id="'+id+'" style="max-height:150px"></canvas></div>';
+    setTimeout(function(){
+      var el=document.getElementById(id);
+      if(!el)return;
+      var ctx=el.getContext('2d');
+      if(!ctx)return;
+      var step=Math.max(1,Math.floor(allLabels.length/10));
+      var c=new Chart(ctx,{
+        type:'line',
+        data:{labels:allLabels,datasets:[
+          {label:name+' (hist)',data:allVals,borderColor:col,borderWidth:1.5,fill:true,backgroundColor:col+'18',pointRadius:0,tension:0.4,spanGaps:false},
+          {label:name+' (fc)',data:fcAllVals,borderColor:col,borderWidth:2,borderDash:[6,4],fill:false,pointRadius:0,tension:0.4,spanGaps:false}
+        ]},
+        options:{
+          responsive:true,animation:{duration:200},
+          plugins:{legend:{display:false},tooltip:{callbacks:{
+            title:function(items){return fd(items[0].label);},
+            label:function(i){return i.dataset.label+': '+(i.raw!=null?i.raw.toFixed(4):'none');}
+          }}},
+          scales:{
+            x:{grid:{color:GC},ticks:{color:TC,font:{size:8},maxTicksLimit:10,callback:function(v,i){return i%step===0?fd(allLabels[i]):''}}},
+            y:{grid:{color:GC},ticks:{color:TC,font:{size:9}}}
+          }
+        }
+      });
+      compCharts.push(c);
+    },50);
+  });
+}
+
+function drawWxChart(cityList){
+  var vms=cityList.map(c=>({city:c}));
+  var agg=getAgg('__all__'),hs=agg[0]?.dateStr;if(!hs)return;
+  var end=iso(addD(new Date(),17)),dates=[],d=new Date(hs+'T00:00:00'),ed=new Date(end+'T00:00:00');
+  while(d<=ed){dates.push(iso(d));d=addD(d,1);}
+  var temps=dates.map(ds=>{var ts=vms.map(vm=>WBC[vm.city]?.[ds]?.tMax).filter(t=>t!=null);return ts.length?avgs(ts):null});
+  var prec=dates.map(ds=>{var ps=vms.map(vm=>WBC[vm.city]?.[ds]?.pr).filter(p=>p!=null);return ps.length?avgs(ps):null});
+  if(!temps.some(t=>t!=null))return;
+  document.getElementById('wxCard').style.display='';
+  var step=Math.max(1,Math.floor(dates.length/12));
+  if(WXC)WXC.destroy();
+  var ctx=document.getElementById('WXC').getContext('2d');
+  WXC=new Chart(ctx,{type:'bar',data:{labels:dates,datasets:[{label:'Precip (mm)',data:prec,backgroundColor:'rgba(59,130,246,0.3)',borderColor:'rgba(59,130,246,0.5)',borderWidth:1,yAxisID:'yp',order:2},{label:'Max Temp degC',data:temps,borderColor:'#34d399',borderWidth:2,fill:true,backgroundColor:'rgba(52,211,153,0.07)',pointRadius:0,tension:.4,spanGaps:true,type:'line',yAxisID:'yt',order:1}]},options:{responsive:true,animation:{duration:200},plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:14,font:{size:9},color:TC,padding:8}},tooltip:{callbacks:{title:([i])=>fd(i.label),label:i=>i.dataset.label+': '+(i.raw!=null?i.raw.toFixed(1):'n/a')+(i.dataset.label.includes('degC')?'degC':'mm')}}},scales:{x:{grid:{color:GC},ticks:{color:TC,font:{size:9},maxTicksLimit:12,callback:(v,i)=>i%step===0?fd(dates[i]):''}},yt:{grid:{color:GC},ticks:{color:'rgba(52,211,153,0.6)',font:{size:9},callback:v=>v+'deg'},position:'left'},yp:{grid:{display:false},ticks:{color:'rgba(59,130,246,0.6)',font:{size:9},callback:v=>v+'mm'},position:'right'}}}});
+}
+
+async function fetchAll(){
+  var vms=Object.values(VM).filter(m=>m.city&&m.lat),cities=new Map();
+  vms.forEach(vm=>{if(!cities.has(vm.city))cities.set(vm.city,{lat:vm.lat,lon:vm.lon,cc:vm.cc||'AU'})});
+  if(!cities.size){document.getElementById('fSt').textContent='(!) Map cities first';return}
+  var agg=getAgg('__all__'),hs=agg[0]?.dateStr,he=agg[agg.length-1]?.dateStr;
+  if(!hs){document.getElementById('fSt').textContent='(!) No sales data';return}
+  document.getElementById('fSt').textContent='Fetching weather...';
+  for(var[city,{lat,lon,cc}] of cities){
+    setWChip(city,'busy');
+    try{
+      var hist=await fetch('https://archive-api.open-meteo.com/v1/archive?latitude='+lat+'&longitude='+lon+'&start_date='+hs+'&end_date='+he+'&daily=temperature_2m_max,precipitation_sum&timezone=auto').then(r=>r.json());
+      var fcwx=await fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&daily=temperature_2m_max,precipitation_sum&forecast_days=16&timezone=auto').then(r=>r.json());
+      WBC[city]={};
+      if(hist.daily?.time)hist.daily.time.forEach((t,i)=>{WBC[city][t]={tMax:hist.daily.temperature_2m_max[i],pr:hist.daily.precipitation_sum[i]}});
+      if(fcwx.daily?.time)fcwx.daily.time.forEach((t,i)=>{WBC[city][t]={tMax:fcwx.daily.temperature_2m_max[i],pr:fcwx.daily.precipitation_sum[i]}});
+      setWChip(city,'ok',city+' ('+Object.keys(WBC[city]).length+'d)');
+    }catch(e){setWChip(city,'err',city+' (x)')}
+  }
+  document.getElementById('fSt').textContent='Fetching holidays...';
+  var years=[...new Set(agg.map(r=>new Date(r.dateStr+'T00:00:00').getFullYear()))];
+  years.push(new Date().getFullYear(),new Date().getFullYear()+1);years=[...new Set(years)];
+  var ccs=[...new Set([...cities.values()].map(c=>c.cc))];
+  for(var cc2 of ccs){for(var yr of years){try{var h=await fetch('https://date.nager.at/api/v3/PublicHolidays/'+yr+'/'+cc2).then(r=>r.ok?r.json():[]);h.forEach(hh=>{if(!HS.has(hh.date)){HS.add(hh.date);HD.push({date:hh.date,name:hh.localName||hh.name,cc:cc2})}});}catch(e){}}}
+  HD.sort((a,b)=>a.date.localeCompare(b.date));
+  document.getElementById('fSt').textContent='(ok) '+cities.size+' cities . '+HS.size+' holidays';
+  renderHolTable();drawWxChart([...cities.keys()]);
+}
+
+function setWChip(city,state,lbl){
+  var row=document.getElementById('wRow'),el=row.querySelector('[data-c="'+CSS.escape(city)+'"]');
+  if(!el){el=document.createElement('div');el.className='wc';el.dataset.c=city;el.innerHTML='<span class="wd"></span><span></span>';row.appendChild(el)}
+  el.className='wc '+(state==='ok'?'ok':state==='busy'?'busy':'err');
+  el.querySelector('span:last-child').textContent=lbl||city;
+}
+
+function renderVT(){
+  var venues=[...new Set(AR.map(r=>r.venue))].sort();
+  var cnts={};AR.forEach(r=>{cnts[r.venue]=(cnts[r.venue]||0)+1});
+  var cityOpts='<option value="">— Select city —</option>'+Object.keys(CITIES).map(c=>'<option value="'+c+'">'+c+'</option>').join('');
+  document.getElementById('vTbd').innerHTML=venues.map(function(v){
+    var vm=VM[v]||{},key='vm_'+v.replace(/[^a-z0-9]/gi,'_');
+    var opts=cityOpts.replace('value="'+(vm.city||'XXXX')+'"','value="'+(vm.city||'')+'" selected');
+    // Build 12 month input cells
+    var mthCells='';
+    for(var mi=0;mi<12;mi++){
+      var mv=vm.mthMults&&vm.mthMults[mi]!=null?vm.mthMults[mi].toFixed(2):'1.00';
+      mthCells+='<td><input type="number" value="'+mv+'" step="0.05" min="0" max="5" onchange="updVMMth(\''+v+'\','+mi+',+this.value)" style="width:48px"></td>';
+    }
+    return '<tr>'
+      +'<td style="font-weight:700;color:#dde1f5;white-space:nowrap;font-size:10px">'+v+'</td>'
+      +'<td><select id="'+key+'_city" onchange="updVM(\''+v+'\',\'city\',this.value)" style="width:120px">'+opts+'</select></td>'
+      +'<td id="'+key+'_s" style="color:var(--m)">'+(vm.state||'—')+'</td>'
+      +'<td id="'+key+'_cc" style="color:var(--m)">'+(vm.cc||'—')+'</td>'
+      +'<td><input type="number" value="'+(vm.holidayMult||1.10)+'" step="0.05" min="0.5" max="3" onchange="updVM(\''+v+'\',\'holidayMult\',+this.value)" style="width:50px"></td>'
+      +'<td><input type="number" value="'+(vm.tempSens!=null?vm.tempSens:'')+'" step="0.01" min="-0.5" max="0.5" placeholder="Auto" onchange="updVM(\''+v+'\',\'tempSens\',this.value?+this.value:null)" style="width:55px"></td>'
+      +mthCells
+      +'<td style="color:var(--m)">'+(cnts[v]||0)+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+function updVMMth(v,mIdx,val){
+  if(!VM[v])VM[v]={holidayMult:1.10,tempSens:null};
+  if(!VM[v].mthMults||VM[v].mthMults.length!==12)VM[v].mthMults=[1,1,1,1,1,1,1,1,1,1,1,1];
+  VM[v].mthMults[mIdx]=val||1;
+}
+function updVM(v,f,val){
+  if(!VM[v])VM[v]={holidayMult:1.10,tempSens:null};
+  if(f==='city'&&val){var cp=CITIES[val];if(cp)Object.assign(VM[v],{city:val,state:cp.s,cc:cp.cc,lat:cp.lat,lon:cp.lon});else VM[v].city=val;var k='vm_'+v.replace(/[^a-z0-9]/gi,'_');['s','cc','lat','lon'].forEach(f2=>{var el=document.getElementById(k+'_'+f2);if(el)el.textContent=f2==='s'?(VM[v].state||'n/a'):f2==='cc'?(VM[v].cc||'n/a'):f2==='lat'?(VM[v].lat?VM[v].lat.toFixed(4):'n/a'):(VM[v].lon?VM[v].lon.toFixed(4):'n/a')});}else VM[v][f]=val;
+}
+
+function dlVenueTemplate(){
+  var mthHdr='Mth 1 Multiplier,Mth 2 Multiplier,Mth 3 Multiplier,Mth 4 Multiplier,Mth 5 Multiplier,Mth 6 Multiplier,Mth 7 Multiplier,Mth 8 Multiplier,Mth 9 Multiplier,Mth 10 Multiplier,Mth 11 Multiplier,Mth 12 Multiplier';
+  var rows=['venue,city,state,country_code,latitude,longitude,holiday_multiplier,temp_sensitivity,'+mthHdr];
+  [...new Set(AR.map(r=>r.venue))].sort().forEach(function(v){
+    var vm=VM[v]||{};
+    var mths=(vm.mthMults&&vm.mthMults.length===12)?vm.mthMults.join(','):'1,1,1,1,1,1,1,1,1,1,1,1';
+    rows.push([v,vm.city||'',vm.state||'',vm.cc||'AU',vm.lat||'',vm.lon||'',vm.holidayMult||1.10,vm.tempSens!=null?vm.tempSens:'',mths].join(','));
+  });
+  dlString(rows.join('\n'),'venue_city_mapping_template.csv','text/csv');
+}
+function exportVenueMapping(){
+  var mthHdr='Mth 1 Multiplier,Mth 2 Multiplier,Mth 3 Multiplier,Mth 4 Multiplier,Mth 5 Multiplier,Mth 6 Multiplier,Mth 7 Multiplier,Mth 8 Multiplier,Mth 9 Multiplier,Mth 10 Multiplier,Mth 11 Multiplier,Mth 12 Multiplier';
+  var rows=['venue,city,state,country_code,latitude,longitude,holiday_multiplier,temp_sensitivity,'+mthHdr];
+  [...new Set(AR.map(r=>r.venue))].sort().forEach(function(v){
+    var vm=VM[v]||{};
+    var mths=(vm.mthMults&&vm.mthMults.length===12)?vm.mthMults.join(','):'1,1,1,1,1,1,1,1,1,1,1,1';
+    rows.push(['"'+esc(v)+'"',vm.city||'',vm.state||'',vm.cc||'',vm.lat||'',vm.lon||'',vm.holidayMult||'',vm.tempSens!=null?vm.tempSens:'',mths].join(','));
+  });
+  dlString(rows.join('\n'),'venue_mapping_'+iso(new Date())+'.csv','text/csv');
+}
+function importVenueMapping(inp){
+  if(!inp.files[0])return;
+  var rd=new FileReader();
+  rd.onload=e=>{
+    var ls=e.target.result.trim().split(/\r?\n/).filter(l=>l.trim());if(ls.length<2){alert('CSV needs header + at least 1 row');return}
+    var raw=ls[0].split(',').map(h=>h.trim().replace(/[""]/g,'')),nh=raw.map(h=>h.toLowerCase().replace(/[\s\-]+/g,'_').replace(/[^a-z0-9_]/g,''));
+    var fi=ks=>nh.findIndex(h=>ks.some(k=>h===k||h.includes(k)));
+    var iv=fi(['venue','name']),ic=fi(['city']),is_=fi(['state']),icc=fi(['country_code','country']),ilat=fi(['latitude','lat']),ilon=fi(['longitude','lon']),ihm=fi(['holiday_multiplier','holiday_mult']),its=fi(['temp_sensitivity','temp_sens']);
+    // Find 12 monthly multiplier columns
+    var iMth=[];
+    for(var mn=1;mn<=12;mn++){
+      var mi=nh.findIndex(function(h){return h.includes('mth')&&(h.includes('_'+mn)||h.endsWith(mn+''));});
+      iMth.push(mi);
+    }
+    var g=(vs,idx)=>idx>=0?(vs[idx]||'').trim().replace(/[""]/g,''):'';
+    var imported=0;
+    for(var i=1;i<ls.length;i++){
+      var vs=ls[i].split(','),vname=g(vs,iv);if(!vname)continue;
+      var city=g(vs,ic),cp=CITIES[city];
+      var mthMults=iMth.map(function(mi){var v=mi>=0?parseFloat(g(vs,mi)):NaN;return isNaN(v)?1.0:v;});
+      VM[vname]={city:city,state:g(vs,is_)||(cp?cp.s:''),cc:g(vs,icc)||(cp?cp.cc:'AU'),lat:parseFloat(g(vs,ilat))||(cp?cp.lat:null),lon:parseFloat(g(vs,ilon))||(cp?cp.lon:null),holidayMult:parseFloat(g(vs,ihm))||1.10,tempSens:g(vs,its)?parseFloat(g(vs,its)):null,mthMults:mthMults};
+      imported++;
+    }
+    alert('Imported '+imported+' venue mappings.');renderVT();
+  };rd.readAsText(inp.files[0]);inp.value='';
+}
+
+function renderHolTable(){
+  var today=iso(new Date());
+  document.getElementById('hTbl').innerHTML=HD.map(h=>'<tr><td>'+fd(h.date)+' <span style="color:var(--m);font-size:9px">'+h.date+'</span></td><td>'+h.name+'</td><td>'+h.cc+'</td><td>'+(h.date>=today?'<span class="bdg g">Upcoming</span>':'<span style="color:var(--m);font-size:9px">Past</span>')+'</td></tr>').join('')||'<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--m)">No holidays loaded.</td></tr>';
+  document.getElementById('hCount').textContent=HD.length+' loaded';
+}
+function renderET(){
+  var venues=[...new Set(AR.map(r=>r.venue))];
+  document.getElementById('eTbl').innerHTML=EVS.length?EVS.map((ev,i)=>'<tr><td><input type="text" value="'+esc(ev.name)+'" onchange="EVS['+i+'].name=this.value" style="width:130px"></td><td><input type="date" value="'+ev.date+'" onchange="EVS['+i+'].date=this.value"></td><td><select onchange="EVS['+i+'].type=this.value">'+ETYPES.map(t=>'<option'+(t===ev.type?' selected':'')+'>'+t+'</option>').join('')+'</select></td><td><input type="number" value="'+ev.impact+'" onchange="EVS['+i+'].impact=+this.value" style="width:55px"> %</td><td><select onchange="EVS['+i+'].venueFilter=this.value"><option value="">All</option>'+venues.map(v=>'<option value="'+v+'"'+(v===ev.venueFilter?' selected':'')+'>'+v+'</option>').join('')+'</select></td><td><button onclick="EVS.splice('+i+',1);renderET()" style="padding:2px 7px;color:var(--r);border-color:#450a0a">(x)</button></td></tr>').join(''):'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--m)">No custom events.</td></tr>';
+}
+function addEv(){EVS.push({name:'Event Name',date:iso(new Date()),type:'Custom',impact:10,venueFilter:''});renderET();}
+function exportHolidays(){var rows=['date,holiday_name,country_code,status'],today=iso(new Date());HD.forEach(h=>rows.push([h.date,'"'+esc(h.name)+'"',h.cc,h.date>=today?'upcoming':'past'].join(',')));dlString(rows.join('\n'),'holidays_'+iso(new Date())+'.csv','text/csv');}
+function exportEvents(){var rows=['event_name,date,type,impact_pct,venue_filter'];EVS.forEach(ev=>rows.push(['"'+esc(ev.name)+'"',ev.date,ev.type,ev.impact,ev.venueFilter||'All'].join(',')));dlString(rows.join('\n'),'custom_events_'+iso(new Date())+'.csv','text/csv');}
+
+function openExport(){
+  if(!AR.length){alert('Import sales data first.');return;}
+  var venues=[...new Set(AR.map(r=>r.venue))].sort();
+  var totalSales=AR.reduce((s,r)=>s+r.sales,0)||1;
+  var venueAvgShare={};
+  venues.forEach(ven=>{venueAvgShare[ven]=AR.filter(r=>r.venue===ven).reduce((s,r)=>s+r.sales,0)/totalSales;});
+  var dowTotals=Array.from({length:7},(_,dow)=>AR.filter(r=>r.dow===dow).reduce((s,r)=>s+r.sales,0)||1);
+  var venueDOWShare={};
+  venues.forEach(ven=>{venueDOWShare[ven]={};for(var dow=0;dow<7;dow++){var vd=AR.filter(r=>r.venue===ven&&r.dow===dow).reduce((s,r)=>s+r.sales,0);venueDOWShare[ven][dow]=vd/dowTotals[dow];}});
+  var venueRatios={};
+  venues.forEach(ven=>{var vRows=AR.filter(r=>r.venue===ven),vS=vRows.reduce((s,r)=>s+r.sales,0)||1,vG=vRows.reduce((s,r)=>s+r.guests,0),vA=vRows.length?vRows.reduce((s,r)=>s+r.atv,0)/vRows.length:0;venueRatios[ven]={gRatio:vG/vS,avgAtv:vA};});
+  var hasPerVenue=venues.every(function(ven){return fcResultByVenue[ven]&&fcResultByVenue[ven].d&&fcResultByVenue[ven].d.forecast_dates;});
+  var allRes=fcResultByVenue['__all__'];
+  if(!hasPerVenue&&(!allRes||!allRes.d||!allRes.d.forecast_dates)){alert('Please select "All Venues (combined)", click Run Forecast, then export.');return;}
+  var d=allRes?allRes.d:{},adjFc=allRes?allRes.adjFc:[],model=d.model||'';
+  var header='venue,date,dow,type,sales,guests,atv,forecast_sales,lower_90,upper_90,forecast_guests,forecast_atv,is_holiday,holiday_name,temp_max_c,adj_factor,model';
+  var lines=[header];
+  AR.forEach(r=>{var holName=HD.find(h=>h.date===r.dateStr)?.name||'',vms=getVMs(r.venue),t=getTempForDate(r.dateStr,vms);lines.push(['"'+esc(r.venue)+'"',r.dateStr,DOW[r.dow],'historical',r.sales.toFixed(2),r.guests.toFixed(0),r.atv.toFixed(2),'','','','','',HS.has(r.dateStr)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'','1.000',''].join(','));});
+  if(hasPerVenue){
+    // Best: use each venue's own Prophet forecast directly
+    venues.forEach(function(ven){
+      var vRes=fcResultByVenue[ven];
+      var vd=vRes.d,vadjFc=vRes.adjFc,vmodel=vd.model||'';
+      var vRows=AR.filter(r=>r.venue===ven);
+      var vS=vRows.reduce((s,r)=>s+r.sales,0)||1;
+      var gRatio=vRows.reduce((s,r)=>s+r.guests,0)/vS;
+      var avgAtv=vRows.length?vRows.reduce((s,r)=>s+r.atv,0)/vRows.length:0;
+      var vms=getVMs(ven);
+      vd.forecast_dates.forEach(function(ds,i){
+        var p=vadjFc[i]||{};
+        var fcS=p.fc||0,fcLo=p.lo||0,fcHi=p.hi||0;
+        var fcG=fcS*gRatio,fcA=avgAtv;
+        var dow=new Date(ds+'T00:00:00').getDay();
+        var holName=HD.find(h=>h.date===ds)?HD.find(h=>h.date===ds).name:'';
+        var t=getTempForDate(ds,vms);
+        lines.push(['"'+esc(ven)+'"',ds,DOW[dow],'forecast','','','',fcS.toFixed(2),fcLo.toFixed(2),fcHi.toFixed(2),fcG.toFixed(0),fcA.toFixed(2),HS.has(ds)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'',(p.adj||1).toFixed(3),'"'+esc(vmodel)+'"','per-venue Prophet'].join(','));
+      });
+    });
+  } else {
+    // Fallback: proportional split
+    var d=allRes.d,adjFc=allRes.adjFc,model=d.model||'';
+    d.forecast_dates.forEach(function(ds,i){
+      var p=adjFc[i]||{},totalFcS=p.fc||0,totalFcLo=p.lo||0,totalFcHi=p.hi||0;
+      var dow=new Date(ds+'T00:00:00').getDay();
+      var holName=HD.find(h=>h.date===ds)?HD.find(h=>h.date===ds).name:'';
+      var shareSum=venues.reduce(function(s,ven){var sh=venueDOWShare[ven]?venueDOWShare[ven][dow]:0;return s+(sh>0?sh:venueAvgShare[ven]);},0)||1;
+      venues.forEach(function(ven){
+        var rawShare=venueDOWShare[ven]?venueDOWShare[ven][dow]:0;
+        var share=(rawShare>0?rawShare:venueAvgShare[ven])/shareSum;
+        var fcS=totalFcS*share,fcLo=totalFcLo*share,fcHi=totalFcHi*share;
+        var fcG=fcS*(venueRatios[ven]?venueRatios[ven].gRatio:0);
+        var fcA=venueRatios[ven]?venueRatios[ven].avgAtv:0;
+        var vms=getVMs(ven),t=getTempForDate(ds,vms);
+        lines.push(['"'+esc(ven)+'"',ds,DOW[dow],'forecast','','','',fcS.toFixed(2),fcLo.toFixed(2),fcHi.toFixed(2),fcG.toFixed(0),fcA.toFixed(2),HS.has(ds)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'',(p.adj||1).toFixed(3),'"'+esc(model)+'"','proportional split'].join(','));
+      });
+    });
+  }
+  var csv=lines.join('\n');
+  document.getElementById('csvTxt').value=csv;
+  document.getElementById('epScope').textContent=venues.length+' venues . '+d.forecast_dates.length+' forecast days . '+(lines.length-1)+' rows';
+  var ep=document.getElementById('ep');ep.style.display='';ep.scrollIntoView({behavior:'smooth'});
+  dlString(csv,'venu_cast_export_'+iso(new Date())+'.csv','text/csv');
+}
+
+function dlCsv(){dlString(document.getElementById('csvTxt').value,'venu_cast_export_'+iso(new Date())+'.csv','text/csv');}
+function copyCsv(){var t=document.getElementById('csvTxt');t.select();try{document.execCommand('copy')}catch(e){navigator.clipboard?.writeText(t.value)}var m=document.getElementById('cpMsg');m.style.display='inline';setTimeout(()=>m.style.display='none',2200);}
+function dlString(str,fname,mime){var a=document.createElement('a');a.href='data:'+mime+';charset=utf-8,'+encodeURIComponent(str);a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);}
+
+function loadData(rows){
+  AR=rows;fcResultByVenue={};
+  var venues=[...new Set(rows.map(r=>r.venue))].sort();
+  venues.forEach(v=>{if(!VM[v])VM[v]={holidayMult:1.10,tempSens:null}});
+  var detected=0;
+  venues.forEach(v=>{if(!VM[v].city){for(var city of Object.keys(CITIES)){if(v.toLowerCase().includes(city.toLowerCase())){Object.assign(VM[v],{city,state:CITIES[city].s,cc:CITIES[city].cc,lat:CITIES[city].lat,lon:CITIES[city].lon});detected++;break;}}}});
+  if(detected){var el=document.getElementById('autoDetLbl');el.style.display='';el.textContent=detected+' '+(detected>1?'cities':'city')+' auto-detected';}
+  var sel=document.getElementById('vSel');
+  sel.innerHTML='<option value="__all__">All Venues (combined)</option>'+venues.map(v=>'<option value="'+v+'">'+v+'</option>').join('');
+  CRV='__all__';
+  document.getElementById('cRec').innerHTML='<b>'+rows.length.toLocaleString()+'</b> records';
+  document.getElementById('cVen').innerHTML='<b>'+venues.length+'</b> venues';
+  document.getElementById('cDt').innerHTML='<b>'+fd(rows[0]?.dateStr)+'</b> -> <b>'+fd(rows[rows.length-1]?.dateStr)+'</b>';
+  document.getElementById('hMeta').style.display='flex';
+  document.getElementById('hBtns').style.display='flex';
+  document.getElementById('dz').style.display='none';
+  document.getElementById('dash').style.display='';
+  renderVT();renderET();renderHolTable();runForecast();
+}
+
+function navTo(p,btn){
+  document.querySelectorAll('.ntb').forEach(b=>b.classList.remove('on'));
+  if(btn)btn.classList.add('on');
+  ['pfc','pvenues','pwx','pcomps','pruns'].forEach(function(id){document.getElementById(id).style.display='none';});
+  document.getElementById('p'+p).style.display='';
+  if(p==='venues')renderVT();
+  if(p==='wx'){renderET();renderHolTable();}
+  if(p==='runs')loadRunsList();
+}
+function sv(v,btn){document.querySelectorAll('.vtb').forEach(b=>b.classList.remove('on'));if(btn)btn.classList.add('on');document.getElementById('vCh').style.display=v==='ch'?'':'none';document.getElementById('vDow').style.display=v==='dow'?'':'none';}
+function setM(m,btn){CM=m;document.querySelectorAll('#mP .pill').forEach(b=>b.classList.remove('on'));if(btn)btn.classList.add('on');runForecast();}
+function setU(u,btn){CU=u;document.querySelectorAll('#uP .pill').forEach(b=>b.classList.remove('on'));if(btn)btn.classList.add('on');runForecast();}
+function onDrop(ev){ev.preventDefault();document.getElementById('dz').classList.remove('drag');var f=ev.dataTransfer.files[0];if(f)readF(f);}
+function onFI(inp){if(inp.files[0])readF(inp.files[0]);}
+function readF(f){var r=new FileReader();r.onload=e=>loadData(parseCSV(e.target.result));r.readAsText(f);}
+
+// ── SAVED FORECASTS ────────────────────────────────────────────────────────────
+
+function openSaveDialog(){
+  var url=getApiUrl();
+  if(!url){alert('Enter your Render API URL first.');return;}
+  if(!fcResultByVenue['__all__']&&Object.keys(fcResultByVenue).length===0){
+    alert('Run a forecast first.');return;
+  }
+  // Pre-fill label
+  var today=new Date();
+  document.getElementById('saveLabel').value=
+    'Forecast '+today.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'})+
+    ' - '+document.getElementById('fcN').value+' '+CU;
+  document.getElementById('saveNotes').value='';
+  document.getElementById('saveSt').style.display='none';
+  document.getElementById('confirmSaveBtn').disabled=false;
+  document.getElementById('saveDialog').style.display='flex';
+}
+
+async function confirmSave(){
+  var url=getApiUrl();
+  var label=document.getElementById('saveLabel').value||'Unnamed run';
+  var notes=document.getElementById('saveNotes').value||'';
+  var st=document.getElementById('saveSt');
+  st.style.display='';st.style.color='var(--m)';st.textContent='Saving...';
+  document.getElementById('confirmSaveBtn').disabled=true;
+
+  // Build rows array from fcResultByVenue
+  var venues=[...new Set(AR.map(r=>r.venue))].sort();
+  var rows=[];
+  var hasPerVenue=venues.every(function(ven){return fcResultByVenue[ven]&&fcResultByVenue[ven].d&&fcResultByVenue[ven].d.forecast_dates;});
+  var venueList=hasPerVenue?venues:['__all__'];
+
+  venueList.forEach(function(ven){
+    var res=fcResultByVenue[ven];if(!res)return;
+    var d=res.d,adjFc=res.adjFc,vms=getVMs(ven);
+    var model=d.model||'';
+    (d.forecast_dates||[]).forEach(function(ds,i){
+      var p=adjFc[i]||{};
+      var t=getTempForDate(ds,vms);
+      rows.push({
+        venue:ven==='__all__'?'All Venues':ven,
+        forecast_date:ds,
+        forecast_sales:p.fc||0,
+        lower_90:p.lo||0,
+        upper_90:p.hi||0,
+        adj_factor:p.adj||1,
+        model_used:model,
+        is_holiday:HS.has(ds)?1:0,
+        holiday_name:HD.find(function(h){return h.date===ds;})?HD.find(function(h){return h.date===ds;}).name:'',
+        temp_max_c:t!=null?t:null
+      });
+    });
+  });
+
+  var allRes=fcResultByVenue['__all__'];
+  var payload={
+    label:label,notes:notes,metric:CM,
+    venues_count:venues.length,
+    forecast_days:+document.getElementById('fcN').value||30,
+    history_from:AR[0]?AR[0].dateStr:null,
+    history_to:AR[AR.length-1]?AR[AR.length-1].dateStr:null,
+    avg_rmse:allRes?allRes.d.rmse:null,
+    rows:rows
+  };
+
+  try{
+    var r=await fetch(url+'/runs/save',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),signal:AbortSignal.timeout(30000)
+    });
+    var data=await r.json();
+    if(data.error)throw new Error(data.error);
+    st.style.color='var(--g)';st.textContent='(ok) Saved '+data.rows_saved+' rows — ID: '+data.run_id.slice(0,8)+'...';
+    setTimeout(function(){document.getElementById('saveDialog').style.display='none';},1800);
+  }catch(e){
+    st.style.color='var(--r)';st.textContent='Failed: '+e.message;
+    document.getElementById('confirmSaveBtn').disabled=false;
+  }
+}
+
+async function loadRunsList(){
+  var url=getApiUrl();
+  var dbSt=document.getElementById('runsDbStatus');
+  var tbd=document.getElementById('runsTbd');
+  var setupNote=document.getElementById('runsSetupNote');
+  if(!url){dbSt.textContent='No API URL';dbSt.className='bdg r';return;}
+  dbSt.textContent='Loading...';dbSt.className='bdg';
+  try{
+    var r=await fetch(url+'/runs',{signal:AbortSignal.timeout(15000)});
+    var data=await r.json();
+    if(!data.db){
+      dbSt.textContent='No database';dbSt.className='bdg r';
+      setupNote.style.display='';
+      tbd.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--m)">Database not configured. See setup instructions above.</td></tr>';
+      return;
+    }
+    setupNote.style.display='none';
+    dbSt.textContent=data.runs.length+' saved runs';dbSt.className='bdg g';
+    if(!data.runs.length){
+      tbd.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--m)">No saved runs yet. Run a forecast and click (ok) Save Forecast.</td></tr>';
+      return;
+    }
+    window._runsList = data.runs;
+    tbd.innerHTML=data.runs.map(function(run,idx){
+      var dt=run.created_at?new Date(run.created_at).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'n/a';
+      var rmse=run.avg_rmse?'$'+(run.avg_rmse).toFixed(0):'n/a';
+      return '<tr><td style="color:#dde1f5;font-weight:700">'+run.label+'</td><td style="color:var(--m)">'+dt+'</td><td>'+run.venues_count+'</td><td>'+run.forecast_days+'d</td><td>'+run.metric+'</td><td>'+rmse+'</td><td style="color:var(--m);font-size:9px">'+(run.notes||'')+'</td><td style="display:flex;gap:5px"><button class="grn" onclick="loadRunByIdx('+idx+')">Load</button><button onclick="deleteRunByIdx('+idx+')" style="color:var(--r);border-color:#450a0a">Del</button></td></tr>';
+    }).join('');
+  }catch(e){
+    dbSt.textContent='Error';dbSt.className='bdg r';
+    tbd.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--r)">Failed to load: '+e.message+'</td></tr>';
+  }
+}
+
+function loadRunByIdx(idx){var r=window._runsList&&window._runsList[idx];if(r)loadRun(r.id,r.label);}
+function deleteRunByIdx(idx){var r=window._runsList&&window._runsList[idx];if(r)deleteRun(r.id);}
+async function loadRun(runId,label){
+  var url=getApiUrl();
+  if(!url)return;
+  setSt('fcSt','busy','<span class="spin">(*)</span>&nbsp;Loading saved run: '+label+'...');
+  document.getElementById('saveBtn').style.display='none';
+  // Switch to forecast tab
+  document.querySelectorAll('.ntb').forEach(b=>b.classList.remove('on'));
+  document.getElementById('runsTab').classList.remove('on');
+  ['pfc','pvenues','pwx','pcomps','pruns'].forEach(function(id){document.getElementById(id).style.display='none';});
+  document.getElementById('pfc').style.display='';
+  document.querySelector('.ntb').classList.add('on');
+
+  try{
+    var r=await fetch(url+'/runs/'+runId,{signal:AbortSignal.timeout(30000)});
+    var data=await r.json();
+    if(data.error)throw new Error(data.error);
+    var meta=data.meta,rows=data.rows;
+
+    // Rebuild fcResultByVenue from stored rows
+    var venueMap={};
+    rows.forEach(function(row){
+      if(!venueMap[row.venue])venueMap[row.venue]={dates:[],fc:[],lo:[],hi:[],adj:[],models:[]};
+      venueMap[row.venue].dates.push(row.forecast_date);
+      venueMap[row.venue].fc.push(row.forecast_sales||0);
+      venueMap[row.venue].lo.push(row.lower_90||0);
+      venueMap[row.venue].hi.push(row.upper_90||0);
+      venueMap[row.venue].adj.push(row.adj_factor||1);
+      venueMap[row.venue].models.push(row.model_used||'');
+    });
+
+    // Rebuild __all__ total
+    var allDates=[],totalFc={},totalLo={},totalHi={};
+    Object.values(venueMap).forEach(function(vd){
+      vd.dates.forEach(function(ds,i){
+        if(!totalFc[ds]){allDates.push(ds);totalFc[ds]=0;totalLo[ds]=0;totalHi[ds]=0;}
+        totalFc[ds]+=(vd.fc[i]||0);
+        totalLo[ds]+=(vd.lo[i]||0);
+        totalHi[ds]+=(vd.hi[i]||0);
+      });
+    });
+    allDates=allDates.filter(function(d,i,a){return a.indexOf(d)===i;}).sort();
+
+    var allAdjFc=allDates.map(function(ds){
+      return{fc:totalFc[ds]||0,lo:totalLo[ds]||0,hi:totalHi[ds]||0,adj:1,ds:ds,t:null,isHol:HS.has(ds)};
+    });
+
+    // Store in fcResultByVenue
+    Object.entries(venueMap).forEach(function(entry){
+      var ven=entry[0],vd=entry[1];
+      fcResultByVenue[ven]={
+        agg:AR.filter(r=>r.venue===ven),
+        adjFc:vd.dates.map(function(ds,i){return{fc:vd.fc[i],lo:vd.lo[i],hi:vd.hi[i],adj:vd.adj[i],ds:ds,t:null,isHol:HS.has(ds)};},),
+        d:{model:vd.models[0]||meta.metric,rmse:meta.avg_rmse||0,cv:0,
+           fitted:[],forecast_dates:vd.dates,forecast:vd.fc,lower_90:vd.lo,upper_90:vd.hi,components:{}},
+        fcDays:meta.forecast_days,vms:[],ts:0,tstat:{mean:20,std:5},lastD:new Date()
+      };
+    });
+
+    var allAgg=AR.length?getAgg('__all__'):[];
+    fcResultByVenue['__all__']={
+      agg:allAgg,adjFc:allAdjFc,
+      d:{model:meta.label||'Saved',rmse:meta.avg_rmse||0,cv:0,
+         fitted:[],forecast_dates:allDates,
+         forecast:allDates.map(function(ds){return totalFc[ds]||0;}),
+         lower_90:allDates.map(function(ds){return totalLo[ds]||0;}),
+         upper_90:allDates.map(function(ds){return totalHi[ds]||0;}),
+         components:{}},
+      fcDays:meta.forecast_days,vms:[],ts:0,tstat:{mean:20,std:5},lastD:new Date()
+    };
+    lastFcResult=fcResultByVenue['__all__'];
+
+    // Update KPIs
+    var fTot=allDates.reduce(function(s,ds){return s+(totalFc[ds]||0);},0);
+    var fLo=allDates.reduce(function(s,ds){return s+(totalLo[ds]||0);},0);
+    var fHi=allDates.reduce(function(s,ds){return s+(totalHi[ds]||0);},0);
+    document.getElementById('kF').textContent='$'+(fTot>=1e6?(fTot/1e6).toFixed(1)+'M':fTot>=1e3?(fTot/1e3).toFixed(1)+'K':Math.round(fTot));
+    document.getElementById('kFN').textContent=meta.forecast_days+'d forecast · $'+Math.round(fLo/1e3)+'K–$'+Math.round(fHi/1e3)+'K 90%CI';
+    document.getElementById('mBdg').textContent='Saved: '+meta.label;
+
+    // Draw chart if we have historical data
+    var allRes=fcResultByVenue['__all__'];
+    if(allAgg.length)drawMainChart(allAgg,allRes.d,allAdjFc,[]);
+    if(allAgg.length)drawDOW(allAgg);
+
+    setSt('fcSt','ok','(ok) Loaded saved run: '+meta.label+' — '+allDates.length+' forecast days, '+Object.keys(venueMap).length+' venues');
+    document.getElementById('saveBtn').style.display='';
+
+  }catch(e){
+    setSt('fcSt','err','Failed to load run: '+e.message);
+  }
+}
+
+async function deleteRun(runId){
+  if(!confirm('Delete this saved run? This cannot be undone.'))return;
+  var url=getApiUrl();
+  try{
+    var r=await fetch(url+'/runs/'+runId,{method:'DELETE',signal:AbortSignal.timeout(10000)});
+    var data=await r.json();
+    if(data.deleted)loadRunsList();
+    else alert('Delete failed');
+  }catch(e){alert('Delete failed: '+e.message);}
+}
+</script>
+</body>
+</html>

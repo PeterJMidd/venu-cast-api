@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Venu Cast — How the Forecast Model Works</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: #f4f6fb;
+  color: #1f2937;
+  padding: 24px;
+  line-height: 1.4;
+}
+.page {
+  max-width: 1400px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(31,41,55,0.12);
+  overflow: hidden;
+}
+header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 28px 36px;
+}
+header h1 { font-size: 26px; margin-bottom: 4px; }
+header p { font-size: 14px; opacity: 0.92; }
+header .sub { font-size: 12px; opacity: 0.75; margin-top: 6px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  padding: 24px 28px;
+}
+.step {
+  background: #fafbff;
+  border-left: 4px solid #667eea;
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+.step.full { grid-column: 1 / -1; }
+.step h2 {
+  font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #667eea; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 10px;
+}
+.step h2 .num {
+  display: inline-flex; width: 26px; height: 26px;
+  background: #667eea; color: white;
+  border-radius: 50%; justify-content: center; align-items: center;
+  font-weight: bold; font-size: 12px;
+}
+.step h3 { font-size: 15px; color: #1f2937; margin-bottom: 6px; font-weight: 600; }
+.step p { font-size: 12.5px; color: #4b5563; margin-bottom: 6px; }
+.step ul { list-style: none; padding-left: 0; }
+.step li { font-size: 12px; color: #4b5563; margin: 3px 0; padding-left: 14px; position: relative; }
+.step li::before { content: '▸'; position: absolute; left: 0; color: #667eea; font-size: 9px; top: 4px; }
+
+.tier {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;
+  margin-top: 8px; font-size: 11px;
+}
+.tier > div {
+  background: white; border: 1px solid #e0e4ff; padding: 8px 10px;
+  border-radius: 4px; text-align: center; line-height: 1.3;
+}
+.tier > div strong { display: block; color: #667eea; font-size: 11px; margin-bottom: 3px; }
+
+.chain {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px;
+  margin: 8px 0;
+}
+.chain-row {
+  display: flex; align-items: stretch; gap: 6px; margin: 4px 0;
+  font-size: 11.5px;
+}
+.chain-row .arrow {
+  display: flex; align-items: center; color: #94a3b8; font-size: 18px;
+}
+.chain-step {
+  flex: 1; padding: 8px 10px; border-radius: 5px;
+  background: #f1f5f9; border-left: 3px solid #94a3b8;
+}
+.chain-step.special { background: #fef3c7; border-left-color: #f59e0b; }
+.chain-step.guard { background: #fee2e2; border-left-color: #ef4444; }
+.chain-step.lfl { background: #dcfce7; border-left-color: #16a34a; }
+.chain-step.final { background: #ddd6fe; border-left-color: #7c3aed; font-weight: 600; }
+.chain-step strong { color: #1f2937; font-size: 12px; }
+.chain-step small { color: #6b7280; font-size: 10.5px; display: block; margin-top: 2px; }
+
+.formula {
+  background: #1e293b; color: #d1fae5;
+  font-family: 'Consolas', monospace; font-size: 11px;
+  padding: 8px 12px; border-radius: 4px;
+  margin: 6px 0; line-height: 1.5;
+}
+.tag {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 600; margin-right: 4px;
+}
+.tag.in { background: #dbeafe; color: #1e40af; }
+.tag.out { background: #dcfce7; color: #166534; }
+.tag.api { background: #fce7f3; color: #be185d; }
+.tag.cap { background: #fee2e2; color: #991b1b; }
+.tag.soft { background: #fef3c7; color: #92400e; }
+
+.pnl-flow {
+  background: linear-gradient(180deg, #f0fdf4 0%, #ecfccb 100%);
+  padding: 12px 16px; border-radius: 8px;
+  font-family: 'Consolas', monospace; font-size: 11.5px;
+  line-height: 1.7;
+}
+.pnl-flow .line { display: flex; justify-content: space-between; padding: 2px 0; }
+.pnl-flow .sub { color: #6b7280; font-size: 10.5px; padding-left: 12px; }
+.pnl-flow .total { border-top: 1.5px solid #16a34a; padding-top: 4px; margin-top: 4px; font-weight: 700; color: #15803d; }
+
+footer {
+  background: #1f2937; color: #d1d5db;
+  padding: 14px 28px; font-size: 11px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+footer .badge { background: #667eea; padding: 4px 10px; border-radius: 4px; color: white; font-weight: 600; }
+@media print { body { background: white; padding: 0; } .page { box-shadow: none; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>📊 Venu Cast — How the Forecast Model Works</h1>
+  <p>From raw template upload → per-venue daily sales forecast → full P&L. Every step, every fallback, every guardrail.</p>
+  <div class="sub">FY27 model · Prophet/SARIMA/Holt-Winters/DOW-Flat · State-aware weather + holidays · Layered safety nets</div>
+</header>
+
+<div class="grid">
+
+<!-- STEP 1: INPUTS -->
+<div class="step">
+  <h2><span class="num">1</span> DATA INPUTS</h2>
+  <h3>5 sales templates uploaded</h3>
+  <ul>
+    <li><span class="tag in">XLSX</span> <strong>01 Sales History</strong> — 3 tabs (Servings, Retail, POS Discounts), wide format, 1 row/venue × 5+ years daily</li>
+    <li><span class="tag in">XLSX</span> <strong>ATP History</strong> — long-format ticket value per venue per day</li>
+    <li><span class="tag in">XLSX</span> <strong>D03 Location BI</strong> — cluster + cluster_type per venue</li>
+    <li><span class="tag in">XLSX</span> <strong>Venue Details</strong> — opening_date, ramp-up %, impact venues (cannibalisation)</li>
+    <li><span class="tag in">CSV</span> <strong>Venue City Mapping</strong> — 15-month multipliers per venue</li>
+  </ul>
+</div>
+
+<!-- STEP 2: EXTERNAL DATA -->
+<div class="step">
+  <h2><span class="num">2</span> EXTERNAL DATA (auto-fetched)</h2>
+  <h3>Weather + state-aware public holidays</h3>
+  <ul>
+    <li><span class="tag api">API</span> <strong>Open-Meteo Archive</strong> — historical temp_max, precipitation, wind_max, gusts_max for the state's anchor city</li>
+    <li><span class="tag api">API</span> <strong>Open-Meteo Forecast</strong> — climatology (multi-year avg per day-of-year) for future dates</li>
+    <li><span class="tag api">PKG</span> <strong>holidays Python pkg</strong> — full state-specific calendar (VIC has Melb Cup, QLD has Royal QLD Show, etc.)</li>
+    <li>Extreme-weather flag = (gusts ≥ 90 km/h OR rain ≥ 50 mm) → cyclone/storm marker</li>
+    <li>Cached per state to avoid repeated fetches</li>
+  </ul>
+</div>
+
+<!-- STEP 3: HISTORY ANALYSIS -->
+<div class="step">
+  <h2><span class="num">3</span> PER-VENUE HISTORY ANALYSIS</h2>
+  <h3>Profile each venue's sales pattern</h3>
+  <ul>
+    <li><strong>n_trading</strong> = count of non-zero days</li>
+    <li><strong>patchiness</strong> = fraction of zero days</li>
+    <li><strong>stable_mean</strong> = median (robust to spikes/zeros)</li>
+    <li><strong>recent_mean</strong> = mean of last 28 trading days</li>
+    <li><strong>recent_max</strong> = highest single day in last 28</li>
+    <li><strong>dow_means</strong> = per-weekday average (Mon-Sun)</li>
+  </ul>
+  <p><strong>Flags set:</strong> <code>bypass_prophet</code> (&lt;21 days), <code>is_patchy</code>, <code>use_flat_forecast</code></p>
+</div>
+
+<!-- STEP 4: MODEL SELECTION -->
+<div class="step">
+  <h2><span class="num">4</span> MODEL SELECTION BY TRADING DAYS</h2>
+  <h3>Adaptive algorithm tier — protects new venues</h3>
+  <div class="tier">
+    <div><strong>&lt; 21 days</strong>DOW-Flat<br><small>bypass Prophet</small></div>
+    <div><strong>21–59</strong>Prophet minimal<br><small>cp_prior=0.005</small></div>
+    <div><strong>60–179</strong>Prophet conservative<br><small>cp_prior=0.01</small></div>
+    <div><strong>180–364</strong>Prophet moderate<br><small>cp_prior=0.02</small></div>
+    <div><strong>365+</strong>Prophet full<br><small>cp=0.010, yearly=12 Fourier, seas=30</small></div>
+    <div><strong>Fallback</strong>SARIMA → Holt-Winters<br><small>if Prophet fails</small></div>
+  </div>
+  <p style="margin-top:6px;font-size:11.5px;"><span class="tag soft">FIX</span> The &lt;21-day bypass prevents the Kawana Waters trap (Prophet projecting opening ramp exponentially → $692k/day).</p>
+</div>
+
+<!-- STEP 5: PROPHET DECOMPOSITION -->
+<div class="step full">
+  <h2><span class="num">5</span> PROPHET FIT (the data-science core for mature venues)</h2>
+  <h3>Decomposes daily sales into trend + seasonality + regressors</h3>
+  <div class="formula">
+    y(t) = trend(t) × weekly(t) × yearly(t) × holiday(t) × temp_max × precipitation × wind_gusts × extreme_event_flag
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px;font-size:11px;">
+    <div style="background:#fff;border:1px solid #e5e7eb;padding:8px;border-radius:4px;"><strong>Trend</strong><br>changepoint_prior=0.010 → tight, won't extrapolate recent dips. changepoint_range=0.85 → no trend changes in last 15% of history.</div>
+    <div style="background:#fff;border:1px solid #e5e7eb;padding:8px;border-radius:4px;"><strong>Seasonality</strong><br>Weekly always. Yearly with 12 Fourier terms (365+ days). seasonality_prior=30 → strong seasonal variation for beach venues.</div>
+    <div style="background:#fff;border:1px solid #e5e7eb;padding:8px;border-radius:4px;"><strong>Holidays</strong><br>Per-state, named. Prophet learns per-holiday lift/dip (Melbourne Cup, ANZAC, Christmas, etc.).</div>
+    <div style="background:#fff;border:1px solid #e5e7eb;padding:8px;border-radius:4px;"><strong>Weather regressors</strong><br>temp_max, precipitation, wind_gusts, extreme_event (4 standardized regressors). Climatology fills future.</div>
+  </div>
+</div>
+
+<!-- STEP 6: RESOLUTION CHAIN -->
+<div class="step full">
+  <h2><span class="num">6</span> RESOLUTION CHAIN — applied per venue, in this exact order</h2>
+  <p>Each step is independent and can be toggled. The final forecast is the result of this entire chain.</p>
+
+  <div class="chain">
+    <div class="chain-row">
+      <div class="chain-step special"><strong>0. SCENARIO OVERRIDE</strong><small>If user set a per-venue scenario (target growth % or target avg daily $), it WINS — no other adjustments apply. Calibrated multiplier hits target exactly.</small></div>
+      <div class="arrow">→</div>
+      <div class="chain-step final"><strong>FINAL forecast</strong><small>User authority preserved</small></div>
+    </div>
+
+    <p style="text-align:center;color:#94a3b8;font-size:11px;margin:8px 0;">— OR, if no scenario set, the model goes through these adjustments —</p>
+
+    <div class="chain-row">
+      <div class="chain-step"><strong>1. Raw Prophet output</strong><small>Daily sales = Prophet fit × 15-month multiplier from CSV</small></div>
+      <div class="arrow">→</div>
+      <div class="chain-step soft" style="background:#fef3c7;border-left-color:#f59e0b;"><strong>2. SOFTENING (β=0.7 default)</strong><small>Shrink FY27 avg toward FY26 baseline: target=β×Prophet+(1-β)×FY26/day. Preserves daily shape, gentles the level.</small></div>
+    </div>
+
+    <div class="chain-row">
+      <div class="chain-step"><strong>3. Cluster Cannibalisation</strong><small>If venue is in another opener's "Impact venue" list, apply monthly impact % during opener's first 6 months. Multipliers stack.</small></div>
+      <div class="arrow">→</div>
+      <div class="chain-step guard"><strong>4. Baseline GUARDRAILS</strong><small>Cap FY27 within band of annualised FY26: mature 0.80–1.30×, ramping 0.75–1.30× (+recent-run-rate cap). Catches extremes.</small></div>
+    </div>
+
+    <div class="chain-row">
+      <div class="chain-step lfl"><strong>5. UNIVERSAL LFL ADJUSTMENT</strong><small>Per-month multiplier scales LFL venues' streams to hit network LFL target (on basis = current Sales Type view). Skips venues with scenarios.</small></div>
+      <div class="arrow">→</div>
+      <div class="chain-step final"><strong>FINAL forecast</strong><small>Sales × Multiplier × β-soften × Cann × Guards × LFL</small></div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 7: DERIVED -->
+<div class="step">
+  <h2><span class="num">7</span> DERIVED OUTPUTS</h2>
+  <h3>From the final daily forecast</h3>
+  <div class="formula">
+ATP_forecast[day]   = last_ATP × (1 + monthly_growth%)<br>
+Transactions[day]   = Servings_forecast / ATP_forecast<br>
+Integrated_check    = Transactions × ATP   (should == Servings)
+  </div>
+  <ul style="margin-top:6px;">
+    <li>POS Discounts shown as <strong>negative</strong> values in all outputs</li>
+    <li>Reconciliation: integrated forecast should match direct forecast; divergences &gt;10% flagged</li>
+  </ul>
+</div>
+
+<!-- STEP 8: FUTURE VENUES -->
+<div class="step">
+  <h2><span class="num">8</span> NEW VENUE HANDLING</h2>
+  <h3>Future venues with no history</h3>
+  <div class="formula">
+weekly_$ = new_monthly_sales / 4.345 weeks<br>
+daily_$  = weekly_$ × DOW_share × ramp_factor[month]<br>
+DOW_share borrowed from cluster peers (mature venues)
+  </div>
+  <ul style="margin-top:6px;">
+    <li>Opening date from Venue Details determines start</li>
+    <li>Zero sales before opening date</li>
+    <li>Month 1-6 ramp % from Venue Details template applies progressively</li>
+    <li>15-month multiplier + ATP forecast still applied on top</li>
+  </ul>
+</div>
+
+<!-- STEP 9: GUARDRAILS DETAIL -->
+<div class="step">
+  <h2><span class="num">9</span> SANITY CEILINGS (inside Prophet engine)</h2>
+  <h3>Hard caps applied BEFORE the resolution chain</h3>
+  <div class="tier" style="grid-template-columns:repeat(3,1fr);">
+    <div><strong>&lt; 28 days</strong><span class="tag cap">CAP</span>recent_max × 1.5</div>
+    <div><strong>28–89 days</strong><span class="tag cap">CAP</span>max(recent_max×2, stable×3)</div>
+    <div><strong>90+ days</strong><span class="tag cap">CAP</span>stable_mean × 4</div>
+  </div>
+  <p style="margin-top:6px;font-size:11.5px;"><strong>Floor:</strong> 0.40 × recent_mean (for venues with 60+ trading days). Loose enough to allow legitimate winter dips for seasonal venues.</p>
+</div>
+
+<!-- STEP 10: UNIVERSAL LFL -->
+<div class="step">
+  <h2><span class="num">10</span> UNIVERSAL LFL MATH</h2>
+  <div class="formula">
+LFL pool = venues with cohort = "FY26 Existing"<br>
+          AND no per-venue scenario active<br><br>
+pre_LFL  = sum(FY27 forecast across pool)<br>
+target   = LFL_FY26 × (1 + target_pct/100)<br>
+gap      = target - pre_LFL<br><br>
+monthly_multiplier[m] = 1 + (gap × weight[m]) / pre_FY27[m]
+  </div>
+  <p style="font-size:11.5px;margin-top:6px;"><strong>Target basis</strong> = current Sales Type view (servings / retail / discounts / all combined). Weights auto-normalise to 100%.</p>
+</div>
+
+<!-- STEP 11: P&L OVERLAY -->
+<div class="step full">
+  <h2><span class="num">11</span> P&L BUILD (after sales forecast)</h2>
+  <h3>Overlay 4 expense templates onto the resolved sales</h3>
+  <div style="display:grid;grid-template-columns:2fr 3fr;gap:14px;margin-top:8px;">
+    <div>
+      <p style="font-size:12px;margin-bottom:6px;"><strong>Expense templates uploaded separately:</strong></p>
+      <ul>
+        <li>👷 Labour — SPLH, hourly rate, oncosts, mgmt salary, award rates</li>
+        <li>🍳 COGS — Food %, Packaging %, Retail % of net sales</li>
+        <li>🏢 Rent — base, outgoings, % rent threshold, marketing levy</li>
+        <li>📒 Other P&L — per-venue × GL account (bank fees, cleaning, admin, etc.)</li>
+      </ul>
+    </div>
+    <div class="pnl-flow">
+      <div class="line"><span>Net Sales</span><span>servings + retail</span></div>
+      <div class="line sub"><span>− POS Discounts</span><span>shown separately (negative)</span></div>
+      <div class="line"><span>− COGS</span><span>net × (food% + packaging% + retail%)</span></div>
+      <div class="line"><span>= Gross Profit</span><span>typically 70–75% of net</span></div>
+      <div class="line"><span>− Labour</span><span>(sales/SPLH × rate) + oncosts + mgmt</span></div>
+      <div class="line"><span>− Occupancy</span><span>rent + outgoings + %rent + mkt levy</span></div>
+      <div class="line"><span>+ Other P&L</span><span>sum of GL line items (signed)</span></div>
+      <div class="line total"><span>= Venue Contribution</span><span>~10–20% of net</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 12: SAVE / SHARE -->
+<div class="step full">
+  <h2><span class="num">12</span> SAVE, SHARE, REVIEW</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;font-size:11.5px;">
+    <div style="background:white;border:1px solid #e5e7eb;padding:10px;border-radius:6px;">
+      <strong>💾 Snapshots</strong><br>
+      <small>Save named versions to disk (OneDrive). Load back any time. Up to 3 active scenarios per snapshot.</small>
+    </div>
+    <div style="background:white;border:1px solid #e5e7eb;padding:10px;border-radius:6px;">
+      <strong>📤 Read-only HTML export</strong><br>
+      <small>Self-contained dashboard. Email or share file → recipient opens in browser, no server needed. ~64 pre-computed filter slices.</small>
+    </div>
+    <div style="background:white;border:1px solid #e5e7eb;padding:10px;border-radius:6px;">
+      <strong>⬇️ CSV Export</strong><br>
+      <small>Daily forecast + monthly P&L. Per-venue, per-cluster, per-state rollups. All columns including weather, holidays, scenario context.</small>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<footer>
+  <div>
+    <strong>Venu Cast</strong> · Forecasting engine for FY27 venue-level sales + P&L · Built on Prophet, SARIMA, Holt-Winters with custom guardrails
+  </div>
+  <div><span class="badge">v2026.05</span></div>
+</footer>
+
+</div>
+</body>
+</html>

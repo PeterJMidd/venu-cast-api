@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; padding: 30px; }
+  .page { max-width: 960px; margin: 0 auto; }
+
+  /* Section card */
+  .card { background: #fff; border-radius: 14px; box-shadow: 0 2px 16px rgba(0,0,0,0.06); margin-bottom: 24px; overflow: hidden; }
+  .card-header { padding: 20px 32px; font-size: 20px; font-weight: 700; color: #fff; }
+  .card-body { padding: 28px 32px; }
+
+  /* Hero */
+  .hero { background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460); padding: 40px; text-align: center; border-radius: 14px; margin-bottom: 24px; }
+  .hero h1 { color: #fff; font-size: 32px; font-weight: 800; letter-spacing: -0.5px; }
+  .hero .sub { color: rgba(255,255,255,0.7); font-size: 15px; margin-top: 8px; }
+  .hero .badge { display: inline-block; margin-top: 16px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); border-radius: 20px; padding: 6px 18px; color: #fff; font-size: 13px; font-weight: 600; }
+
+  /* What it does */
+  .what-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .what-item { background: #f8f9fa; border-radius: 10px; padding: 18px; border-left: 4px solid #3498db; }
+  .what-item h4 { font-size: 14px; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; }
+  .what-item p { font-size: 13px; color: #666; line-height: 1.5; }
+
+  /* Flow */
+  .flow { display: flex; align-items: stretch; gap: 0; flex-wrap: nowrap; }
+  .flow-step { flex: 1; text-align: center; position: relative; padding: 16px 10px; }
+  .flow-step::after { content: ''; position: absolute; right: -1px; top: 50%; transform: translateY(-50%); width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-left: 10px solid #ddd; z-index: 1; }
+  .flow-step:last-child::after { display: none; }
+  .flow-icon { width: 48px; height: 48px; border-radius: 12px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff; }
+  .flow-step h4 { font-size: 12px; font-weight: 700; color: #333; margin-bottom: 2px; }
+  .flow-step p { font-size: 10px; color: #888; line-height: 1.3; }
+
+  /* Tech stack */
+  .tech-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .tech-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: #f8f9fa; border-radius: 10px; border: 1px solid #eee; }
+  .tech-logo { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 16px; flex-shrink: 0; }
+  .tech-item h4 { font-size: 13px; font-weight: 700; color: #333; }
+  .tech-item p { font-size: 11px; color: #888; }
+
+  /* Costs */
+  .cost-table { width: 100%; border-collapse: collapse; }
+  .cost-table th { text-align: left; padding: 10px 14px; background: #f0f2f5; font-size: 12px; font-weight: 700; color: #666; text-transform: uppercase; border-bottom: 2px solid #ddd; }
+  .cost-table td { padding: 12px 14px; font-size: 13px; color: #333; border-bottom: 1px solid #eee; }
+  .cost-table .amount { font-weight: 700; color: #27ae60; }
+  .cost-table .total-row td { background: #1a1a2e; color: #fff; font-weight: 700; font-size: 14px; border: none; }
+  .cost-table .total-row .amount { color: #2ecc71; }
+
+  /* Ideas */
+  .ideas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .idea { padding: 18px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid; }
+  .idea h4 { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 4px; }
+  .idea p { font-size: 12px; color: #666; line-height: 1.5; }
+  .idea .tags { margin-top: 8px; }
+  .idea .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; color: #fff; margin-right: 4px; }
+
+  /* Stats bar */
+  .stats { display: flex; justify-content: space-around; padding: 20px 0; }
+  .stat { text-align: center; }
+  .stat .num { font-size: 28px; font-weight: 800; color: #0f3460; }
+  .stat .label { font-size: 11px; color: #888; text-transform: uppercase; font-weight: 600; }
+
+  .footer { text-align: center; padding: 16px; font-size: 11px; color: #aaa; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>Yo-Chi Automated Operations Reporting</h1>
+    <div class="sub">AI-powered daily operations emails delivered to every venue manager at 5:00 AM</div>
+    <div class="badge">Fully Automated &bull; Zero Manual Input &bull; AI-Enhanced</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="card">
+    <div class="card-body">
+      <div class="stats">
+        <div class="stat"><div class="num">73</div><div class="label">Venues Reported</div></div>
+        <div class="stat"><div class="num">5:00 AM</div><div class="label">Daily AEST</div></div>
+        <div class="stat"><div class="num">~146</div><div class="label">Shifts Analysed</div></div>
+        <div class="stat"><div class="num">73</div><div class="label">AI Summaries</div></div>
+        <div class="stat"><div class="num">&lt;6 min</div><div class="label">Total Runtime</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- What It Does -->
+  <div class="card">
+    <div class="card-header" style="background:linear-gradient(135deg, #0f3460, #1a1a2e);">What It Does</div>
+    <div class="card-body">
+      <div class="what-grid">
+        <div class="what-item">
+          <h4>Daily Shift Reports</h4>
+          <p>Pulls every shift leader's submission from yesterday — trade feedback, guest experience, operations notes, rostering, and star of the shift — formatted into a professional HTML email per venue.</p>
+        </div>
+        <div class="what-item">
+          <h4>Star Champions Leaderboard</h4>
+          <p>Tracks month-to-date "Star of the Shift" nominations and ranks the top 3 team members per venue with Gold, Silver, and Bronze medals.</p>
+        </div>
+        <div class="what-item">
+          <h4>AI-Powered Insights</h4>
+          <p>Claude Haiku analyses each venue's daily comments and 7-day history to surface key issues and recurring trends — giving managers an instant executive summary.</p>
+        </div>
+        <div class="what-item">
+          <h4>Venue-Specific Delivery</h4>
+          <p>Each email is sent from the venue's own shared mailbox to configured recipients. Venue lists, senders, and recipients are managed via a simple Excel file on SharePoint.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Process Flow -->
+  <div class="card">
+    <div class="card-header" style="background:linear-gradient(135deg, #2980b9, #3498db);">How It Works</div>
+    <div class="card-body">
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-icon" style="background:#0078d4;">&#9200;</div>
+          <h4>5:00 AM Trigger</h4>
+          <p>Azure wakes up the function automatically</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon" style="background:#036c5f;">&#128196;</div>
+          <h4>Load Config</h4>
+          <p>Downloads venue list from SharePoint Excel</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon" style="background:#217346;">&#128202;</div>
+          <h4>Fetch Shifts</h4>
+          <p>3 bulk queries: today, MTD, and 7-day data</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon" style="background:#d4763c;">&#129302;</div>
+          <h4>AI Analysis</h4>
+          <p>Claude Haiku generates insights per venue</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon" style="background:#8e44ad;">&#128232;</div>
+          <h4>Build Email</h4>
+          <p>HTML email with champions, shifts, AI summary</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon" style="background:#e74c3c;">&#128640;</div>
+          <h4>Send</h4>
+          <p>Delivered via Exchange to all recipients</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Technology Stack -->
+  <div class="card">
+    <div class="card-header" style="background:linear-gradient(135deg, #2c3e50, #34495e);">Technology Stack</div>
+    <div class="card-body">
+      <div class="tech-grid">
+        <div class="tech-item">
+          <div class="tech-logo" style="background:#0078d4;">Az</div>
+          <div><h4>Azure Functions</h4><p>Serverless compute — runs the daily timer and Python code</p></div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-logo" style="background:#0078d4;">GP</div>
+          <div><h4>Microsoft Graph API</h4><p>Reads SharePoint data and sends emails via Exchange</p></div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-logo" style="background:#036c5f;">SP</div>
+          <div><h4>SharePoint Online</h4><p>Stores shift submissions (list) and config (Excel file)</p></div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-logo" style="background:#d4763c;">Cl</div>
+          <div><h4>Claude AI (Haiku 4.5)</h4><p>Low-cost AI model generating daily insights and trend analysis</p></div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-logo" style="background:#0078d4;">Ex</div>
+          <div><h4>Exchange Online</h4><p>Sends from each venue's shared mailbox</p></div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-logo" style="background:#306998;">Py</div>
+          <div><h4>Python 3.11</h4><p>Business logic, data processing, and HTML email templating</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monthly Cost -->
+  <div class="card">
+    <div class="card-header" style="background:linear-gradient(135deg, #27ae60, #2ecc71);">Monthly Cost Estimate</div>
+    <div class="card-body">
+      <table class="cost-table">
+        <thead>
+          <tr><th>Service</th><th>What For</th><th>Monthly Cost (AUD)</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Azure Functions (B1 Plan)</td>
+            <td>Hosting the function app with Always On for reliable daily triggers</td>
+            <td class="amount">~$19</td>
+          </tr>
+          <tr>
+            <td>Azure Storage</td>
+            <td>Timer state, function metadata, deployment files</td>
+            <td class="amount">~$1</td>
+          </tr>
+          <tr>
+            <td>Claude AI (Haiku 4.5)</td>
+            <td>73 AI summaries/day x 30 days = ~2,190 calls/month (low token usage)</td>
+            <td class="amount">~$3-5</td>
+          </tr>
+          <tr>
+            <td>Microsoft 365</td>
+            <td>SharePoint, Exchange, Graph API — included in existing Yo-Chi subscription</td>
+            <td class="amount">$0</td>
+          </tr>
+          <tr>
+            <td>Application Insights</td>
+            <td>Logging and monitoring (free tier covers this volume)</td>
+            <td class="amount">$0</td>
+          </tr>
+          <tr class="total-row">
+            <td colspan="2">Estimated Total Monthly Cost</td>
+            <td class="amount">~$23-25 AUD</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- What Else Could It Do -->
+  <div class="card">
+    <div class="card-header" style="background:linear-gradient(135deg, #8e44ad, #9b59b6);">What Else Could This Platform Do?</div>
+    <div class="card-body">
+      <p style="font-size:13px;color:#666;margin-bottom:16px;">The same architecture (Azure Functions + SharePoint + Graph API + Claude AI) can be reused for other automated workflows:</p>
+      <div class="ideas-grid">
+        <div class="idea" style="border-color:#e74c3c;">
+          <h4>Weekly Performance Digest</h4>
+          <p>Aggregate the full week's data per venue and send a Monday morning summary with AI-generated performance commentary, sales trends, and improvement recommendations.</p>
+          <div class="tags"><span class="tag" style="background:#e74c3c;">Email</span><span class="tag" style="background:#d4763c;">AI</span></div>
+        </div>
+        <div class="idea" style="border-color:#3498db;">
+          <h4>Automated Roster Alerts</h4>
+          <p>Monitor rostering feedback for understaffing mentions and automatically flag venues that need additional cover to area managers before the next shift.</p>
+          <div class="tags"><span class="tag" style="background:#3498db;">Alert</span><span class="tag" style="background:#d4763c;">AI</span></div>
+        </div>
+        <div class="idea" style="border-color:#27ae60;">
+          <h4>Guest Feedback Escalation</h4>
+          <p>Use AI to scan guest experience comments for negative sentiment or complaints and immediately escalate to the operations team — not waiting until the next morning.</p>
+          <div class="tags"><span class="tag" style="background:#27ae60;">Real-time</span><span class="tag" style="background:#d4763c;">AI</span></div>
+        </div>
+        <div class="idea" style="border-color:#f39c12;">
+          <h4>Monthly Operations Report</h4>
+          <p>Auto-generate an end-of-month PDF report per venue or region with charts, top performers, recurring issues, and AI-written executive summary for leadership.</p>
+          <div class="tags"><span class="tag" style="background:#f39c12;">Report</span><span class="tag" style="background:#d4763c;">AI</span></div>
+        </div>
+        <div class="idea" style="border-color:#9b59b6;">
+          <h4>Sales Anomaly Detection</h4>
+          <p>Compare daily sales against historical averages and alert when a venue is significantly under or over performing — catching issues like equipment failures or unexpected rushes.</p>
+          <div class="tags"><span class="tag" style="background:#9b59b6;">Analytics</span><span class="tag" style="background:#d4763c;">AI</span></div>
+        </div>
+        <div class="idea" style="border-color:#1abc9c;">
+          <h4>Supplier & Stock Alerts</h4>
+          <p>Monitor operations feedback for stock-out mentions (flavours, toppings) and auto-notify suppliers or procurement team with a reorder request.</p>
+          <div class="tags"><span class="tag" style="background:#1abc9c;">Supply Chain</span><span class="tag" style="background:#3498db;">Automation</span></div>
+        </div>
+        <div class="idea" style="border-color:#e67e22;">
+          <h4>Training Gap Identifier</h4>
+          <p>AI analyses feedback patterns across venues to identify recurring operational mistakes, then suggests targeted training topics for area managers to address.</p>
+          <div class="tags"><span class="tag" style="background:#e67e22;">HR</span><span class="tag" style="background:#d4763c;">AI</span></div>
+        </div>
+        <div class="idea" style="border-color:#2c3e50;">
+          <h4>Cross-Venue Benchmarking</h4>
+          <p>Compare all venues against each other on key metrics — stars awarded, feedback sentiment, sales consistency — and generate a national leaderboard email for leadership.</p>
+          <div class="tags"><span class="tag" style="background:#2c3e50;">Analytics</span><span class="tag" style="background:#d4763c;">AI</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Yo-Chi Operations Automation &bull; Built with Azure Functions, Microsoft Graph API, and Claude AI &bull; May 2026
+  </div>
+
+</div>
+</body>
+</html>
