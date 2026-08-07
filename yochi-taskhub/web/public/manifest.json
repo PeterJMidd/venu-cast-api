@@ -1,0 +1,13 @@
+{
+  "name": "Yo-Chi TaskHub",
+  "short_name": "TaskHub",
+  "description": "Yo-Chi finance task management",
+  "start_url": "/my-tasks",
+  "display": "standalone",
+  "background_color": "#eef1f5",
+  "theme_color": "#1d683d",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

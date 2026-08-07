@@ -1,0 +1,7 @@
+web/node_modules/
+web/.next/
+web/out/
+web/.env.local
+fn/.python_packages/
+fn/deploy_local.zip
+**/__pycache__/
