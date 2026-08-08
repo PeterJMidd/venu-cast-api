@@ -120,6 +120,46 @@ def digest_timer(timer: func.TimerRequest) -> None:
     logging.info("digest_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 35 6 * * 1", arg_name="timer", run_on_startup=False)
+def health_timer(timer: func.TimerRequest) -> None:
+    """Monday 06:35: leading-indicator venue health scores."""
+    import tk_health
+    result = tk_health.run()
+    logging.info("health_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 20 7 * * 1", arg_name="timer", run_on_startup=False)
+def price_timer(timer: func.TimerRequest) -> None:
+    """Monday 07:20: spend control screen (price creep/dispersion/intensity/POS)."""
+    import tk_price
+    result = tk_price.run()
+    logging.info("price_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 20 6 * * *", arg_name="timer", run_on_startup=False)
+def anomaly_timer(timer: func.TimerRequest) -> None:
+    """Daily 06:20: z-score anomalies -> cockpit signals."""
+    import tk_anomaly
+    result = tk_anomaly.run()
+    logging.info("anomaly_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 55 6 * * 1", arg_name="timer", run_on_startup=False)
+def cash_timer(timer: func.TimerRequest) -> None:
+    """Monday 06:55: 13-week cash forecast + floor alert + email."""
+    import tk_cash
+    result = tk_cash.run()
+    logging.info("cash_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 10 7 * * 1", arg_name="timer", run_on_startup=False)
+def flash_timer(timer: func.TimerRequest) -> None:
+    """Monday 07:10: per-venue prime-cost flash + exception tasks."""
+    import tk_flash
+    result = tk_flash.run()
+    logging.info("flash_timer: %s", result)
+
+
 @app.timer_trigger(schedule="0 0 5 * * *", arg_name="timer", run_on_startup=False)
 @app.queue_output(arg_name="outmsg", queue_name="taskhub-batch",
                   connection="AzureWebJobsStorage")
@@ -206,6 +246,36 @@ def run_glsweep(req: func.HttpRequest,
     if req.params.get("triage") == "1":
         result["triage_batches"] = _auto_triage(result, outmsg, forced=True)
     return _json(200, result)
+
+
+@app.route(route="run_price", auth_level=func.AuthLevel.FUNCTION)
+def run_price(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_price
+    return _json(200, tk_price.run(email=req.params.get("email") != "0"))
+
+
+@app.route(route="run_health", auth_level=func.AuthLevel.FUNCTION)
+def run_health(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_health
+    return _json(200, tk_health.run(email=req.params.get("email") != "0"))
+
+
+@app.route(route="run_anomaly", auth_level=func.AuthLevel.FUNCTION)
+def run_anomaly(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_anomaly
+    return _json(200, tk_anomaly.run())
+
+
+@app.route(route="run_cash", auth_level=func.AuthLevel.FUNCTION)
+def run_cash(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_cash
+    return _json(200, tk_cash.run(email=req.params.get("email") != "0"))
+
+
+@app.route(route="run_flash", auth_level=func.AuthLevel.FUNCTION)
+def run_flash(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_flash
+    return _json(200, tk_flash.run(email=req.params.get("email") != "0"))
 
 
 @app.route(route="run_estate", auth_level=func.AuthLevel.FUNCTION)
@@ -577,12 +647,130 @@ def dashboard_data(req: func.HttpRequest) -> func.HttpResponse:
             "procedures": dict(zip(proc["columns"], proc["rows"][0])) if proc["rows"] else None,
             "as_at": time.time(),
         }
+        try:
+            data["cockpit"] = _cockpit(tk_db, data)
+        except Exception:
+            logging.exception("cockpit assembly failed (non-fatal)")
+            data["cockpit"] = None
         _DASH_CACHE["at"] = time.time()
         _DASH_CACHE["data"] = data
         return _json(200, data)
     except Exception as e:
         logging.exception("dashboard_data failed")
         return _json(500, {"error": str(e)})
+
+
+def _cockpit(tk_db, data):
+    """Mission-control extras: meetings, cash, compliance radar, team workload,
+    data-verified checklist, decisions pending, external signals."""
+    import datetime as _dt
+    today = _dt.date.today()
+    now_iso = _dt.datetime.utcnow().isoformat() + "Z"
+
+    meetings = tk_db.get("calendar_events", {
+        "starts_at": "gte." + now_iso, "order": "starts_at",
+        "select": "subject,starts_at,ends_at,location,organizer,attendees,prep",
+        "limit": "8"})
+
+    cash_rows = tk_db.get("cash_forecast", {
+        "order": "generated_at.desc,week_start", "limit": str(26),
+        "select": "generated_at,week_start,closing,net,assumptions"})
+    cash = None
+    if cash_rows:
+        latest_gen = cash_rows[0]["generated_at"]
+        weeks = [r for r in cash_rows if r["generated_at"] == latest_gen]
+        assumptions = next((r["assumptions"] for r in weeks if r.get("assumptions")), {})
+        trough = min(weeks, key=lambda w: float(w["closing"]))
+        cash = {"weeks": [{"week_start": w["week_start"], "closing": w["closing"]}
+                          for w in weeks],
+                "trough_week": trough["week_start"], "trough": trough["closing"],
+                "opening": assumptions.get("opening_cash"),
+                "floor": assumptions.get("floor"),
+                "dso_days": assumptions.get("dso_days"),
+                "dpo_days": assumptions.get("dpo_days"),
+                "generated_at": latest_gen}
+
+    horizon = (today + _dt.timedelta(days=60)).isoformat()
+    radar_raw = tk_db.get("tasks", {
+        "status": "neq.done", "due_date": "lte." + horizon,
+        "select": "title,due_date,priority,project_id,projects(name,category_id)",
+        "order": "due_date", "limit": "200"})
+    radar = [{"title": t["title"], "due": t["due_date"], "priority": t["priority"],
+              "project": (t.get("projects") or {}).get("name")}
+             for t in radar_raw
+             if (t.get("projects") or {}).get("category_id") in (2, 7)][:12]
+
+    open_tasks = tk_db.get("tasks", {
+        "status": "neq.done",
+        "select": "assignee_id,due_date,priority,title,project_id", "limit": "1000"})
+    profiles = {p["id"]: p["full_name"] or p["email"] for p in tk_db.get(
+        "profiles", {"active": "eq.true", "select": "id,full_name,email"})}
+    team = {}
+    today_iso = today.isoformat()
+    for t in open_tasks:
+        who = profiles.get(t.get("assignee_id"), "Unassigned")
+        rec = team.setdefault(who, {"open": 0, "overdue": 0, "critical": 0})
+        rec["open"] += 1
+        if t.get("due_date") and t["due_date"] < today_iso:
+            rec["overdue"] += 1
+        if t.get("priority") == "critical":
+            rec["critical"] += 1
+    team_rows = sorted(
+        ({"who": k, **v} for k, v in team.items()),
+        key=lambda r: -r["open"])[:10]
+
+    open_estate = sum(1 for t in open_tasks if t["title"].startswith("[Estate]"))
+    open_watch = sum(1 for t in open_tasks if t["title"].startswith("[Watch]"))
+    close_overdue = sum(1 for t in open_tasks
+                        if t.get("project_id") == "aaaaaaaa-0000-0000-0000-000000000001"
+                        and t.get("due_date") and t["due_date"] < today_iso)
+    crit_overdue = sum(1 for t in open_tasks if t.get("priority") == "critical"
+                       and t.get("due_date") and t["due_date"] < today_iso)
+    fresh = bool(data["trading"]["latest_day"] and
+                 data["trading"]["latest_day"] >= (today - _dt.timedelta(days=2)).isoformat())
+    checklist = [
+        {"item": "Sales data fresh (≤2 days)", "ok": fresh,
+         "detail": "latest day %s" % data["trading"]["latest_day"]},
+        {"item": "No estate-health issues open", "ok": open_estate == 0,
+         "detail": "%d open" % open_estate},
+        {"item": "No unresolved data-watch flags", "ok": open_watch == 0,
+         "detail": "%d open" % open_watch},
+        {"item": "Close tasks on schedule", "ok": close_overdue == 0,
+         "detail": "%d overdue" % close_overdue},
+        {"item": "Cash above floor all 13 weeks",
+         "ok": bool(cash) and cash["trough"] is not None and cash.get("floor") is not None
+               and float(cash["trough"]) >= float(cash["floor"]),
+         "detail": ("trough $%s" % "{:,.0f}".format(float(cash["trough"])))
+                   if cash else "no forecast yet"},
+        {"item": "No critical tasks overdue", "ok": crit_overdue == 0,
+         "detail": "%d overdue" % crit_overdue},
+    ]
+
+    decisions = [{"title": t["title"], "due": t.get("due_date"),
+                  "who": profiles.get(t.get("assignee_id"), "")}
+                 for t in open_tasks if t.get("priority") == "critical"][:6]
+
+    signals = tk_db.get("signals", {
+        "order": "created_at.desc", "limit": "6",
+        "select": "kind,headline,detail,source,created_at"})
+
+    vip = tk_db.get("vip_messages", {
+        "order": "received_at.desc", "limit": "6",
+        "select": "sender,subject,snippet,received_at,weblink"})
+
+    rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    priority = sorted(
+        (t for t in open_tasks if t.get("priority") in ("critical", "high")),
+        key=lambda t: (rank.get(t.get("priority"), 9), t.get("due_date") or "9999"))
+    priority = [{"title": t["title"], "due": t.get("due_date"),
+                 "priority": t["priority"],
+                 "who": profiles.get(t.get("assignee_id"), "")}
+                for t in priority[:7]]
+
+    return {"meetings": meetings, "cash": cash, "radar": radar,
+            "team": team_rows, "checklist": checklist,
+            "decisions": decisions, "signals": signals,
+            "vip": vip, "priority": priority}
 
 
 @app.route(route="notify", auth_level=func.AuthLevel.ANONYMOUS,

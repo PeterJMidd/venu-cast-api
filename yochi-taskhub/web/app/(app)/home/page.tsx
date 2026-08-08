@@ -9,6 +9,22 @@ import { useOpenTask } from "@/components/TaskCard";
 import { useProfile } from "@/hooks/useProfile";
 import type { Task } from "@/lib/types";
 
+interface Cockpit {
+  meetings: { subject: string; starts_at: string; ends_at: string | null; location: string | null; organizer: string | null; attendees: number | null; prep: string | null }[];
+  cash: {
+    weeks: { week_start: string; closing: number }[];
+    trough_week: string; trough: number; opening: number | null; floor: number | null;
+    dso_days: number | null; dpo_days: number | null; generated_at: string;
+  } | null;
+  radar: { title: string; due: string; priority: string; project: string | null }[];
+  team: { who: string; open: number; overdue: number; critical: number }[];
+  checklist: { item: string; ok: boolean; detail: string }[];
+  decisions: { title: string; due: string | null; who: string }[];
+  signals: { kind: string; headline: string; detail: string | null; source: string | null; created_at: string }[];
+  vip: { sender: string; subject: string; snippet: string | null; received_at: string; weblink: string | null }[];
+  priority: { title: string; due: string | null; priority: string; who: string }[];
+}
+
 interface DashData {
   trading: {
     series: { d: string; sales: number; ly: number }[];
@@ -18,7 +34,11 @@ interface DashData {
   };
   forecast: { d: string; forecast_sales: number }[];
   procedures: { procs: number; done: number; cancelled: number; day: string } | null;
+  cockpit: Cockpit | null;
 }
+
+const fmtM = (v: number | null | undefined) =>
+  v == null ? "—" : `$${(Number(v) / 1e6).toFixed(1)}m`;
 
 const ESTATE = [
   { name: "Dashboard portal", desc: "Daily decks, Restoke ops reports", url: "https://zealous-stone-02ebae600.7.azurestaticapps.net" },
@@ -114,6 +134,77 @@ function HomeInner() {
       </h1>
       <p className="mb-6 text-sm text-gray-500">The whole operation on one screen — tasks and live data together.</p>
 
+      {/* Executive brief */}
+      {lake?.cockpit && (
+        <div className="mb-6 rounded-2xl border-2 border-brand-200 bg-gradient-to-b from-brand-50/60 to-white p-4">
+          <div className="mb-3 flex items-baseline justify-between">
+            <span className="text-sm font-bold text-brand-700">EXECUTIVE BRIEF</span>
+            <span className="text-[11px] text-gray-400">
+              {lfl !== null && t?.latest_sales
+                ? `Sales $${(t.latest_sales / 1000).toFixed(0)}k (${lfl >= 0 ? "+" : ""}${lfl.toFixed(1)}% LY)`
+                : ""}
+              {fcVar !== null ? ` · ${fcVar >= 0 ? "+" : ""}${fcVar.toFixed(1)}% vs base` : ""}
+              {lake.cockpit.cash ? ` · cash trough ${fmtM(lake.cockpit.cash.trough)}` : ""}
+              {` · ${lake.cockpit.checklist.filter((c) => c.ok).length}/${lake.cockpit.checklist.length} checks green`}
+            </span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div>
+              <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500">Deliver today</div>
+              <div className="space-y-1">
+                {lake.cockpit.priority.map((p, i) => (
+                  <div key={i} className="flex items-center gap-1.5 text-xs">
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${p.priority === "critical" ? "bg-red-500" : "bg-amber-500"}`}
+                    />
+                    <span className="truncate">{p.title}</span>
+                    {p.due && (
+                      <span className="ml-auto shrink-0 text-[10px] text-gray-400">{format(parseISO(p.due), "d MMM")}</span>
+                    )}
+                  </div>
+                ))}
+                {!lake.cockpit.priority.length && <div className="text-xs text-gray-300">Nothing critical or high open.</div>}
+              </div>
+            </div>
+            <div>
+              <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                Key messages · Janine, J Dog, Brooke
+              </div>
+              <div className="space-y-1">
+                {lake.cockpit.vip.map((m, i) => (
+                  <a
+                    key={i}
+                    href={m.weblink ?? undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`block text-xs ${m.weblink ? "hover:underline" : "cursor-default"}`}
+                  >
+                    <span className="font-semibold">{m.sender.split(" ")[0]}:</span>{" "}
+                    <span className={/URGENT/i.test(m.subject) ? "font-semibold text-red-600" : ""}>{m.subject}</span>
+                    <span className="ml-1 text-[10px] text-gray-400">{format(parseISO(m.received_at), "EEE HH:mm")}</span>
+                  </a>
+                ))}
+                {!lake.cockpit.vip.length && <div className="text-xs text-gray-300">No recent messages.</div>}
+              </div>
+            </div>
+            <div>
+              <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500">Key news & context</div>
+              <div className="space-y-1">
+                {lake.cockpit.signals.slice(0, 4).map((s, i) => (
+                  <div key={i} className="text-xs">
+                    <span className="mr-1 rounded bg-gray-100 px-1 py-px text-[9px] font-bold uppercase text-gray-500">
+                      {s.kind}
+                    </span>
+                    {s.headline}
+                  </div>
+                ))}
+                {!lake.cockpit.signals.length && <div className="text-xs text-gray-300">No signals yet.</div>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Task KPIs */}
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Tile label="Open tasks" value={String(open.length)} />
@@ -181,6 +272,198 @@ function HomeInner() {
           </Link>
         </div>
       </div>
+
+      {/* Cockpit: cash + checklist */}
+      {lake?.cockpit && (
+        <>
+          <div className="mb-6 grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="mb-1 flex items-baseline justify-between">
+                <span className="text-xs font-semibold text-gray-500">CASH · 13-WEEK FORECAST</span>
+                {lake.cockpit.cash && (
+                  <span className="text-[11px] text-gray-400">
+                    DSO {lake.cockpit.cash.dso_days ?? "—"}d · DPO {lake.cockpit.cash.dpo_days ?? "—"}d
+                  </span>
+                )}
+              </div>
+              {lake.cockpit.cash ? (
+                <>
+                  <div className="flex items-baseline gap-3">
+                    <div className="text-2xl font-bold">{fmtM(lake.cockpit.cash.opening)}</div>
+                    <div
+                      className={`text-sm font-bold ${
+                        lake.cockpit.cash.floor != null && Number(lake.cockpit.cash.trough) < Number(lake.cockpit.cash.floor)
+                          ? "text-red-600"
+                          : "text-brand-600"
+                      }`}
+                    >
+                      trough {fmtM(lake.cockpit.cash.trough)} · wk {format(parseISO(lake.cockpit.cash.trough_week), "d MMM")}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex h-14 items-end gap-1">
+                    {lake.cockpit.cash.weeks.map((w) => {
+                      const max = Math.max(1, ...lake.cockpit!.cash!.weeks.map((x) => Number(x.closing)));
+                      const below = lake.cockpit!.cash!.floor != null && Number(w.closing) < Number(lake.cockpit!.cash!.floor);
+                      return (
+                        <div
+                          key={w.week_start}
+                          className={`flex-1 rounded-t ${below ? "bg-red-400" : "bg-brand-200"}`}
+                          style={{ height: `${Math.max(4, (56 * Number(w.closing)) / max)}px` }}
+                          title={`wk ${format(parseISO(w.week_start), "d MMM")}: ${fmtM(Number(w.closing))}`}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="mt-1 text-[10px] text-gray-400">
+                    closing balance by week · refreshed {format(parseISO(lake.cockpit.cash.generated_at), "d MMM")}
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-gray-300">No cash forecast yet — runs Monday 06:55.</div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="mb-2 text-xs font-semibold text-gray-500">CRITICAL CHECKLIST · data-verified</div>
+              <div className="space-y-1.5">
+                {lake.cockpit.checklist.map((c) => (
+                  <div key={c.item} className="flex items-center gap-2 text-xs">
+                    <span className={c.ok ? "text-brand-600" : "text-red-600"}>{c.ok ? "✓" : "✗"}</span>
+                    <span className={c.ok ? "" : "font-semibold"}>{c.item}</span>
+                    <span className="ml-auto shrink-0 text-gray-400">{c.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Cockpit: meetings + compliance radar */}
+          <div className="mb-6 grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="mb-2 text-xs font-semibold text-gray-500">UPCOMING MEETINGS</div>
+              {lake.cockpit.meetings.length ? (
+                <div className="space-y-1.5">
+                  {lake.cockpit.meetings.map((m, i) =>
+                    m.prep ? (
+                      <details key={i} className="group text-xs">
+                        <summary className="flex cursor-pointer list-none items-center gap-2">
+                          <span className="w-24 shrink-0 font-semibold text-gray-600">
+                            {format(parseISO(m.starts_at), "EEE HH:mm")}
+                          </span>
+                          <span className="truncate">{m.subject}</span>
+                          <span className="ml-auto shrink-0 rounded bg-brand-50 px-1.5 py-px text-[9px] font-bold text-brand-700">
+                            PREP ▾
+                          </span>
+                        </summary>
+                        <div className="mt-1.5 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-2.5 text-[11px] leading-relaxed text-gray-700">
+                          {m.prep}
+                        </div>
+                      </details>
+                    ) : (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        <span className="w-24 shrink-0 font-semibold text-gray-600">
+                          {format(parseISO(m.starts_at), "EEE HH:mm")}
+                        </span>
+                        <span className="truncate">{m.subject}</span>
+                        {m.attendees != null && m.attendees > 1 && (
+                          <span className="ml-auto shrink-0 text-gray-400">{m.attendees}p</span>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-300">No meetings synced.</div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="mb-2 text-xs font-semibold text-gray-500">COMPLIANCE RADAR · next 60 days</div>
+              {lake.cockpit.radar.length ? (
+                <div className="space-y-1.5">
+                  {lake.cockpit.radar.slice(0, 8).map((r, i) => {
+                    const days = Math.round((parseISO(r.due).getTime() - Date.now()) / 864e5);
+                    return (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        <span
+                          className={`w-16 shrink-0 font-bold ${days < 0 ? "text-red-600" : days <= 7 ? "text-amber-600" : "text-gray-500"}`}
+                        >
+                          {format(parseISO(r.due), "d MMM")}
+                        </span>
+                        <span className="truncate">{r.title}</span>
+                        <span className="ml-auto shrink-0 text-gray-400">{r.project}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-300">Nothing due in the next 60 days.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Cockpit: team + decisions */}
+          <div className="mb-6 grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="mb-2 text-xs font-semibold text-gray-500">TEAM WORKLOAD</div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-gray-400">
+                    <th className="pb-1 font-medium">Person</th>
+                    <th className="pb-1 text-right font-medium">Open</th>
+                    <th className="pb-1 text-right font-medium">Overdue</th>
+                    <th className="pb-1 text-right font-medium">Critical</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lake.cockpit.team.map((r) => (
+                    <tr key={r.who} className="border-t border-gray-50">
+                      <td className="py-1">{r.who}</td>
+                      <td className="py-1 text-right">{r.open}</td>
+                      <td className={`py-1 text-right ${r.overdue ? "font-bold text-red-600" : ""}`}>{r.overdue}</td>
+                      <td className={`py-1 text-right ${r.critical ? "font-bold text-amber-600" : ""}`}>{r.critical}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="mb-2 text-xs font-semibold text-gray-500">DECISIONS PENDING · critical priority</div>
+              {lake.cockpit.decisions.length ? (
+                <div className="space-y-1.5">
+                  {lake.cockpit.decisions.map((d, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="truncate">{d.title}</span>
+                      <span className="ml-auto shrink-0 text-gray-400">
+                        {d.due ? format(parseISO(d.due), "d MMM") : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-300">Nothing awaiting a call from you.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Cockpit: external signals */}
+          {lake.cockpit.signals.length > 0 && (
+            <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+              <div className="mb-2 text-xs font-semibold text-gray-500">CONTEXT · economy, industry, business</div>
+              <div className="grid gap-2 md:grid-cols-3">
+                {lake.cockpit.signals.map((s, i) => (
+                  <div key={i} className="rounded-lg bg-gray-50 p-2.5">
+                    <div className="text-[10px] font-bold uppercase text-gray-400">{s.kind}</div>
+                    <div className="text-xs font-semibold">{s.headline}</div>
+                    {s.detail && <div className="mt-0.5 text-[11px] text-gray-500">{s.detail}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Position + agent activity */}
       <div className="grid gap-3 md:grid-cols-2">
