@@ -1,0 +1,11 @@
+.vercel
+node_modules/
+__pycache__/
+.python_packages/
+deploy_local.zip
+*.local.json
+secrets.local.*
+datasights-lake/data/
+datasights-lake/parquet/
+weel-sync/data/
+weel-sync/Weel_Expense_Report_*.html

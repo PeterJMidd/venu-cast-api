@@ -33,7 +33,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) setError(error.message);
-    else router.replace("/my-tasks");
+    else router.replace("/");
   }
 
   async function setNewPassword(e: React.FormEvent) {
@@ -47,7 +47,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.updateUser({ password });
     setBusy(false);
     if (error) setError(error.message);
-    else router.replace("/my-tasks");
+    else router.replace("/");
   }
 
   return (

@@ -1,0 +1,15 @@
+azure-functions
+azure-storage-blob
+pymssql
+pandas
+pyarrow
+pypdf
+python-docx
+python-pptx
+openpyxl
+extract-msg
+duckdb
+requests
+lxml
+beautifulsoup4
+html5lib

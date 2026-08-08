@@ -7,8 +7,15 @@ import { supabase } from "@/lib/supabase";
 export default function Home() {
   const router = useRouter();
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      router.replace(data.session ? "/my-tasks" : "/login");
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session) {
+        router.replace("/login");
+        return;
+      }
+      const { data: prof } = await supabase
+        .from("profiles").select("role").eq("id", data.session.user.id).single();
+      const role = (prof as { role?: string } | null)?.role;
+      router.replace(role === "admin" || role === "finance" ? "/home" : "/my-tasks");
     });
   }, [router]);
   return (

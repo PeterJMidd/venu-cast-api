@@ -70,6 +70,29 @@ def _patch(batch_id, fields):
     tk_db.patch("batch_runs", {"id": "eq." + batch_id}, fields)
 
 
+def enqueue_triage(task_ids, requested_by):
+    """Create queued 'triage' batches (one per project) for freshly created
+    watcher/GL-sweep tasks. Returns the batch ids - the caller pushes them to
+    the taskhub-batch queue."""
+    if not task_ids:
+        return []
+    tasks = tk_db.get("tasks", {"id": "in.(%s)" % ",".join(task_ids),
+                                "select": "id,project_id"})
+    by_project = {}
+    for t in tasks:
+        by_project.setdefault(t["project_id"], []).append(t["id"])
+    batch_ids = []
+    for project_id, ids in by_project.items():
+        rows = tk_db.insert("batch_runs", [{
+            "project_id": project_id,
+            "kind": "triage",
+            "task_ids": ids,
+            "requested_by": requested_by,
+        }], returning=True)
+        batch_ids.append(rows[0]["id"])
+    return batch_ids
+
+
 def process(batch_id):
     rows = tk_db.get("batch_runs", {"id": "eq." + batch_id, "select": "*"})
     if not rows:
@@ -83,6 +106,13 @@ def process(batch_id):
     try:
         if batch["kind"] == "steer":
             targets = _steer_targets(batch)
+        elif batch["kind"] == "triage":
+            ids = (batch.get("task_ids") or [])[:MAX_TASKS_PER_BATCH]
+            tasks = tk_db.get("tasks", {"id": "in.(%s)" % ",".join(ids),
+                                        "status": "neq.done",
+                                        "select": "id,title"}) if ids else []
+            targets = [{"task_id": t["id"], "title": t["title"], "feedback": None}
+                       for t in tasks]
         else:
             tasks = tk_db.get("tasks", {
                 "project_id": "eq." + batch["project_id"],
@@ -144,8 +174,10 @@ def process(batch_id):
         req = tk_db.get("profiles", {"id": "eq." + batch["requested_by"],
                                      "select": "email"})
         if req:
-            tk_email.send(req[0]["email"],
-                          "Batch run complete — %d task(s)" % total,
+            subject = ("Auto-triage complete — %d task(s) pre-worked"
+                       if batch["kind"] == "triage"
+                       else "Batch run complete — %d task(s)") % total
+            tk_email.send(req[0]["email"], subject,
                           "<pre style='font-family:inherit;white-space:pre-wrap'>%s</pre>"
                           % summary.replace("&", "&amp;").replace("<", "&lt;"))
     except Exception as e:

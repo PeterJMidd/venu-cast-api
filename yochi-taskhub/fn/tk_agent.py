@@ -99,14 +99,15 @@ def _task_context(task_id):
 
 
 def _precedents(title):
-    """Recent successful plans for similar-sounding tasks (the learning loop)."""
+    """Learning loop: (plans, lessons). Plans = recent successful plans for
+    similar-sounding tasks. Lessons = user refinement feedback recorded on past
+    successful runs (similar tasks first, then most recent anywhere) - the
+    auto-refine loop: every 'Refine the output' instruction teaches later runs."""
     words = [w for w in re.findall(r"[A-Za-z]{4,}", title)][:4]
-    if not words:
-        return []
     runs = tk_db.get("agent_runs", {
         "outcome": "eq.success",
         "order": "created_at.desc",
-        "limit": "20",
+        "limit": "40",
         "select": "task_title,plan,created_at",
     })
     scored = []
@@ -115,18 +116,32 @@ def _precedents(title):
         if score:
             scored.append((score, r))
     scored.sort(key=lambda x: -x[0])
-    return [r for _, r in scored[:3]]
+    precedents = [r for _, r in scored[:3]] if words else []
+    matched = [r for _, r in scored]
+    seen, lessons = set(), []
+    for r in matched + [r for r in runs if r not in matched]:
+        fb = (r.get("plan") or {}).get("feedback")
+        if fb and fb not in seen:
+            seen.add(fb)
+            lessons.append(fb)
+        if len(lessons) >= 5:
+            break
+    return precedents, lessons
 
 
 def propose(task_id):
     task, proj = _task_context(task_id)
     schema = tk_skillbuilder._schema_text()
-    precedents = _precedents(task["title"])
+    precedents, lessons = _precedents(task["title"])
     prec_txt = ""
     if precedents:
         prec_txt = "\n\nPrecedents (successful plans for similar tasks):\n" + json.dumps(
             [{"task": p["task_title"], "plan": p["plan"]} for p in precedents],
             separators=(",", ":"))[:8000]
+    if lessons:
+        prec_txt += ("\n\nLessons from the user's past refinements of agent output "
+                     "(apply proactively where relevant):\n" +
+                     "\n".join("- " + l for l in lessons))
     user = "Lake schema:\n%s\n\nTask: %s\nProject: %s\nDue: %s\nDescription:\n%s%s" % (
         schema, task["title"], proj.get("name", ""), task.get("due_date"),
         task.get("description") or "(none)", prec_txt)
@@ -272,9 +287,19 @@ def execute(task_id, plan, requester_uid, feedback=None, prior_summary=None):
         revision = ("\n\nTHIS IS A REVISION. Previous report summary:\n%s\n\n"
                     "The user's feedback to incorporate (follow it precisely):\n%s") % (
             prior_summary or "(not available)", feedback)
-    user = "Task: %s\nDescription:\n%s\n\nApproach taken:\n%s\n\nData pulls:\n%s%s" % (
+    lessons_txt = ""
+    try:
+        _, lessons = _precedents(task["title"])
+        if lessons:
+            lessons_txt = ("\n\nLessons from the user's past refinements of agent "
+                           "reports (apply where relevant):\n" +
+                           "\n".join("- " + l for l in lessons))
+    except Exception:
+        LOG.exception("lesson lookup failed (non-fatal)")
+    user = "Task: %s\nDescription:\n%s\n\nApproach taken:\n%s\n\nData pulls:\n%s%s%s" % (
         task["title"], task.get("description") or "",
-        plan.get("approach", ""), json.dumps(pulls, separators=(",", ":"))[:70000], revision)
+        plan.get("approach", ""), json.dumps(pulls, separators=(",", ":"))[:70000],
+        lessons_txt, revision)
     try:
         out = tk_ai.structured(REPORT_SYSTEM, user, "deliver", REPORT_SCHEMA, max_tokens=8000)
         # a truncated generation can drop fields even with a forced tool
@@ -312,9 +337,15 @@ def execute(task_id, plan, requester_uid, feedback=None, prior_summary=None):
         "task_id": task_id, "author_id": requester_uid,
         "body": "🤖 Agent run complete — attached: %s.\n\n%s" % (", ".join(files), out["summary"]),
     }])
+    plan_record = {k: plan[k] for k in ("approach", "deliverable_title", "data_queries")
+                   if k in plan}
+    if feedback:
+        # the refinement that shaped this successful run - future _precedents
+        # calls surface it as a lesson
+        plan_record["feedback"] = feedback[:600]
     tk_db.insert("agent_runs", [{
         "task_id": task_id, "task_title": task["title"],
-        "plan": {k: plan[k] for k in ("approach", "deliverable_title", "data_queries") if k in plan},
+        "plan": plan_record,
         "outcome": "success", "requested_by": requester_uid}])
     import tk_position
     tk_position.append_event(task["project_id"], "Agent %s '%s': %s" % (

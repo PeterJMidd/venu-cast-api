@@ -148,7 +148,7 @@ def run(force=False):
     admin = tk_db.get("profiles", {"role": "eq.admin", "active": "eq.true",
                                    "select": "id,email", "limit": "1"})[0]
     due = tk_calendar.roll_forward(today + dt.timedelta(days=2))
-    created = 0
+    created, task_ids = 0, []
     for a in top:
         title = "GL review: %s %s" % (a["code"], a["name"])
         if title in existing:
@@ -165,7 +165,7 @@ def run(force=False):
             "\n".join("- " + s for s in (ai["close_steps"] if ai else
                                          ["Reconcile the movement to source evidence"])),
         )
-        tk_db.insert("tasks", [{
+        rows = tk_db.insert("tasks", [{
             "project_id": CLOSE_PROJECT,
             "period_id": period_id,
             "title": title,
@@ -174,7 +174,8 @@ def run(force=False):
             "assignee_id": admin["id"],
             "due_date": due.isoformat(),
             "source": "watcher",
-        }])
+        }], returning=True)
+        task_ids.append(rows[0]["id"])
         created += 1
 
     # summary task with the full scorecard workbook
@@ -203,4 +204,4 @@ def run(force=False):
         "<ul><li>%d accounts flagged for review</li><li>%d individual review tasks created "
         "with AI analysis and close steps</li><li>Full scorecard attached to the "
         "'GL sweep' task in TaskHub</li></ul>" % (prior.strftime("%B %Y"), len(flagged), created))
-    return {"flagged": len(flagged), "tasks_created": created}
+    return {"flagged": len(flagged), "tasks_created": created, "task_ids": task_ids}

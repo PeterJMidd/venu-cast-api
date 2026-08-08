@@ -16,8 +16,16 @@ interface DashData {
     latest_sales: number | null;
     latest_ly: number | null;
   };
+  forecast: { d: string; forecast_sales: number }[];
   procedures: { procs: number; done: number; cancelled: number; day: string } | null;
 }
+
+const ESTATE = [
+  { name: "Dashboard portal", desc: "Daily decks, Restoke ops reports", url: "https://zealous-stone-02ebae600.7.azurestaticapps.net" },
+  { name: "Lake agent", desc: "Chat with all 108 data tables", url: "https://yochi-lake-agent.azurewebsites.net" },
+  { name: "Data lake", desc: "Catalog, sample rows, ask-the-lake", url: "/lake" },
+  { name: "Reporting", desc: "Task & close metrics", url: "/reporting" },
+];
 
 function Tile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "bad" | "good" | "warn" }) {
   const color = tone === "bad" ? "text-red-600" : tone === "good" ? "text-brand-600" : tone === "warn" ? "text-amber-600" : "text-gray-900";
@@ -90,6 +98,15 @@ function HomeInner() {
   const p = lake?.procedures;
   const procPct = p && p.procs ? Math.round((100 * p.done) / p.procs) : null;
 
+  // Venu Cast base case: actual-vs-forecast for the latest actual day + next-7-day outlook
+  const fc = lake?.forecast ?? [];
+  const fcByDay = new Map(fc.map((f) => [f.d, f.forecast_sales]));
+  const latestFc = t?.latest_day ? fcByDay.get(t.latest_day) : undefined;
+  const fcVar = latestFc && t?.latest_sales ? ((t.latest_sales - latestFc) / latestFc) * 100 : null;
+  const next7 = t?.latest_day
+    ? fc.filter((f) => f.d > t.latest_day!).slice(0, 7).reduce((s, f) => s + (f.forecast_sales ?? 0), 0)
+    : 0;
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <h1 className="mb-1 text-xl font-bold">
@@ -106,7 +123,7 @@ function HomeInner() {
       </div>
 
       {/* Live lake row */}
-      <div className="mb-6 grid gap-3 md:grid-cols-3">
+      <div className="mb-6 grid gap-3 md:grid-cols-4">
         <div className="rounded-xl border border-gray-200 bg-white p-4 md:col-span-2">
           <div className="mb-1 flex items-baseline justify-between">
             <span className="text-xs font-semibold text-gray-500">
@@ -133,6 +150,21 @@ function HomeInner() {
             ))}
           </div>
           <div className="mt-1 text-[10px] text-gray-400">last 14 days · nightly lake refresh</div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="text-xs font-semibold text-gray-500">VENU CAST · vs base case</div>
+          <div className={`mt-1 text-2xl font-bold ${fcVar === null ? "" : fcVar >= 0 ? "text-brand-600" : "text-amber-600"}`}>
+            {fcVar === null ? "—" : `${fcVar >= 0 ? "+" : ""}${fcVar.toFixed(1)}%`}
+          </div>
+          <div className="text-xs text-gray-500">
+            {latestFc && t?.latest_sales
+              ? `actual $${(t.latest_sales / 1000).toFixed(0)}k vs forecast $${(latestFc / 1000).toFixed(0)}k`
+              : "no base case for latest day"}
+          </div>
+          {next7 > 0 && (
+            <div className="mt-1 text-[11px] text-gray-400">next 7 days forecast: ${(next7 / 1e6).toFixed(2)}m</div>
+          )}
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -182,6 +214,23 @@ function HomeInner() {
             <div className="text-sm text-gray-300">No agent runs yet.</div>
           )}
         </div>
+      </div>
+
+      {/* Estate launcher */}
+      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {ESTATE.map((e) =>
+          e.url.startsWith("/") ? (
+            <Link key={e.name} href={e.url} className="rounded-xl border border-gray-200 bg-white p-3 hover:border-brand-500">
+              <div className="text-sm font-semibold">{e.name}</div>
+              <div className="text-[11px] text-gray-400">{e.desc}</div>
+            </Link>
+          ) : (
+            <a key={e.name} href={e.url} target="_blank" rel="noreferrer" className="rounded-xl border border-gray-200 bg-white p-3 hover:border-brand-500">
+              <div className="text-sm font-semibold">{e.name} ↗</div>
+              <div className="text-[11px] text-gray-400">{e.desc}</div>
+            </a>
+          )
+        )}
       </div>
 
       {/* Overdue quick list */}

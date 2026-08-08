@@ -1,9 +1,10 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, isBefore, parseISO, startOfDay } from "date-fns";
 import { supabase } from "@/lib/supabase";
+import { updateTask, notify } from "@/lib/mutations";
 import { useProfile } from "@/hooks/useProfile";
 import { useProfiles, profileName } from "@/hooks/useProfiles";
 import { useRealtimeTasks } from "@/hooks/useRealtimeTasks";
@@ -31,6 +32,34 @@ function TasksInner() {
   const [fStatus, setFStatus] = useState("");
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [showNew, setShowNew] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const qc = useQueryClient();
+
+  function toggleSel(id: string) {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
+  async function bulkApply(patch: { status?: string; assignee_id?: string | null }) {
+    setBulkBusy(true);
+    try {
+      for (const id of Array.from(selected)) {
+        await updateTask(id, patch as never);
+        if (patch.assignee_id) notify("assigned", id, [patch.assignee_id]);
+      }
+      setSelected(new Set());
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   const isStaff = me?.role === "admin" || me?.role === "finance";
 
@@ -157,6 +186,18 @@ function TasksInner() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-400">
             <tr>
+              {isStaff && (
+                <th className="w-8 px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(filtered.map((t) => t.id)) : new Set())
+                    }
+                    className="accent-brand-600"
+                  />
+                </th>
+              )}
               <th className="px-4 py-2.5">Task</th>
               <th className="px-4 py-2.5">Project</th>
               <th className="px-4 py-2.5">Assignee</th>
@@ -175,6 +216,16 @@ function TasksInner() {
                   onClick={() => openTask(t.id)}
                   className="cursor-pointer hover:bg-brand-50/40"
                 >
+                  {isStaff && (
+                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(t.id)}
+                        onChange={() => toggleSel(t.id)}
+                        className="accent-brand-600"
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-2.5 font-medium">
                     {t.parent_id && <span className="mr-1.5 rounded bg-gray-100 px-1 text-[10px] text-gray-500">sub</span>}
                     {t.title}
@@ -195,7 +246,7 @@ function TasksInner() {
             })}
             {!isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-300">
+                <td colSpan={isStaff ? 7 : 6} className="px-4 py-8 text-center text-gray-300">
                   No tasks match.
                 </td>
               </tr>
@@ -205,6 +256,35 @@ function TasksInner() {
       </div>
 
       {showNew && <NewTaskModal onClose={() => setShowNew(false)} />}
+
+      {selected.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 shadow-2xl">
+          <span className="text-sm font-semibold">{selected.size} selected</span>
+          <select
+            defaultValue=""
+            disabled={bulkBusy}
+            onChange={(e) => { if (e.target.value) bulkApply({ status: e.target.value }); e.target.value = ""; }}
+            className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+          >
+            <option value="">Set status…</option>
+            {TASK_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+          </select>
+          <select
+            defaultValue=""
+            disabled={bulkBusy}
+            onChange={(e) => { if (e.target.value) bulkApply({ assignee_id: e.target.value === "none" ? null : e.target.value }); e.target.value = ""; }}
+            className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+          >
+            <option value="">Assign to…</option>
+            <option value="none">Unassigned</option>
+            {profiles?.map((p) => <option key={p.id} value={p.id}>{p.full_name || p.email}</option>)}
+          </select>
+          <button onClick={() => setSelected(new Set())} className="text-xs text-gray-400 hover:text-gray-600">
+            Clear
+          </button>
+          {bulkBusy && <span className="text-xs text-gray-400">applying…</span>}
+        </div>
+      )}
     </div>
   );
 }

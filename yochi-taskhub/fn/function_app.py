@@ -6,6 +6,7 @@
 Timers use local crons via WEBSITE_TIME_ZONE=Australia/Sydney."""
 import json
 import logging
+import typing
 
 import azure.functions as func
 
@@ -13,9 +14,35 @@ app = func.FunctionApp()
 
 CORS_JSON = {"Content-Type": "application/json"}
 
+FALLBACK_ADMIN = "818a4f97-84f7-41be-8c25-63126e4e411a"  # Peter
+
 
 def _json(status, payload):
     return func.HttpResponse(json.dumps(payload), status_code=status, headers=CORS_JSON)
+
+
+def _admin_uid():
+    import tk_db
+    rows = tk_db.get("profiles", {"role": "eq.admin", "active": "eq.true",
+                                  "select": "id", "limit": "1"})
+    return rows[0]["id"] if rows else FALLBACK_ADMIN
+
+
+def _auto_triage(result, outmsg, forced=False):
+    """Queue agent pre-work batches for tasks a watcher/sweep just created.
+    On by default; disable with app setting AUTO_TRIAGE=0 (timers) — manual
+    HTTP runs only triage when forced (?triage=1)."""
+    import os
+    import tk_batch
+    ids = (result or {}).get("task_ids") or []
+    if not ids:
+        return []
+    if not forced and os.environ.get("AUTO_TRIAGE", "1") == "0":
+        return []
+    batch_ids = tk_batch.enqueue_triage(ids, _admin_uid())
+    if batch_ids:
+        outmsg.set(batch_ids)
+    return batch_ids
 
 
 def _authed(req, admin_only=False):
@@ -36,9 +63,13 @@ def template_timer(timer: func.TimerRequest) -> None:
 
 
 @app.timer_trigger(schedule="0 0 6 * * *", arg_name="timer", run_on_startup=False)
-def watcher_timer(timer: func.TimerRequest) -> None:
+@app.queue_output(arg_name="outmsg", queue_name="taskhub-batch",
+                  connection="AzureWebJobsStorage")
+def watcher_timer(timer: func.TimerRequest,
+                  outmsg: func.Out[typing.List[str]]) -> None:
     import tk_watcher
     result = tk_watcher.run()
+    result["triage_batches"] = _auto_triage(result, outmsg)
     logging.info("watcher_timer: %s", result)
 
 
@@ -64,10 +95,67 @@ def skills_timer(timer: func.TimerRequest) -> None:
 
 
 @app.timer_trigger(schedule="0 15 7 * * *", arg_name="timer", run_on_startup=False)
-def glsweep_timer(timer: func.TimerRequest) -> None:
+@app.queue_output(arg_name="outmsg", queue_name="taskhub-batch",
+                  connection="AzureWebJobsStorage")
+def glsweep_timer(timer: func.TimerRequest,
+                  outmsg: func.Out[typing.List[str]]) -> None:
     import tk_glsweep
     result = tk_glsweep.run()
+    result["triage_batches"] = _auto_triage(result, outmsg)
     logging.info("glsweep_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 10 6 * * *", arg_name="timer", run_on_startup=False)
+def estate_timer(timer: func.TimerRequest) -> None:
+    import tk_estate
+    result = tk_estate.run()
+    logging.info("estate_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 5 7 * * 1", arg_name="timer", run_on_startup=False)
+def digest_timer(timer: func.TimerRequest) -> None:
+    """Monday 07:05: weekly position-delta digest to admins."""
+    import tk_digest
+    result = tk_digest.run()
+    logging.info("digest_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 0 5 * * *", arg_name="timer", run_on_startup=False)
+@app.queue_output(arg_name="outmsg", queue_name="taskhub-batch",
+                  connection="AzureWebJobsStorage")
+def close_batch_timer(timer: func.TimerRequest, outmsg: func.Out[str]) -> None:
+    """WD+1 05:00: agent pre-works the Month-end close project before the team
+    starts (batch run over its open tasks, position + debrief email)."""
+    result = _run_close_batch(outmsg, force=False)
+    logging.info("close_batch_timer: %s", result)
+
+
+def _run_close_batch(outmsg, force):
+    import datetime as dt
+    import tk_calendar
+    import tk_db
+    import tk_glsweep
+    today = dt.date.today()
+    if not force and today != tk_calendar.business_day_of_month(
+            today.year, today.month, 1):
+        return {"skipped": "runs on the first business day of the month"}
+    # idempotency: never double-queue the scheduled close run for one day
+    existing = tk_db.get("batch_runs", {
+        "project_id": "eq." + tk_glsweep.CLOSE_PROJECT,
+        "kind": "eq.run_all",
+        "created_at": "gte." + today.isoformat(),
+        "select": "id", "limit": "1"})
+    if existing and not force:
+        return {"skipped": "close batch already queued today",
+                "batch_id": existing[0]["id"]}
+    rows = tk_db.insert("batch_runs", [{
+        "project_id": tk_glsweep.CLOSE_PROJECT,
+        "kind": "run_all",
+        "requested_by": _admin_uid(),
+    }], returning=True)
+    batch_id = rows[0]["id"]
+    outmsg.set(batch_id)
+    return {"batch_id": batch_id}
 
 
 # ---------------------------------------------------------------- ops triggers
@@ -78,9 +166,15 @@ def run_templates(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="run_watcher", auth_level=func.AuthLevel.FUNCTION)
-def run_watcher(req: func.HttpRequest) -> func.HttpResponse:
+@app.queue_output(arg_name="outmsg", queue_name="taskhub-batch",
+                  connection="AzureWebJobsStorage")
+def run_watcher(req: func.HttpRequest,
+                outmsg: func.Out[typing.List[str]]) -> func.HttpResponse:
     import tk_watcher
-    return _json(200, tk_watcher.run())
+    result = tk_watcher.run()
+    if req.params.get("triage") == "1":
+        result["triage_batches"] = _auto_triage(result, outmsg, forced=True)
+    return _json(200, result)
 
 
 @app.route(route="run_briefing", auth_level=func.AuthLevel.FUNCTION)
@@ -103,9 +197,35 @@ def run_skills(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.route(route="run_glsweep", auth_level=func.AuthLevel.FUNCTION)
-def run_glsweep(req: func.HttpRequest) -> func.HttpResponse:
+@app.queue_output(arg_name="outmsg", queue_name="taskhub-batch",
+                  connection="AzureWebJobsStorage")
+def run_glsweep(req: func.HttpRequest,
+                outmsg: func.Out[typing.List[str]]) -> func.HttpResponse:
     import tk_glsweep
-    return _json(200, tk_glsweep.run(force=req.params.get("force") == "1"))
+    result = tk_glsweep.run(force=req.params.get("force") == "1")
+    if req.params.get("triage") == "1":
+        result["triage_batches"] = _auto_triage(result, outmsg, forced=True)
+    return _json(200, result)
+
+
+@app.route(route="run_estate", auth_level=func.AuthLevel.FUNCTION)
+def run_estate(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_estate
+    return _json(200, tk_estate.run())
+
+
+@app.route(route="run_digest", auth_level=func.AuthLevel.FUNCTION)
+def run_digest(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_digest
+    return _json(200, tk_digest.run())
+
+
+@app.route(route="run_close_batch", auth_level=func.AuthLevel.FUNCTION)
+@app.queue_output(arg_name="outmsg", queue_name="taskhub-batch",
+                  connection="AzureWebJobsStorage")
+def run_close_batch(req: func.HttpRequest,
+                    outmsg: func.Out[str]) -> func.HttpResponse:
+    return _json(200, _run_close_batch(outmsg, force=req.params.get("force") == "1"))
 
 
 @app.route(route="ops_build_skill", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
@@ -440,6 +560,12 @@ def dashboard_data(req: func.HttpRequest) -> func.HttpResponse:
             FROM p WHERE d = (SELECT d0 FROM latest)""", max_rows=1)
         rows = trading["rows"]
         latest = rows[-1] if rows else None
+        import tk_db
+        try:
+            forecast = tk_db.get("v_forecast_daily", {"order": "d", "select": "d,forecast_sales"})
+        except Exception:
+            logging.exception("forecast view fetch failed (non-fatal)")
+            forecast = []
         data = {
             "trading": {
                 "series": [{"d": r[0], "sales": r[1], "ly": r[2]} for r in rows],
@@ -447,6 +573,7 @@ def dashboard_data(req: func.HttpRequest) -> func.HttpResponse:
                 "latest_sales": latest[1] if latest else None,
                 "latest_ly": latest[2] if latest else None,
             },
+            "forecast": forecast,
             "procedures": dict(zip(proc["columns"], proc["rows"][0])) if proc["rows"] else None,
             "as_at": time.time(),
         }

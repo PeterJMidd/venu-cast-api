@@ -36,10 +36,12 @@ py -m azure.cli functionapp config appsettings set --name $APP --resource-group 
     SUPABASE_URL=https://kesjkyofzdpjioafhuuw.supabase.co `
     ANTHROPIC_MODEL=claude-sonnet-4-6 `
     ANTHROPIC_MODEL_CHEAP=claude-haiku-4-5-20251001 `
-    EMAIL_ENABLED=false `
-    EMAIL_OVERRIDE_TO=peterm@yochi.com.au `
-    APP_URL=http://localhost:3100 `
+    EMAIL_ENABLED=true `
+    APP_URL=https://jolly-flower-042897300.7.azurestaticapps.net `
     | Out-Null
+# NOTE: went live 2026-07-26 — EMAIL_OVERRIDE_TO must stay UNSET (mail goes to
+# real recipients) and APP_URL is the production SWA. Do not re-add the
+# localhost/override values here; they clobber live settings on every deploy.
 
 # --- 3. Secrets: copied from sibling apps so values never live in this script ---
 Write-Host "== app settings (secrets, copied from yochi-daily-insights) ==" -ForegroundColor Cyan

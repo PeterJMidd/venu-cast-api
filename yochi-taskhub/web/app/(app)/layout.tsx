@@ -9,6 +9,7 @@ import { useProfile } from "@/hooks/useProfile";
 import DrawerHost from "@/components/DrawerHost";
 import NLQuickAdd from "@/components/NLQuickAdd";
 import NewProjectModal from "@/components/NewProjectModal";
+import PrefsModal from "@/components/PrefsModal";
 import type { Category, Project } from "@/lib/types";
 
 const NAV = [
@@ -24,6 +25,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [showNewProject, setShowNewProject] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showPrefs, setShowPrefs] = useState(false);
   const { data: profile } = useProfile();
 
   useEffect(() => {
@@ -188,12 +190,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="truncate text-sm font-medium">{profile?.full_name ?? profile?.email}</div>
           <div className="flex items-center justify-between">
             <span className="text-xs capitalize text-gray-400">{profile?.role}</span>
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="text-xs text-gray-400 hover:text-red-600"
-            >
-              Sign out
-            </button>
+            <div className="flex gap-3">
+              <button onClick={() => setShowPrefs(true)} className="text-xs text-gray-400 hover:text-brand-600" title="Notification settings">⚙</button>
+              <button
+                onClick={() => supabase.auth.signOut()}
+                className="text-xs text-gray-400 hover:text-red-600"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -225,6 +230,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <DrawerHost />
       </Suspense>
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} />}
+      {showPrefs && profile && <PrefsModal userId={profile.id} onClose={() => setShowPrefs(false)} />}
     </div>
   );
 }
