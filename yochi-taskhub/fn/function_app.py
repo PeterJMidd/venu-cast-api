@@ -120,6 +120,22 @@ def digest_timer(timer: func.TimerRequest) -> None:
     logging.info("digest_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 40 6 * * *", arg_name="timer", run_on_startup=False)
+def asana_timer(timer: func.TimerRequest) -> None:
+    """Daily 06:40: cloud Asana -> TaskHub sync (no desktop dependency)."""
+    import tk_asana
+    result = tk_asana.run()
+    logging.info("asana_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 25 6 * * 1", arg_name="timer", run_on_startup=False)
+def signals_timer(timer: func.TimerRequest) -> None:
+    """Monday 06:25: web-search-grounded cockpit signals."""
+    import tk_signals
+    result = tk_signals.run()
+    logging.info("signals_timer: %s", result)
+
+
 @app.timer_trigger(schedule="0 35 6 * * 1", arg_name="timer", run_on_startup=False)
 def health_timer(timer: func.TimerRequest) -> None:
     """Monday 06:35: leading-indicator venue health scores."""
@@ -246,6 +262,18 @@ def run_glsweep(req: func.HttpRequest,
     if req.params.get("triage") == "1":
         result["triage_batches"] = _auto_triage(result, outmsg, forced=True)
     return _json(200, result)
+
+
+@app.route(route="run_asana", auth_level=func.AuthLevel.FUNCTION)
+def run_asana(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_asana
+    return _json(200, tk_asana.run())
+
+
+@app.route(route="run_signals", auth_level=func.AuthLevel.FUNCTION)
+def run_signals(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_signals
+    return _json(200, tk_signals.run())
 
 
 @app.route(route="run_price", auth_level=func.AuthLevel.FUNCTION)

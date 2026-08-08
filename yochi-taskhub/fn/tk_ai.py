@@ -44,6 +44,20 @@ def text(system, user, cheap=False, max_tokens=2000):
     return out.strip()
 
 
+def searched_text(system, user, max_searches=6, max_tokens=3000):
+    """Text answer grounded in live web search (Anthropic server-side tool)."""
+    data = _call({
+        "model": _model(),
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": user}],
+        "tools": [{"type": "web_search_20250305", "name": "web_search",
+                   "max_uses": max_searches}],
+    })
+    return "".join(b.get("text", "") for b in data.get("content", [])
+                   if b.get("type") == "text").strip()
+
+
 def structured(system, user, tool_name, tool_schema, cheap=False, max_tokens=2000):
     """Force a single tool call and return its validated-by-API input dict."""
     data = _call({
