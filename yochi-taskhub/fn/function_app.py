@@ -664,12 +664,41 @@ def dashboard_data(req: func.HttpRequest) -> func.HttpResponse:
         except Exception:
             logging.exception("forecast view fetch failed (non-fatal)")
             forecast = []
+        try:
+            import tk_budget
+            budget_days = tk_budget.daily_group()
+        except Exception:
+            logging.exception("budget load failed (non-fatal)")
+            budget_days = {}
+        mtd = None
+        if latest and budget_days:
+            month_start = str(latest[0])[:8] + "01"
+            mtd_rows = lake_reader.query("""
+                SELECT round(sum(net_sales),0) FROM mart_venue_daily
+                WHERE CAST("date" AS DATE) >= DATE '%s'
+                  AND CAST("date" AS DATE) <= DATE '%s'""" % (
+                month_start, latest[0]), max_rows=1)
+            mtd_sales = float(mtd_rows["rows"][0][0] or 0)
+            import datetime as _dt
+            d0 = _dt.date.fromisoformat(month_start)
+            d1 = _dt.date.fromisoformat(str(latest[0])[:10])
+            days = [(d0 + _dt.timedelta(days=i)).isoformat()
+                    for i in range((d1 - d0).days + 1)]
+            buds = [budget_days.get(d) for d in days]
+            mtd_budget = round(sum(buds)) if all(b is not None for b in buds) else None
+            mtd = {"sales": round(mtd_sales), "budget": mtd_budget}
         data = {
             "trading": {
-                "series": [{"d": r[0], "sales": r[1], "ly": r[2]} for r in rows],
+                "series": [{"d": r[0], "sales": r[1], "ly": r[2],
+                            "budget": (round(budget_days[str(r[0])[:10]])
+                                       if str(r[0])[:10] in budget_days else None)}
+                           for r in rows],
                 "latest_day": latest[0] if latest else None,
                 "latest_sales": latest[1] if latest else None,
                 "latest_ly": latest[2] if latest else None,
+                "latest_budget": (round(budget_days[str(latest[0])[:10]])
+                                  if latest and str(latest[0])[:10] in budget_days else None),
+                "mtd": mtd,
             },
             "forecast": forecast,
             "procedures": dict(zip(proc["columns"], proc["rows"][0])) if proc["rows"] else None,

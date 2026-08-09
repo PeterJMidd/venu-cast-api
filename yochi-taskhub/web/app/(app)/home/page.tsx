@@ -27,10 +27,12 @@ interface Cockpit {
 
 interface DashData {
   trading: {
-    series: { d: string; sales: number; ly: number }[];
+    series: { d: string; sales: number; ly: number; budget: number | null }[];
     latest_day: string | null;
     latest_sales: number | null;
     latest_ly: number | null;
+    latest_budget: number | null;
+    mtd: { sales: number; budget: number | null } | null;
   };
   forecast: { d: string; forecast_sales: number }[];
   procedures: { procs: number; done: number; cancelled: number; day: string } | null;
@@ -114,7 +116,10 @@ function HomeInner() {
 
   const t = lake?.trading;
   const lfl = t?.latest_sales && t?.latest_ly ? ((t.latest_sales - t.latest_ly) / t.latest_ly) * 100 : null;
-  const maxSales = Math.max(1, ...(t?.series ?? []).map((s) => s.sales ?? 0));
+  const maxSales = Math.max(1, ...(t?.series ?? []).flatMap((s) => [s.sales ?? 0, s.budget ?? 0]));
+  const budVar = t?.latest_sales && t?.latest_budget ? ((t.latest_sales - t.latest_budget) / t.latest_budget) * 100 : null;
+  const mtdVar =
+    t?.mtd?.budget && t.mtd.sales ? ((t.mtd.sales - t.mtd.budget) / t.mtd.budget) * 100 : null;
   const p = lake?.procedures;
   const procPct = p && p.procs ? Math.round((100 * p.done) / p.procs) : null;
 
@@ -226,21 +231,53 @@ function HomeInner() {
               </span>
             )}
           </div>
-          <div className="text-2xl font-bold">
-            {t?.latest_sales ? `$${(t.latest_sales / 1000).toFixed(0)}k` : "…"}
+          <div className="flex items-baseline gap-3">
+            <div className="text-2xl font-bold">
+              {t?.latest_sales ? `$${(t.latest_sales / 1000).toFixed(0)}k` : "…"}
+            </div>
+            {budVar !== null && (
+              <span className={`text-xs font-bold ${budVar >= 0 ? "text-brand-600" : "text-red-600"}`}>
+                {budVar >= 0 ? "+" : ""}
+                {budVar.toFixed(1)}% vs budget ${((t!.latest_budget ?? 0) / 1000).toFixed(0)}k
+              </span>
+            )}
           </div>
           <div className="mt-2 flex h-16 items-end gap-1">
             {(t?.series ?? []).map((s) => (
-              <div key={s.d} className="group relative flex-1">
+              <div key={s.d} className="group relative h-16 flex-1">
                 <div
-                  className={`rounded-t ${s.d === t?.latest_day ? "bg-brand-600" : "bg-brand-100"}`}
+                  className={`absolute bottom-0 left-0 right-0 rounded-t ${
+                    s.budget != null && s.sales != null && s.sales < s.budget
+                      ? s.d === t?.latest_day
+                        ? "bg-red-500"
+                        : "bg-red-200"
+                      : s.d === t?.latest_day
+                        ? "bg-brand-600"
+                        : "bg-brand-100"
+                  }`}
                   style={{ height: `${Math.max(4, (64 * (s.sales ?? 0)) / maxSales)}px` }}
-                  title={`${format(parseISO(s.d), "EEE d MMM")}: $${((s.sales ?? 0) / 1000).toFixed(0)}k`}
+                  title={`${format(parseISO(s.d), "EEE d MMM")}: $${((s.sales ?? 0) / 1000).toFixed(0)}k${
+                    s.budget != null ? ` vs budget $${(s.budget / 1000).toFixed(0)}k` : ""
+                  }`}
                 />
+                {s.budget != null && (
+                  <div
+                    className="pointer-events-none absolute left-0 right-0 border-t-2 border-gray-800/70"
+                    style={{ bottom: `${Math.max(2, Math.min(64, (64 * s.budget) / maxSales))}px` }}
+                  />
+                )}
               </div>
             ))}
           </div>
-          <div className="mt-1 text-[10px] text-gray-400">last 14 days · nightly lake refresh</div>
+          <div className="mt-1 flex items-center justify-between text-[10px] text-gray-400">
+            <span>last 14 days · ─ budget · red = below budget</span>
+            {t?.mtd?.budget != null && mtdVar !== null && (
+              <span className={mtdVar >= 0 ? "font-semibold text-brand-600" : "font-semibold text-red-600"}>
+                MTD ${(t.mtd.sales / 1e6).toFixed(2)}m vs ${(t.mtd.budget / 1e6).toFixed(2)}m ({mtdVar >= 0 ? "+" : ""}
+                {mtdVar.toFixed(1)}%)
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-4">
