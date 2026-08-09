@@ -10,6 +10,7 @@ import DrawerHost from "@/components/DrawerHost";
 import NLQuickAdd from "@/components/NLQuickAdd";
 import NewProjectModal from "@/components/NewProjectModal";
 import PrefsModal from "@/components/PrefsModal";
+import VoicePanel from "@/components/VoicePanel";
 import type { Category, Project } from "@/lib/types";
 
 const NAV = [
@@ -229,6 +230,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Suspense>
         <DrawerHost />
       </Suspense>
+      {profile && profile.role !== "stakeholder" && <VoicePanel />}
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} />}
       {showPrefs && profile && <PrefsModal userId={profile.id} onClose={() => setShowPrefs(false)} />}
     </div>

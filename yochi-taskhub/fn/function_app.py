@@ -358,6 +358,38 @@ def lake_catalog(req: func.HttpRequest) -> func.HttpResponse:
         return _json(500, {"error": str(e)})
 
 
+@app.route(route="ask", auth_level=func.AuthLevel.ANONYMOUS,
+           methods=["POST", "OPTIONS"])
+def ask(req: func.HttpRequest) -> func.HttpResponse:
+    """Voice/chat assistant: agentic answer over the lake + TaskHub state."""
+    if req.method == "OPTIONS":
+        return func.HttpResponse("", status_code=204)
+    import tk_auth
+    import tk_ask
+    try:
+        _, role, _ = _authed(req)
+    except tk_auth.AuthError as e:
+        return _json(401, {"error": str(e)})
+    if role == "stakeholder":
+        return _json(403, {"error": "finance or admin only"})
+    try:
+        body = req.get_json()
+        question = (body.get("question") or "").strip()
+        if not question:
+            return _json(400, {"error": "no question"})
+        return _json(200, tk_ask.answer(question, body.get("history")))
+    except Exception as e:
+        logging.exception("ask failed")
+        return _json(500, {"error": str(e)})
+
+
+@app.route(route="ops_ask", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
+def ops_ask(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_ask
+    body = req.get_json()
+    return _json(200, tk_ask.answer(body["question"], body.get("history")))
+
+
 @app.route(route="ask_lake", auth_level=func.AuthLevel.ANONYMOUS,
            methods=["POST", "OPTIONS"])
 def ask_lake(req: func.HttpRequest) -> func.HttpResponse:
