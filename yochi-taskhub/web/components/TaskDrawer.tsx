@@ -143,6 +143,21 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     },
   });
 
+  // NOTE: every hook must run on every render (React #310) — keep all hooks
+  // above this early return.
+  const { data: subtasks } = useQuery({
+    queryKey: ["task", taskId, "subtasks"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("id,title,status,assignee_id,due_date")
+        .eq("parent_id", taskId)
+        .order("created_at");
+      if (error) throw error;
+      return data as Pick<Task, "id" | "title" | "status" | "assignee_id" | "due_date">[];
+    },
+  });
+
   if (!task) return null;
 
   const invalidate = () => {
@@ -223,19 +238,6 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     setCommentText("");
     qc.invalidateQueries({ queryKey: ["task", taskId, "comments"] });
   }
-
-  const { data: subtasks } = useQuery({
-    queryKey: ["task", taskId, "subtasks"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select("id,title,status,assignee_id,due_date")
-        .eq("parent_id", taskId)
-        .order("created_at");
-      if (error) throw error;
-      return data as Pick<Task, "id" | "title" | "status" | "assignee_id" | "due_date">[];
-    },
-  });
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
