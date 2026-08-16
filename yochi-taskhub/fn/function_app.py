@@ -120,6 +120,66 @@ def digest_timer(timer: func.TimerRequest) -> None:
     logging.info("digest_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 45 10 * * *", arg_name="timer", run_on_startup=False)
+def revenue_timer(timer: func.TimerRequest) -> None:
+    """Daily 10:45 (post top-up): POS -> GL revenue assurance + Adyen clearing."""
+    import tk_revenue
+    result = tk_revenue.run()
+    logging.info("revenue_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 55 10 * * *", arg_name="timer", run_on_startup=False)
+def dailypl_timer(timer: func.TimerRequest) -> None:
+    """Daily 10:55: MTD estimated P&L pulse (continuous close)."""
+    import tk_dailypl
+    result = tk_dailypl.run()
+    logging.info("dailypl_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 25 7 * * 1", arg_name="timer", run_on_startup=False)
+def ap_timer(timer: func.TimerRequest) -> None:
+    """Monday 07:25: AP autopilot (RNI, duplicates at entry, proposed payment run)."""
+    import tk_ap
+    result = tk_ap.run()
+    logging.info("ap_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 5 7 * * 1", arg_name="timer", run_on_startup=False)
+def payroll_timer(timer: func.TimerRequest) -> None:
+    """Monday 07:05: payrun vs Tanda reconciliation + approval hygiene."""
+    import tk_payroll
+    result = tk_payroll.run()
+    logging.info("payroll_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 35 7 * * *", arg_name="timer", run_on_startup=False)
+@app.queue_output(arg_name="outmsg", queue_name="taskhub-batch",
+                  connection="AzureWebJobsStorage")
+def decisions_timer(timer: func.TimerRequest,
+                    outmsg: func.Out[typing.List[str]]) -> None:
+    """Daily 07:35: agent pre-works up to 2 critical tasks lacking a recent run."""
+    import tk_decisions
+    ids = tk_decisions.pick()
+    batches = _auto_triage({"task_ids": ids}, outmsg, forced=True) if ids else []
+    logging.info("decisions_timer: picked=%s batches=%s", ids, batches)
+
+
+@app.timer_trigger(schedule="0 15 8 1 * *", arg_name="timer", run_on_startup=False)
+def autoaudit_timer(timer: func.TimerRequest) -> None:
+    """Monthly (1st, 08:15): the automation audits itself."""
+    import tk_autoaudit
+    result = tk_autoaudit.run()
+    logging.info("autoaudit_timer: %s", result)
+
+
+@app.timer_trigger(schedule="0 40 7 * * *", arg_name="timer", run_on_startup=False)
+def mmr_timer(timer: func.TimerRequest) -> None:
+    """Daily 07:40, self-gates to WD+3: MMR finance pack auto-assembly."""
+    import tk_mmr
+    result = tk_mmr.run()
+    logging.info("mmr_timer: %s", result)
+
+
 @app.timer_trigger(schedule="0 45 5 * * *", arg_name="timer", run_on_startup=False)
 def feeds_timer(timer: func.TimerRequest) -> None:
     """Daily 05:45: active external data feeds -> lake (weekly ones on Mondays)."""
@@ -278,6 +338,43 @@ def run_glsweep(req: func.HttpRequest,
     if req.params.get("triage") == "1":
         result["triage_batches"] = _auto_triage(result, outmsg, forced=True)
     return _json(200, result)
+
+
+@app.route(route="run_revenue", auth_level=func.AuthLevel.FUNCTION)
+def run_revenue(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_revenue
+    return _json(200, tk_revenue.run())
+
+
+@app.route(route="run_dailypl", auth_level=func.AuthLevel.FUNCTION)
+def run_dailypl(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_dailypl
+    return _json(200, tk_dailypl.run())
+
+
+@app.route(route="run_ap", auth_level=func.AuthLevel.FUNCTION)
+def run_ap(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_ap
+    return _json(200, tk_ap.run(email=req.params.get("email") != "0"))
+
+
+@app.route(route="run_payroll", auth_level=func.AuthLevel.FUNCTION)
+def run_payroll(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_payroll
+    return _json(200, tk_payroll.run())
+
+
+@app.route(route="run_autoaudit", auth_level=func.AuthLevel.FUNCTION)
+def run_autoaudit(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_autoaudit
+    return _json(200, tk_autoaudit.run(email=req.params.get("email") != "0"))
+
+
+@app.route(route="run_mmr", auth_level=func.AuthLevel.FUNCTION)
+def run_mmr(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_mmr
+    return _json(200, tk_mmr.run(force=req.params.get("force") == "1",
+                                 email=req.params.get("email") != "0"))
 
 
 @app.route(route="run_feeds", auth_level=func.AuthLevel.FUNCTION)
@@ -908,6 +1005,7 @@ def _cockpit(tk_db, data):
 
     open_estate = sum(1 for t in open_tasks if t["title"].startswith("[Estate]"))
     open_watch = sum(1 for t in open_tasks if t["title"].startswith("[Watch]"))
+    open_revenue = sum(1 for t in open_tasks if t["title"].startswith("[Revenue]"))
     close_overdue = sum(1 for t in open_tasks
                         if t.get("project_id") == "aaaaaaaa-0000-0000-0000-000000000001"
                         and t.get("due_date") and t["due_date"] < today_iso)
@@ -931,7 +1029,13 @@ def _cockpit(tk_db, data):
                    if cash else "no forecast yet"},
         {"item": "No critical tasks overdue", "ok": crit_overdue == 0,
          "detail": "%d overdue" % crit_overdue},
+        {"item": "Revenue assurance clear (POS→GL, Adyen)", "ok": open_revenue == 0,
+         "detail": "%d open" % open_revenue},
     ]
+
+    pulse_rows = tk_db.get("pl_pulse", {"order": "day.desc", "limit": "1",
+                                        "select": "day,data"})
+    pl_pulse = pulse_rows[0] if pulse_rows else None
 
     decisions = [{"title": t["title"], "due": t.get("due_date"),
                   "who": profiles.get(t.get("assignee_id"), "")}
@@ -977,7 +1081,8 @@ def _cockpit(tk_db, data):
     return {"meetings": meetings, "cash": cash, "radar": radar,
             "team": team_rows, "checklist": checklist,
             "decisions": decisions, "signals": signals,
-            "vip": vip, "priority": priority, "pillars": pillar_rows}
+            "vip": vip, "priority": priority, "pillars": pillar_rows,
+            "pl_pulse": pl_pulse}
 
 
 @app.route(route="notify", auth_level=func.AuthLevel.ANONYMOUS,

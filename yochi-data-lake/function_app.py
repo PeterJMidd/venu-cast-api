@@ -169,6 +169,20 @@ def midmorning_topup(timer: func.TimerRequest):
         logging.error("topup sync had %d errors", len(result["sync"]["errors"]))
 
 
+@app.timer_trigger(schedule="%TOPUP2_CRON%", arg_name="timer", run_on_startup=False)
+def early_topup(timer: func.TimerRequest):
+    """07:45: catch prior-day data that lands upstream just after the nightly."""
+    result = _topup()
+    logging.info("early topup result: %s", json.dumps(result)[:1200])
+
+
+@app.timer_trigger(schedule="%TOPUP3_CRON%", arg_name="timer", run_on_startup=False)
+def evening_topup(timer: func.TimerRequest):
+    """16:30: same-day upstream late arrivals so evening/next-morning reads are current."""
+    result = _topup()
+    logging.info("evening topup result: %s", json.dumps(result)[:1200])
+
+
 @app.route(route="topup_now", auth_level=func.AuthLevel.FUNCTION)
 def topup_now(req: func.HttpRequest) -> func.HttpResponse:
     try:

@@ -26,6 +26,16 @@ interface Cockpit {
   vip: { sender: string; subject: string; snippet: string | null; received_at: string; weblink: string | null }[];
   priority: { title: string; due: string | null; priority: string; who: string }[];
   pillars: { name: string; sort: number; open: number; overdue: number; critical: number }[];
+  pl_pulse: {
+    day: string;
+    data: {
+      asof: string; days_mtd: number; revenue: number; cogs: number;
+      cogs_pct: number | null; labour_est: number; labour_basis: string;
+      labour_pct: number | null; opex_est: number; ebitda_est: number;
+      ebitda_pct: number | null; budget_sales: number | null;
+      sales_vs_budget_pct: number | null;
+    };
+  } | null;
 }
 
 interface DashData {
@@ -395,6 +405,40 @@ function HomeInner() {
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white p-4">
+              {lake.cockpit.pl_pulse && (
+                <div className="mb-3 border-b border-gray-100 pb-3">
+                  <div className="mb-1 flex items-baseline justify-between">
+                    <span className="text-xs font-semibold text-gray-500">
+                      P&L PULSE · MTD to {format(parseISO(lake.cockpit.pl_pulse.data.asof), "d MMM")}
+                    </span>
+                    <span className="text-[10px] text-gray-400">estimated · continuous close</span>
+                  </div>
+                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
+                    <span>
+                      Rev <b>{fmtM(lake.cockpit.pl_pulse.data.revenue)}</b>
+                      {lake.cockpit.pl_pulse.data.sales_vs_budget_pct != null && (
+                        <b
+                          className={
+                            lake.cockpit.pl_pulse.data.sales_vs_budget_pct >= 0
+                              ? "text-brand-600"
+                              : "text-red-600"
+                          }
+                        >
+                          {" "}
+                          ({lake.cockpit.pl_pulse.data.sales_vs_budget_pct >= 0 ? "+" : ""}
+                          {lake.cockpit.pl_pulse.data.sales_vs_budget_pct}% bud)
+                        </b>
+                      )}
+                    </span>
+                    <span>Food {lake.cockpit.pl_pulse.data.cogs_pct ?? "—"}%</span>
+                    <span>Labour {lake.cockpit.pl_pulse.data.labour_pct ?? "—"}%</span>
+                    <span>
+                      Est EBITDA <b>{fmtM(lake.cockpit.pl_pulse.data.ebitda_est)}</b> (
+                      {lake.cockpit.pl_pulse.data.ebitda_pct ?? "—"}%)
+                    </span>
+                  </div>
+                </div>
+              )}
               <div className="mb-2 text-xs font-semibold text-gray-500">CRITICAL CHECKLIST · data-verified</div>
               <div className="space-y-1.5">
                 {lake.cockpit.checklist.map((c) => (

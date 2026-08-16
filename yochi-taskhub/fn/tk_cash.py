@@ -142,7 +142,37 @@ def build():
     dso = round(ar_open / (weekly_sales_avg / 7), 1) if weekly_sales_avg else None
     dpo = round(ap_open / (ap_avg / 7), 1) if ap_avg else None
 
+    # accuracy tracking: last generation's week-1 forecast vs what actually
+    # happened (receipts proxy = mart sales x1.1; AP = bills actually paid)
+    accuracy = None
+    try:
+        last_mon = (dt.date.today() - dt.timedelta(days=dt.date.today().weekday() + 7))
+        prev = tk_db.get("cash_forecast", {
+            "week_start": "eq." + last_mon.isoformat(),
+            "order": "generated_at.desc", "limit": "1",
+            "select": "receipts,ap"})
+        if prev:
+            act = lake_reader.query("""
+                SELECT round(sum(net_sales)*1.1,0),
+                       (SELECT round(sum(TRY_CAST(amountpaid AS DOUBLE)),0) FROM Invoices
+                        WHERE type=0 AND CAST(fullypaidondate AS DATE) >= DATE '%s'
+                          AND CAST(fullypaidondate AS DATE) < DATE '%s' + INTERVAL 7 DAY)
+                FROM mart_venue_daily
+                WHERE CAST("date" AS DATE) >= DATE '%s'
+                  AND CAST("date" AS DATE) < DATE '%s' + INTERVAL 7 DAY""" % (
+                last_mon, last_mon, last_mon, last_mon), max_rows=1)
+            act_rec, act_ap = (float(v or 0) for v in act["rows"][0])
+            f_rec, f_ap = float(prev[0]["receipts"]), float(prev[0]["ap"])
+            accuracy = {"week": last_mon.isoformat(),
+                        "receipts_forecast": round(f_rec), "receipts_actual": round(act_rec),
+                        "receipts_err_pct": round(100 * (f_rec - act_rec) / act_rec, 1) if act_rec else None,
+                        "ap_forecast": round(f_ap), "ap_actual": round(act_ap),
+                        "ap_err_pct": round(100 * (f_ap - act_ap) / act_ap, 1) if act_ap else None}
+    except Exception:
+        LOG.exception("accuracy tracking failed (non-fatal)")
+
     assumptions = {"opening_cash": round(opening), "bank_as_at": as_at,
+                   "last_week_accuracy": accuracy,
                    "ar_open": round(ar_open), "ap_open": round(ap_open),
                    "dso_days": dso, "dpo_days": dpo,
                    "ap_weekly_run_rate": round(ap_avg),
