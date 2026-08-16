@@ -6,6 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { format, isBefore, parseISO, startOfDay } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useOpenTask } from "@/components/TaskCard";
+import ReportButton from "@/components/ReportButton";
+import SmartTaskModal from "@/components/SmartTaskModal";
 import { useProfile } from "@/hooks/useProfile";
 import type { Task } from "@/lib/types";
 
@@ -135,9 +137,15 @@ function HomeInner() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <h1 className="mb-1 text-xl font-bold">
-        {me?.full_name ? `Morning, ${me.full_name.split(" ")[0]}` : "Home"}
-      </h1>
+      <div className="mb-1 flex items-center justify-between">
+        <h1 className="text-xl font-bold">
+          {me?.full_name ? `Morning, ${me.full_name.split(" ")[0]}` : "Home"}
+        </h1>
+        <div className="flex gap-2">
+          <SmartTaskModal />
+          <ReportButton />
+        </div>
+      </div>
       <p className="mb-6 text-sm text-gray-500">The whole operation on one screen — tasks and live data together.</p>
 
       {/* Executive brief */}

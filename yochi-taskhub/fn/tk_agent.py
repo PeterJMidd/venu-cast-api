@@ -145,8 +145,8 @@ def propose(task_id):
     user = "Lake schema:\n%s\n\nTask: %s\nProject: %s\nDue: %s\nDescription:\n%s%s" % (
         schema, task["title"], proj.get("name", ""), task.get("due_date"),
         task.get("description") or "(none)", prec_txt)
-    plan = tk_ai.structured(PLAN_SYSTEM, user, "plan_task", PLAN_SCHEMA, max_tokens=2500)
-    validation = tk_skillbuilder._validate(plan["data_queries"])
+    plan = tk_ai.structured(PLAN_SYSTEM, user, "plan_task", PLAN_SCHEMA, max_tokens=4000)
+    validation = tk_skillbuilder._validate(plan.get("data_queries") or [])
     if any(not v["ok"] for v in validation):
         repair = ("Task: %s\n\nOriginal approach (KEEP this as the approach text - do not "
                   "replace it with commentary about the fix):\n%s\n\nYour queries:\n%s\n\n"
@@ -154,10 +154,10 @@ def propose(task_id):
                   "Return the corrected full plan.") % (
             task["title"], plan.get("approach", ""), json.dumps(plan["data_queries"]),
             json.dumps(validation), schema)
-        plan = tk_ai.structured(PLAN_SYSTEM, repair, "plan_task", PLAN_SCHEMA, max_tokens=2500)
-        validation = tk_skillbuilder._validate(plan["data_queries"])
+        plan = tk_ai.structured(PLAN_SYSTEM, repair, "plan_task", PLAN_SCHEMA, max_tokens=4000)
+        validation = tk_skillbuilder._validate(plan.get("data_queries") or [])
     plan["validation"] = validation
-    plan["all_valid"] = all(v["ok"] for v in validation)
+    plan["all_valid"] = bool(validation) and all(v["ok"] for v in validation)
     plan["used_precedents"] = [p["task_title"] for p in precedents]
     return plan
 

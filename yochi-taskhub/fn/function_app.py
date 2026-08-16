@@ -120,6 +120,14 @@ def digest_timer(timer: func.TimerRequest) -> None:
     logging.info("digest_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 45 5 * * *", arg_name="timer", run_on_startup=False)
+def feeds_timer(timer: func.TimerRequest) -> None:
+    """Daily 05:45: active external data feeds -> lake (weekly ones on Mondays)."""
+    import tk_feeds
+    result = tk_feeds.run()
+    logging.info("feeds_timer: %s", result)
+
+
 @app.timer_trigger(schedule="0 5 6 1 * *", arg_name="timer", run_on_startup=False)
 def register_timer(timer: func.TimerRequest) -> None:
     """Monthly (1st, 06:05): compliance register -> lake + rolling task window."""
@@ -270,6 +278,81 @@ def run_glsweep(req: func.HttpRequest,
     if req.params.get("triage") == "1":
         result["triage_batches"] = _auto_triage(result, outmsg, forced=True)
     return _json(200, result)
+
+
+@app.route(route="run_feeds", auth_level=func.AuthLevel.FUNCTION)
+def run_feeds(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_feeds
+    return _json(200, tk_feeds.run(force_slug=req.params.get("feed")))
+
+
+@app.route(route="report", auth_level=func.AuthLevel.ANONYMOUS,
+           methods=["POST", "OPTIONS"])
+def report(req: func.HttpRequest) -> func.HttpResponse:
+    """Scoped status report: {category_id?, project_id?, format: pdf|csv}."""
+    if req.method == "OPTIONS":
+        return func.HttpResponse("", status_code=204)
+    import datetime as _dt
+    import tk_auth
+    import tk_report
+    try:
+        _, role, _ = _authed(req)
+    except tk_auth.AuthError as e:
+        return _json(401, {"error": str(e)})
+    if role in ("stakeholder", "external"):
+        return _json(403, {"error": "finance or admin only"})
+    try:
+        body = req.get_json()
+        cid = body.get("category_id") or None
+        pid = body.get("project_id") or None
+        stamp = _dt.date.today().isoformat()
+        if body.get("format") == "csv":
+            data = tk_report.build_csv(cid, pid)
+            return func.HttpResponse(data, status_code=200, headers={
+                "Content-Type": "text/csv; charset=utf-8",
+                "Content-Disposition":
+                    'attachment; filename="taskhub_report_%s.csv"' % stamp})
+        data, scope = tk_report.build_pdf(cid, pid)
+        return func.HttpResponse(data, status_code=200, headers={
+            "Content-Type": "application/pdf",
+            "Content-Disposition":
+                'attachment; filename="taskhub_report_%s.pdf"' % stamp})
+    except Exception as e:
+        logging.exception("report failed")
+        return _json(500, {"error": str(e)})
+
+
+@app.route(route="smart_task", auth_level=func.AuthLevel.ANONYMOUS,
+           methods=["POST", "OPTIONS"])
+@app.queue_output(arg_name="outmsg", queue_name="taskhub-batch",
+                  connection="AzureWebJobsStorage")
+def smart_task(req: func.HttpRequest,
+               outmsg: func.Out[typing.List[str]]) -> func.HttpResponse:
+    """Spec -> data plan -> task -> (optionally) immediate agent execution."""
+    if req.method == "OPTIONS":
+        return func.HttpResponse("", status_code=204)
+    import tk_auth
+    import tk_smart
+    try:
+        uid, role, _ = _authed(req)
+    except tk_auth.AuthError as e:
+        return _json(401, {"error": str(e)})
+    if role in ("stakeholder", "external"):
+        return _json(403, {"error": "finance or admin only"})
+    try:
+        body = req.get_json()
+        spec = (body.get("description") or "").strip()
+        if not spec:
+            return _json(400, {"error": "describe what the task should do"})
+        out = tk_smart.plan_and_create(spec, requested_by=uid,
+                                       due_date=body.get("due_date"))
+        if body.get("execute_now", True):
+            out["triage_batches"] = _auto_triage(
+                {"task_ids": [out["task_id"]]}, outmsg, forced=True)
+        return _json(200, out)
+    except Exception as e:
+        logging.exception("smart_task failed")
+        return _json(500, {"error": str(e)})
 
 
 @app.route(route="run_register", auth_level=func.AuthLevel.FUNCTION)

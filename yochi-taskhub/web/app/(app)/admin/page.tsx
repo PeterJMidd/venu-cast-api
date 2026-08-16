@@ -10,9 +10,10 @@ import AdminWatchRules from "@/components/AdminWatchRules";
 import AdminSuggestions from "@/components/AdminSuggestions";
 import AdminSkills from "@/components/AdminSkills";
 import AdminAccess from "@/components/AdminAccess";
+import AdminFeeds from "@/components/AdminFeeds";
 import type { Profile, UserRole } from "@/lib/types";
 
-type AdminTab = "users" | "access" | "sections" | "rules" | "skills" | "suggestions";
+type AdminTab = "users" | "access" | "feeds" | "sections" | "rules" | "skills" | "suggestions";
 
 export default function AdminPage() {
   const qc = useQueryClient();
@@ -92,6 +93,7 @@ export default function AdminPage() {
   const TABS: { key: AdminTab; label: string }[] = [
     { key: "users", label: "Users & roles" },
     { key: "access", label: "Access" },
+    { key: "feeds", label: "Data feeds" },
     { key: "sections", label: "Sections" },
     { key: "rules", label: "Watch rules" },
     { key: "skills", label: "AI skills" },
@@ -118,6 +120,7 @@ export default function AdminPage() {
       </div>
 
       {tab === "access" && <AdminAccess />}
+      {tab === "feeds" && <AdminFeeds />}
       {tab === "sections" && <AdminSections />}
       {tab === "rules" && <AdminWatchRules />}
       {tab === "skills" && <AdminSkills />}
