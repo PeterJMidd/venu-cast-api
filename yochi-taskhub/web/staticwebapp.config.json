@@ -1,7 +1,7 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/_next/*", "/*.{css,js,ico,png,svg,txt,json,woff2}"]
+    "exclude": ["/_next/*", "/addin/*", "/*.{css,js,ico,png,svg,txt,json,woff2}"]
   },
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",

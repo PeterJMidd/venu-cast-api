@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+           xsi:type="MailApp">
+  <Id>ba4f9a70-4f35-4dcc-8626-3c34f6830efe</Id>
+  <Version>1.0.0</Version>
+  <ProviderName>Yo-Chi</ProviderName>
+  <DefaultLocale>en-AU</DefaultLocale>
+  <DisplayName DefaultValue="Yo-Chi TaskHub" />
+  <Description DefaultValue="Turn an email into a TaskHub task in the right pillar and project." />
+  <IconUrl DefaultValue="https://jolly-flower-042897300.7.azurestaticapps.net/addin/icon-64.png" />
+  <HighResolutionIconUrl DefaultValue="https://jolly-flower-042897300.7.azurestaticapps.net/addin/icon-128.png" />
+  <SupportUrl DefaultValue="https://jolly-flower-042897300.7.azurestaticapps.net" />
+  <AppDomains>
+    <AppDomain>https://jolly-flower-042897300.7.azurestaticapps.net</AppDomain>
+    <AppDomain>https://kesjkyofzdpjioafhuuw.supabase.co</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Mailbox" />
+  </Hosts>
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.3" />
+    </Sets>
+  </Requirements>
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://jolly-flower-042897300.7.azurestaticapps.net/addin/taskpane.html" />
+        <RequestedHeight>420</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+  <Permissions>ReadItem</Permissions>
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
+  </Rule>
+  <DisableEntityHighlighting>false</DisableEntityHighlighting>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides"
+                    xsi:type="VersionOverridesV1_0">
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.3">
+        <bt:Set Name="Mailbox" />
+      </bt:Sets>
+    </Requirements>
+    <Hosts>
+      <Host xsi:type="MailHost">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="MessageReadCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="thGroup">
+                <Label resid="groupLabel" />
+                <Control xsi:type="Button" id="thOpenPane">
+                  <Label resid="btnLabel" />
+                  <Supertip>
+                    <Title resid="btnLabel" />
+                    <Description resid="btnTip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16" />
+                    <bt:Image size="32" resid="icon32" />
+                    <bt:Image size="80" resid="icon80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="paneUrl" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="icon16" DefaultValue="https://jolly-flower-042897300.7.azurestaticapps.net/addin/icon-16.png" />
+        <bt:Image id="icon32" DefaultValue="https://jolly-flower-042897300.7.azurestaticapps.net/addin/icon-32.png" />
+        <bt:Image id="icon80" DefaultValue="https://jolly-flower-042897300.7.azurestaticapps.net/addin/icon-80.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="paneUrl" DefaultValue="https://jolly-flower-042897300.7.azurestaticapps.net/addin/taskpane.html" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="groupLabel" DefaultValue="TaskHub" />
+        <bt:String id="btnLabel" DefaultValue="Send to TaskHub" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="btnTip" DefaultValue="Create a TaskHub task from this email - pick the pillar, project, priority and due date." />
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

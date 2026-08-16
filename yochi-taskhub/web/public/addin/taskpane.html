@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Send to TaskHub</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<style>
+  :root { --brand:#23824a; --brand-dark:#1d683d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+         font-size:13px; color:#1f2937; background:#f6f8fa; }
+  .wrap { padding:14px; max-width:420px; margin:0 auto; }
+  h2 { font-size:15px; margin:0 0 10px; color:var(--brand-dark); }
+  label { display:block; font-size:11px; color:#6b7280; margin:10px 0 3px; font-weight:600; }
+  input, select, textarea {
+    width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px;
+    font-size:13px; font-family:inherit; background:#fff; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--brand); }
+  textarea { resize:vertical; }
+  button {
+    width:100%; margin-top:14px; background:var(--brand); color:#fff; border:0;
+    border-radius:9px; padding:10px; font-size:14px; font-weight:700; cursor:pointer; }
+  button:disabled { opacity:.55; cursor:default; }
+  button.secondary { background:#fff; color:#374151; border:1px solid #d1d5db;
+    font-weight:500; font-size:12px; padding:7px; margin-top:8px; }
+  .msg { margin-top:10px; padding:8px 10px; border-radius:8px; font-size:12px; }
+  .err { background:#fef2f2; color:#b91c1c; }
+  .ok  { background:#ecfdf5; color:#065f46; }
+  .row { display:flex; gap:8px; }
+  .row > div { flex:1; }
+  .check { display:flex; align-items:center; gap:6px; margin-top:10px; font-size:12px; color:#374151; }
+  .check input { width:auto; }
+  a { color:var(--brand); font-weight:600; }
+  .hidden { display:none; }
+  .who { font-size:11px; color:#9ca3af; margin-top:12px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Sign-in view -->
+  <div id="login" class="hidden">
+    <h2>Sign in to TaskHub</h2>
+    <label>Email</label>
+    <input id="li-email" type="email" autocomplete="username" />
+    <label>Password</label>
+    <input id="li-pass" type="password" autocomplete="current-password" />
+    <button id="li-btn">Sign in</button>
+    <div id="li-msg" class="msg err hidden"></div>
+  </div>
+
+  <!-- Composer view -->
+  <div id="composer" class="hidden">
+    <h2>Create task from this email</h2>
+    <label>Title</label>
+    <input id="t-title" />
+    <label>Project</label>
+    <select id="t-project"></select>
+    <div class="row">
+      <div>
+        <label>Priority</label>
+        <select id="t-priority">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+      <div>
+        <label>Due date</label>
+        <input id="t-due" type="date" />
+      </div>
+    </div>
+    <label>Description (from the email)</label>
+    <textarea id="t-desc" rows="7"></textarea>
+    <div class="check">
+      <input id="t-me" type="checkbox" checked /> <span>Assign to me</span>
+    </div>
+    <button id="t-create">Create task</button>
+    <div id="t-msg" class="msg hidden"></div>
+    <button id="signout" class="secondary">Sign out</button>
+    <div class="who" id="who"></div>
+  </div>
+
+</div>
+<script>
+var SUPA = "https://kesjkyofzdpjioafhuuw.supabase.co";
+var ANON = "sb_publishable_IsW_njh67m2MEaWp_h0NKw_Lre1zg-l";
+var APP  = "https://jolly-flower-042897300.7.azurestaticapps.net";
+var LS   = "taskhub_addin_session";
+
+function $(id) { return document.getElementById(id); }
+function show(id, on) { $(id).classList.toggle("hidden", !on); }
+function msg(id, text, ok) {
+  var el = $(id);
+  el.textContent = "";
+  el.className = "msg " + (ok ? "ok" : "err");
+  el.appendChild(document.createTextNode(text));
+  el.classList.remove("hidden");
+  return el;
+}
+
+function session() {
+  try { return JSON.parse(localStorage.getItem(LS) || "null"); } catch (e) { return null; }
+}
+function saveSession(s) { localStorage.setItem(LS, JSON.stringify(s)); }
+function clearSession() { localStorage.removeItem(LS); }
+
+function authFetch(path, opts, retried) {
+  var s = session();
+  if (!s) return Promise.reject(new Error("Not signed in"));
+  opts = opts || {};
+  opts.headers = Object.assign({
+    "apikey": ANON,
+    "Authorization": "Bearer " + s.access_token,
+    "Content-Type": "application/json",
+    "Accept-Profile": "taskapp",
+    "Content-Profile": "taskapp"
+  }, opts.headers || {});
+  return fetch(SUPA + path, opts).then(function (r) {
+    if (r.status === 401 && !retried && s.refresh_token) {
+      return refresh(s.refresh_token).then(function () {
+        return authFetch(path, opts, true);
+      });
+    }
+    return r;
+  });
+}
+
+function refresh(rt) {
+  return fetch(SUPA + "/auth/v1/token?grant_type=refresh_token", {
+    method: "POST",
+    headers: { "apikey": ANON, "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: rt })
+  }).then(function (r) {
+    if (!r.ok) { clearSession(); boot(); throw new Error("Session expired - sign in again"); }
+    return r.json();
+  }).then(function (j) { saveSession(j); });
+}
+
+// ---------- sign in ----------
+$("li-btn").onclick = function () {
+  var email = $("li-email").value.trim(), pass = $("li-pass").value;
+  if (!email || !pass) return;
+  $("li-btn").disabled = true;
+  fetch(SUPA + "/auth/v1/token?grant_type=password", {
+    method: "POST",
+    headers: { "apikey": ANON, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email, password: pass })
+  }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) {
+      $("li-btn").disabled = false;
+      if (!res.ok) {
+        msg("li-msg", res.j.error_description || res.j.msg || "Sign-in failed", false);
+        return;
+      }
+      saveSession(res.j);
+      boot();
+    })
+    .catch(function (e) { $("li-btn").disabled = false; msg("li-msg", String(e), false); });
+};
+
+$("signout").onclick = function () { clearSession(); boot(); };
+
+// ---------- composer ----------
+function loadProjects() {
+  return authFetch("/rest/v1/projects?select=id,name,category_id,categories(name,sort)&order=name")
+    .then(function (r) {
+      if (!r.ok) throw new Error("Could not load projects (HTTP " + r.status + ")");
+      return r.json();
+    })
+    .then(function (rows) {
+      // group by pillar (category), pillars in sort order
+      var groups = {};
+      rows.forEach(function (p) {
+        var cat = (p.categories && p.categories.name) || "Other";
+        var ord = (p.categories && p.categories.sort) || 99;
+        (groups[cat] = groups[cat] || { ord: ord, items: [] }).items.push(p);
+      });
+      var sel = $("t-project");
+      sel.innerHTML = "";
+      Object.keys(groups).sort(function (a, b) { return groups[a].ord - groups[b].ord; })
+        .forEach(function (cat) {
+          var og = document.createElement("optgroup");
+          og.label = cat;
+          groups[cat].items.forEach(function (p) {
+            var o = document.createElement("option");
+            o.value = p.id;
+            o.textContent = p.name;
+            og.appendChild(o);
+          });
+          sel.appendChild(og);
+        });
+    });
+}
+
+function prefillFromEmail() {
+  var item = Office.context.mailbox.item;
+  if (!item) return;
+  $("t-title").value = item.subject || "";
+  var from = item.from ? (item.from.displayName + " <" + item.from.emailAddress + ">") : "";
+  var when = item.dateTimeCreated ? new Date(item.dateTimeCreated).toLocaleString() : "";
+  item.body.getAsync(Office.CoercionType.Text, function (res) {
+    var body = (res.status === Office.AsyncResultStatus.Succeeded ? res.value : "") || "";
+    body = body.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, 2500);
+    $("t-desc").value = "From email - " + from + " (" + when + ")\n\n" + body;
+  });
+}
+
+$("t-create").onclick = function () {
+  var s = session();
+  var title = $("t-title").value.trim();
+  var pid = $("t-project").value;
+  if (!title || !pid) { msg("t-msg", "Title and project are required", false); return; }
+  var uid = null;
+  try { uid = JSON.parse(atob(s.access_token.split(".")[1])).sub; } catch (e) {}
+  var item = Office.context.mailbox.item;
+  var mid = item && item.internetMessageId ? item.internetMessageId : null;
+  var row = {
+    project_id: pid,
+    title: title,
+    description: $("t-desc").value || null,
+    priority: $("t-priority").value,
+    due_date: $("t-due").value || null,
+    assignee_id: $("t-me").checked ? uid : null,
+    created_by: uid
+  };
+  if (mid) row.external_ref = "email:" + mid;
+  $("t-create").disabled = true;
+  authFetch("/rest/v1/tasks", {
+    method: "POST",
+    headers: { "Prefer": "return=representation" },
+    body: JSON.stringify(row)
+  }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, st: r.status, j: j }; }); })
+    .then(function (res) {
+      $("t-create").disabled = false;
+      if (!res.ok) {
+        var m = (res.j && (res.j.message || res.j.error)) || ("HTTP " + res.st);
+        if (/duplicate|external_ref/i.test(m)) m = "This email is already a TaskHub task.";
+        msg("t-msg", m, false);
+        return;
+      }
+      var t = res.j[0];
+      var el = msg("t-msg", "Task created. ", true);
+      var a = document.createElement("a");
+      a.href = APP + "/my-tasks?task=" + t.id;
+      a.target = "_blank";
+      a.textContent = "Open in TaskHub →";
+      el.appendChild(a);
+    })
+    .catch(function (e) { $("t-create").disabled = false; msg("t-msg", String(e), false); });
+};
+
+// ---------- boot ----------
+function boot() {
+  var s = session();
+  show("login", !s);
+  show("composer", !!s);
+  if (s) {
+    try {
+      var claims = JSON.parse(atob(s.access_token.split(".")[1]));
+      $("who").textContent = "Signed in as " + (claims.email || "");
+    } catch (e) {}
+    loadProjects().catch(function (e) { msg("t-msg", String(e), false); });
+    prefillFromEmail();
+  }
+}
+
+Office.onReady(function () { boot(); });
+</script>
+</body>
+</html>
