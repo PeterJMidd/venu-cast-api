@@ -252,6 +252,21 @@ def flash_timer(timer: func.TimerRequest) -> None:
     logging.info("flash_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 */15 * * * *", arg_name="timer", run_on_startup=False)
+def emaildrop_timer(timer: func.TimerRequest) -> None:
+    """Every 15 min: flagged-email JSON drops in SharePoint -> TaskHub tasks."""
+    import tk_emaildrop
+    result = tk_emaildrop.run()
+    if result.get("created") or result.get("errors"):
+        logging.info("emaildrop_timer: %s", result)
+
+
+@app.route(route="run_emaildrop", auth_level=func.AuthLevel.FUNCTION)
+def run_emaildrop(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_emaildrop
+    return _json(200, tk_emaildrop.run())
+
+
 @app.timer_trigger(schedule="0 50 7 * * 1-5", arg_name="timer", run_on_startup=False)
 def escalate_timer(timer: func.TimerRequest) -> None:
     """Weekdays 07:50: close auto-assignment sweep + escalation/nudge rules
