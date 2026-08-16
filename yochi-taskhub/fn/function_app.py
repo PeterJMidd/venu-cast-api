@@ -252,6 +252,57 @@ def flash_timer(timer: func.TimerRequest) -> None:
     logging.info("flash_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 30 7 * * *", arg_name="timer", run_on_startup=False)
+def workreport_timer(timer: func.TimerRequest) -> None:
+    """Daily 07:30: prior-day work-activity intelligence report (blob estate +
+    lake + TaskHub, per-person where the data allows) -> table + admin email."""
+    import tk_workreport
+    result = tk_workreport.run()
+    logging.info("workreport_timer: %s", result)
+
+
+@app.route(route="run_workreport", auth_level=func.AuthLevel.FUNCTION)
+@app.queue_output(arg_name="wrmsg", queue_name="taskhub-workreport",
+                  connection="AzureWebJobsStorage")
+def run_workreport(req: func.HttpRequest,
+                   wrmsg: func.Out[str]) -> func.HttpResponse:
+    """The full scan outlives the ~230s HTTP gateway limit AND a detached
+    thread dies when the Consumption instance idles - so enqueue it; the
+    queue worker below holds an active invocation for the whole run."""
+    wrmsg.set(req.params.get("date") or "")
+    return _json(202, {"queued": True, "date": req.params.get("date"),
+                       "note": "result lands in taskapp.work_reports"})
+
+
+@app.queue_trigger(arg_name="msg", queue_name="taskhub-workreport",
+                   connection="AzureWebJobsStorage")
+def workreport_worker(msg: func.QueueMessage) -> None:
+    import traceback
+    import tk_workreport
+    date = msg.get_body().decode().strip() or None
+    try:
+        result = tk_workreport.run(report_date=date)
+        logging.info("workreport_worker done: %s", result)
+    except Exception:
+        logging.exception("workreport_worker failed")
+        import datetime as _dt
+        import tk_db
+        day = date or (_dt.datetime.now(
+            _dt.timezone(_dt.timedelta(hours=10))).date()
+            - _dt.timedelta(days=1)).isoformat()
+        err = "ERROR: " + traceback.format_exc()[-1500:]
+        try:
+            if tk_db.get("work_reports", {"report_date": "eq." + day,
+                                          "select": "report_date"}):
+                tk_db.patch("work_reports", {"report_date": "eq." + day},
+                            {"narrative": err})
+            else:
+                tk_db.insert("work_reports", [{"report_date": day,
+                                               "narrative": err}])
+        except Exception:
+            logging.exception("could not record workreport error")
+
+
 @app.timer_trigger(schedule="0 */15 * * * *", arg_name="timer", run_on_startup=False)
 def emaildrop_timer(timer: func.TimerRequest) -> None:
     """Every 15 min: flagged-email JSON drops in SharePoint -> TaskHub tasks."""

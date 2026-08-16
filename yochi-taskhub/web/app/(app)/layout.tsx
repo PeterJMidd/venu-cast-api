@@ -129,6 +129,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 Home
               </Link>
               <Link
+                href="/activity"
+                className={`block rounded-lg px-3 py-1.5 text-sm ${
+                  pathname === "/activity"
+                    ? "bg-brand-50 font-semibold text-brand-700"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                Daily activity
+              </Link>
+              <Link
                 href="/lake"
                 className={`block rounded-lg px-3 py-1.5 text-sm ${
                   pathname === "/lake"
