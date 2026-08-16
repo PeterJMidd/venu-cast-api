@@ -18,7 +18,7 @@ import {
 } from "@/lib/mutations";
 import { useProfile } from "@/hooks/useProfile";
 import { useProfiles, profileName } from "@/hooks/useProfiles";
-import { useOpenTask } from "@/components/TaskCard";
+import { useOpenTask, CompleteToggle } from "@/components/TaskCard";
 import AgentPanel from "@/components/AgentPanel";
 import {
   STATUS_LABELS,
@@ -290,7 +290,12 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
         {/* Header */}
         <div className="border-b border-gray-200 px-6 py-4">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-lg font-bold leading-snug">{task.title}</h2>
+            <div className="flex min-w-0 items-start gap-2.5">
+              <div className="mt-0.5"><CompleteToggle task={task} size="lg" /></div>
+              <h2 className={`text-lg font-bold leading-snug ${task.status === "done" ? "text-gray-400 line-through" : ""}`}>
+                {task.title}
+              </h2>
+            </div>
             <button onClick={() => openTask(null)} className="text-gray-400 hover:text-gray-600">✕</button>
           </div>
           {blockedBy.length > 0 && (
