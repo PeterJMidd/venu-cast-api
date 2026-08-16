@@ -120,6 +120,14 @@ def digest_timer(timer: func.TimerRequest) -> None:
     logging.info("digest_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 5 6 1 * *", arg_name="timer", run_on_startup=False)
+def register_timer(timer: func.TimerRequest) -> None:
+    """Monthly (1st, 06:05): compliance register -> lake + rolling task window."""
+    import tk_register
+    result = tk_register.run()
+    logging.info("register_timer: %s", result)
+
+
 @app.timer_trigger(schedule="0 40 6 * * *", arg_name="timer", run_on_startup=False)
 def asana_timer(timer: func.TimerRequest) -> None:
     """Daily 06:40: cloud Asana -> TaskHub sync (no desktop dependency)."""
@@ -262,6 +270,12 @@ def run_glsweep(req: func.HttpRequest,
     if req.params.get("triage") == "1":
         result["triage_batches"] = _auto_triage(result, outmsg, forced=True)
     return _json(200, result)
+
+
+@app.route(route="run_register", auth_level=func.AuthLevel.FUNCTION)
+def run_register(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_register
+    return _json(200, tk_register.run())
 
 
 @app.route(route="run_asana", auth_level=func.AuthLevel.FUNCTION)
@@ -784,10 +798,11 @@ def _cockpit(tk_db, data):
         "status": "neq.done", "due_date": "lte." + horizon,
         "select": "title,due_date,priority,project_id,projects(name,category_id)",
         "order": "due_date", "limit": "200"})
+    # pillar 2 = Compliance (incl. international) under the 5-pillar model
     radar = [{"title": t["title"], "due": t["due_date"], "priority": t["priority"],
               "project": (t.get("projects") or {}).get("name")}
              for t in radar_raw
-             if (t.get("projects") or {}).get("category_id") in (2, 7)][:12]
+             if (t.get("projects") or {}).get("category_id") == 2][:12]
 
     open_tasks = tk_db.get("tasks", {
         "status": "neq.done",
@@ -843,6 +858,26 @@ def _cockpit(tk_db, data):
         "order": "created_at.desc", "limit": "6",
         "select": "kind,headline,detail,source,created_at"})
 
+    # 5-pillar rollup: the finance model's organising frame
+    cats = {c["id"]: c for c in tk_db.get(
+        "categories", {"select": "id,name,sort", "order": "sort"})}
+    proj_cat = {p["id"]: p["category_id"] for p in tk_db.get(
+        "projects", {"select": "id,category_id"})}
+    pillars = {cid: {"name": c["name"], "sort": c.get("sort") or cid,
+                     "open": 0, "overdue": 0, "critical": 0}
+               for cid, c in cats.items()}
+    for t in open_tasks:
+        cid = proj_cat.get(t.get("project_id"))
+        if cid not in pillars:
+            continue
+        rec = pillars[cid]
+        rec["open"] += 1
+        if t.get("due_date") and t["due_date"] < today_iso:
+            rec["overdue"] += 1
+        if t.get("priority") == "critical":
+            rec["critical"] += 1
+    pillar_rows = sorted(pillars.values(), key=lambda r: r["sort"])
+
     vip = tk_db.get("vip_messages", {
         "order": "received_at.desc", "limit": "6",
         "select": "sender,subject,snippet,received_at,weblink"})
@@ -859,7 +894,7 @@ def _cockpit(tk_db, data):
     return {"meetings": meetings, "cash": cash, "radar": radar,
             "team": team_rows, "checklist": checklist,
             "decisions": decisions, "signals": signals,
-            "vip": vip, "priority": priority}
+            "vip": vip, "priority": priority, "pillars": pillar_rows}
 
 
 @app.route(route="notify", auth_level=func.AuthLevel.ANONYMOUS,

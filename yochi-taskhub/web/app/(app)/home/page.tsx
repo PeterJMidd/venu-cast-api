@@ -23,6 +23,7 @@ interface Cockpit {
   signals: { kind: string; headline: string; detail: string | null; source: string | null; created_at: string }[];
   vip: { sender: string; subject: string; snippet: string | null; received_at: string; weblink: string | null }[];
   priority: { title: string; due: string | null; priority: string; who: string }[];
+  pillars: { name: string; sort: number; open: number; overdue: number; critical: number }[];
 }
 
 interface DashData {
@@ -210,13 +211,38 @@ function HomeInner() {
         </div>
       )}
 
-      {/* Task KPIs */}
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Tile label="Open tasks" value={String(open.length)} />
-        <Tile label="Overdue" value={String(overdue.length)} tone={overdue.length ? "bad" : "good"} />
-        <Tile label="Critical priority" value={String(critical.length)} tone={critical.length ? "warn" : "good"} />
-        <Tile label="Raised by the data" value={String(watcherTasks.length)} sub="watch rules + AI reviews" />
-      </div>
+      {/* The 5 pillars — the finance model's organising frame */}
+      {lake?.cockpit?.pillars?.length ? (
+        <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
+          {lake.cockpit.pillars.map((p) => (
+            <Link
+              key={p.name}
+              href="/tasks"
+              className="rounded-xl border border-gray-200 bg-white p-3 hover:border-brand-500"
+            >
+              <div className="text-[10px] font-bold uppercase leading-tight text-gray-400">
+                {p.sort} · {p.name}
+              </div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-xl font-bold">{p.open}</span>
+                {p.overdue > 0 && (
+                  <span className="text-[11px] font-bold text-red-600">{p.overdue} overdue</span>
+                )}
+                {p.critical > 0 && (
+                  <span className="text-[11px] font-bold text-amber-600">{p.critical} crit</span>
+                )}
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Tile label="Open tasks" value={String(open.length)} />
+          <Tile label="Overdue" value={String(overdue.length)} tone={overdue.length ? "bad" : "good"} />
+          <Tile label="Critical priority" value={String(critical.length)} tone={critical.length ? "warn" : "good"} />
+          <Tile label="Raised by the data" value={String(watcherTasks.length)} sub="watch rules + AI reviews" />
+        </div>
+      )}
 
       {/* Live lake row */}
       <div className="mb-6 grid gap-3 md:grid-cols-4">
