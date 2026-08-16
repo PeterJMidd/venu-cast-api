@@ -147,13 +147,15 @@ def propose(task_id):
         task.get("description") or "(none)", prec_txt)
     plan = tk_ai.structured(PLAN_SYSTEM, user, "plan_task", PLAN_SCHEMA, max_tokens=4000)
     validation = tk_skillbuilder._validate(plan.get("data_queries") or [])
-    if any(not v["ok"] for v in validation):
+    if not validation or any(not v["ok"] for v in validation):
         repair = ("Task: %s\n\nOriginal approach (KEEP this as the approach text - do not "
                   "replace it with commentary about the fix):\n%s\n\nYour queries:\n%s\n\n"
                   "Validation errors:\n%s\n\nLake schema:\n%s\n\n"
-                  "Return the corrected full plan.") % (
-            task["title"], plan.get("approach", ""), json.dumps(plan["data_queries"]),
-            json.dumps(validation), schema)
+                  "Return the corrected full plan WITH 1-4 concrete data_queries - "
+                  "a plan with no queries is invalid.") % (
+            task["title"], plan.get("approach", ""),
+            json.dumps(plan.get("data_queries") or "(none returned)"),
+            json.dumps(validation) or "(no queries)", schema)
         plan = tk_ai.structured(PLAN_SYSTEM, repair, "plan_task", PLAN_SCHEMA, max_tokens=4000)
         validation = tk_skillbuilder._validate(plan.get("data_queries") or [])
     plan["validation"] = validation
