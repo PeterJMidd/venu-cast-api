@@ -359,7 +359,7 @@ def lake_catalog(req: func.HttpRequest) -> func.HttpResponse:
         _, role, _ = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     try:
         lake_reader.sync(log=logging.info)
@@ -384,7 +384,7 @@ def ask(req: func.HttpRequest) -> func.HttpResponse:
         _, role, _ = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     try:
         body = req.get_json()
@@ -416,7 +416,7 @@ def ask_lake(req: func.HttpRequest) -> func.HttpResponse:
         _, role, _ = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     try:
         body = req.get_json()
@@ -458,7 +458,7 @@ def peek_table(req: func.HttpRequest) -> func.HttpResponse:
         _, role, _ = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     try:
         body = req.get_json()
@@ -484,7 +484,7 @@ def agent_propose(req: func.HttpRequest) -> func.HttpResponse:
         _, role, _ = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     try:
         body = req.get_json()
@@ -505,7 +505,7 @@ def agent_execute(req: func.HttpRequest) -> func.HttpResponse:
         uid, role, _ = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     try:
         body = req.get_json()
@@ -529,7 +529,7 @@ def send_report(req: func.HttpRequest) -> func.HttpResponse:
         _, role, sender_email = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     try:
         body = req.get_json()
@@ -593,7 +593,7 @@ def project_run(req: func.HttpRequest, outmsg: func.Out[str]) -> func.HttpRespon
         uid, role, _ = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     try:
         body = req.get_json()
@@ -623,7 +623,7 @@ def project_steer(req: func.HttpRequest, outmsg: func.Out[str]) -> func.HttpResp
         uid, role, _ = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     try:
         body = req.get_json()
@@ -679,7 +679,7 @@ def dashboard_data(req: func.HttpRequest) -> func.HttpResponse:
         _, role, _ = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     if _DASH_CACHE["data"] and time.time() - _DASH_CACHE["at"] < 600:
         return _json(200, _DASH_CACHE["data"])
@@ -963,7 +963,7 @@ def build_skill(req: func.HttpRequest) -> func.HttpResponse:
         _, role, _ = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "finance or admin only"})
     try:
         body = req.get_json()
@@ -994,7 +994,7 @@ def admin_invite(req: func.HttpRequest) -> func.HttpResponse:
         body = req.get_json()
         email = body["email"].strip().lower()
         role = body.get("role", "stakeholder")
-        if role not in ("admin", "finance", "stakeholder"):
+        if role not in ("admin", "finance", "stakeholder", "external"):
             return _json(400, {"error": "bad role"})
         tk_db.invite_user(email, role, body.get("full_name"),
                           redirect_to=body.get("redirect_to"))
@@ -1020,7 +1020,7 @@ def admin_update_user(req: func.HttpRequest) -> func.HttpResponse:
         target = body["user_id"]
         patch = {}
         if "role" in body:
-            if body["role"] not in ("admin", "finance", "stakeholder"):
+            if body["role"] not in ("admin", "finance", "stakeholder", "external"):
                 return _json(400, {"error": "bad role"})
             patch["role"] = body["role"]
         if "active" in body:
@@ -1047,7 +1047,7 @@ def nl_task(req: func.HttpRequest) -> func.HttpResponse:
         _, role, email = _authed(req)
     except tk_auth.AuthError as e:
         return _json(401, {"error": str(e)})
-    if role == "stakeholder":
+    if role in ("stakeholder", "external"):
         return _json(403, {"error": "stakeholders cannot create tasks"})
     try:
         body = req.get_json()

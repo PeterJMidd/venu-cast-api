@@ -9,9 +9,10 @@ import AdminSections from "@/components/AdminSections";
 import AdminWatchRules from "@/components/AdminWatchRules";
 import AdminSuggestions from "@/components/AdminSuggestions";
 import AdminSkills from "@/components/AdminSkills";
+import AdminAccess from "@/components/AdminAccess";
 import type { Profile, UserRole } from "@/lib/types";
 
-type AdminTab = "users" | "sections" | "rules" | "skills" | "suggestions";
+type AdminTab = "users" | "access" | "sections" | "rules" | "skills" | "suggestions";
 
 export default function AdminPage() {
   const qc = useQueryClient();
@@ -90,6 +91,7 @@ export default function AdminPage() {
 
   const TABS: { key: AdminTab; label: string }[] = [
     { key: "users", label: "Users & roles" },
+    { key: "access", label: "Access" },
     { key: "sections", label: "Sections" },
     { key: "rules", label: "Watch rules" },
     { key: "skills", label: "AI skills" },
@@ -115,6 +117,7 @@ export default function AdminPage() {
         ))}
       </div>
 
+      {tab === "access" && <AdminAccess />}
       {tab === "sections" && <AdminSections />}
       {tab === "rules" && <AdminWatchRules />}
       {tab === "skills" && <AdminSkills />}
@@ -147,6 +150,7 @@ export default function AdminPage() {
             <option value="admin">Admin</option>
             <option value="finance">Finance</option>
             <option value="stakeholder">Stakeholder</option>
+            <option value="external">External (advisor)</option>
           </select>
           <button
             disabled={busy}
@@ -186,6 +190,7 @@ export default function AdminPage() {
                     <option value="admin">Admin</option>
                     <option value="finance">Finance</option>
                     <option value="stakeholder">Stakeholder</option>
+            <option value="external">External (advisor)</option>
                   </select>
                 </td>
                 <td className="px-4 py-2.5">

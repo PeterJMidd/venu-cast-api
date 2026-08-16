@@ -1,7 +1,7 @@
 // Hand-written domain types for the `taskapp` schema.
 // (MCP type generation only covers exposed schemas; regenerate once taskapp is exposed.)
 
-export type UserRole = "admin" | "finance" | "stakeholder";
+export type UserRole = "admin" | "finance" | "stakeholder" | "external";
 export type TaskStatus = "todo" | "in_progress" | "waiting_review" | "done" | "blocked";
 export type TaskPriority = "low" | "medium" | "high" | "critical";
 export type TaskSource = "manual" | "template" | "watcher" | "nl";

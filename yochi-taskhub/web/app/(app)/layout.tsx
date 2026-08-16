@@ -11,6 +11,7 @@ import NLQuickAdd from "@/components/NLQuickAdd";
 import NewProjectModal from "@/components/NewProjectModal";
 import PrefsModal from "@/components/PrefsModal";
 import VoicePanel from "@/components/VoicePanel";
+import MfaGate from "@/components/MfaGate";
 import type { Category, Project } from "@/lib/types";
 
 const NAV = [
@@ -28,6 +29,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
   const { data: profile } = useProfile();
+
+  // externals land on tasks — the cockpit/lake/reporting are internal-only
+  useEffect(() => {
+    if (profile?.role === "external" &&
+        ["/home", "/lake", "/reporting", "/templates", "/admin"].includes(pathname)) {
+      router.replace("/my-tasks");
+    }
+  }, [profile, pathname, router]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -230,7 +239,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Suspense>
         <DrawerHost />
       </Suspense>
-      {profile && profile.role !== "stakeholder" && <VoicePanel />}
+      {profile && profile.role !== "stakeholder" && profile.role !== "external" && <VoicePanel />}
+      <MfaGate />
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} />}
       {showPrefs && profile && <PrefsModal userId={profile.id} onClose={() => setShowPrefs(false)} />}
     </div>
