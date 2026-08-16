@@ -6,6 +6,18 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { callFn } from "@/lib/fn";
+
+type FeedProposal = {
+  name: string; kind: string; cadence: string; description: string;
+  research_prompt: string; sources: string;
+  columns: { name: string; description: string }[];
+};
+type SearchResult = {
+  already_available: { table: string; why: string }[];
+  proposals: FeedProposal[];
+  note: string;
+};
 
 const INTERNAL_LOADS: [string, string][] = [
   ["03:00 / 03:20", "Restoke + OpCentral API exports → lake"],
@@ -30,6 +42,45 @@ export default function AdminFeeds() {
   const [nfPrompt, setNfPrompt] = useState("");
   const [nfKind, setNfKind] = useState("industry");
   const [nfMsg, setNfMsg] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [result, setResult] = useState<SearchResult | null>(null);
+  const [searchMsg, setSearchMsg] = useState<string | null>(null);
+  const [added, setAdded] = useState<Record<string, string>>({});
+
+  async function runSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!q.trim() || searching) return;
+    setSearching(true);
+    setSearchMsg(null);
+    setResult(null);
+    setAdded({});
+    try {
+      setResult(await callFn<SearchResult>("feed_search", { query: q.trim() }));
+    } catch (err) {
+      setSearchMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  async function addProposal(p: FeedProposal, status: "active" | "recommended") {
+    const slug = p.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 50);
+    const { error } = await supabase.from("feeds").insert({
+      slug, name: p.name, kind: p.kind, cadence: p.cadence, status,
+      description: p.description, research_prompt: p.research_prompt,
+      columns: p.columns,
+    });
+    setAdded((a) => ({
+      ...a,
+      [p.name]: error
+        ? error.message.includes("duplicate") ? "Already exists — see the lists below." : error.message
+        : status === "active"
+          ? `Added & active — first run next 05:45 (feed_${slug}).`
+          : "Added to Recommended — activate below when ready.",
+    }));
+    qc.invalidateQueries({ queryKey: ["feeds"] });
+  }
   const { data: feeds, error } = useQuery({
     queryKey: ["feeds"],
     queryFn: async () => {
@@ -62,6 +113,89 @@ export default function AdminFeeds() {
         voice assistant, task agent, smart tasks and watch rules alongside internal data.
         Weekly feeds run Mondays 05:45, daily feeds every morning.
       </p>
+      <form onSubmit={runSearch} className="rounded-xl border border-brand-200 bg-brand-50/40 p-4">
+        <div className="mb-2 text-xs font-bold uppercase tracking-wide text-brand-700">
+          🔎 Search for data to load
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="What do you want to be across? (e.g. fair work award updates, insurance premium trends, SG corporate tax)"
+            className="min-w-64 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          />
+          <button
+            disabled={searching || !q.trim()}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {searching ? "Researching…" : "Search"}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-gray-500">
+          Checks what the lake already holds, then web-researches authoritative sources and
+          proposes ready-to-add feeds. Takes ~30–60 seconds.
+        </p>
+        {searchMsg && <div className="mt-2 text-xs text-red-600">{searchMsg}</div>}
+        {result && (
+          <div className="mt-3 space-y-3">
+            {result.note && <div className="text-xs text-gray-600">{result.note}</div>}
+            {result.already_available.length > 0 && (
+              <div className="rounded-lg border border-gray-200 bg-white p-3">
+                <div className="mb-1 text-[11px] font-bold uppercase text-gray-400">
+                  Already in the lake
+                </div>
+                {result.already_available.map((a) => (
+                  <div key={a.table} className="text-xs text-gray-600">
+                    <code className="text-brand-700">{a.table}</code> — {a.why}
+                  </div>
+                ))}
+              </div>
+            )}
+            {result.proposals.map((p) => (
+              <div key={p.name} className="rounded-lg border border-gray-200 bg-white p-3">
+                <div className="text-sm font-semibold">
+                  {p.name}{" "}
+                  <span className="rounded bg-gray-100 px-1.5 py-px text-[9px] font-bold uppercase text-gray-500">
+                    {p.kind}
+                  </span>{" "}
+                  <span className="text-[11px] font-normal text-gray-400">{p.cadence}</span>
+                </div>
+                <div className="mt-0.5 text-xs text-gray-600">{p.description}</div>
+                <div className="mt-0.5 text-[11px] text-gray-400">
+                  Sources: {p.sources} · columns: {p.columns.map((c) => c.name).join(", ")}
+                </div>
+                {added[p.name] ? (
+                  <div className="mt-1.5 text-xs font-medium text-brand-700">{added[p.name]}</div>
+                ) : (
+                  <div className="mt-2 flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => addProposal(p, "active")}
+                      className="rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-semibold text-white"
+                    >
+                      Add & activate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addProposal(p, "recommended")}
+                      className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs text-gray-600"
+                    >
+                      Add as recommended
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {!result.proposals.length && !result.already_available.length && (
+              <div className="text-xs text-gray-500">
+                No reliable recurring source found for that — try rewording, or add a custom
+                feed below with your own instructions.
+              </div>
+            )}
+          </div>
+        )}
+      </form>
+
       <form
         onSubmit={async (e) => {
           e.preventDefault();

@@ -452,6 +452,36 @@ def smart_task(req: func.HttpRequest,
         return _json(500, {"error": str(e)})
 
 
+@app.route(route="feed_search", auth_level=func.AuthLevel.ANONYMOUS,
+           methods=["POST", "OPTIONS"])
+def feed_search(req: func.HttpRequest) -> func.HttpResponse:
+    """Admin -> Data feeds search: {query} -> existing coverage + proposals."""
+    if req.method == "OPTIONS":
+        return func.HttpResponse("", status_code=204)
+    import tk_auth
+    import tk_feeds
+    try:
+        _, role, _ = _authed(req)
+    except tk_auth.AuthError as e:
+        return _json(401, {"error": str(e)})
+    if role in ("stakeholder", "external"):
+        return _json(403, {"error": "finance or admin only"})
+    try:
+        query = (req.get_json().get("query") or "").strip()
+        if not query:
+            return _json(400, {"error": "describe the data you want to load"})
+        return _json(200, tk_feeds.search(query))
+    except Exception as e:
+        logging.exception("feed_search failed")
+        return _json(500, {"error": str(e)})
+
+
+@app.route(route="ops_feed_search", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
+def ops_feed_search(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_feeds
+    return _json(200, tk_feeds.search((req.get_json().get("query") or "").strip()))
+
+
 @app.route(route="run_register", auth_level=func.AuthLevel.FUNCTION)
 def run_register(req: func.HttpRequest) -> func.HttpResponse:
     import tk_register

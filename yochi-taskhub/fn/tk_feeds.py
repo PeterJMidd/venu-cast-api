@@ -83,6 +83,84 @@ def _append_parquet(slug, columns, rows):
     return int(total)
 
 
+SEARCH_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "already_available": {"type": "array", "maxItems": 6, "items": {
+            "type": "object",
+            "properties": {"table": {"type": "string",
+                                     "description": "exact lake table or feed name from the provided lists"},
+                           "why": {"type": "string",
+                                   "description": "one line on how it covers the request"}},
+            "required": ["table", "why"]}},
+        "proposals": {"type": "array", "maxItems": 4, "items": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "kind": {"type": "string",
+                         "enum": ["award", "tax_rates", "due_dates", "economy",
+                                  "industry", "other"]},
+                "cadence": {"type": "string", "enum": ["daily", "weekly"]},
+                "description": {"type": "string",
+                                "description": "one line: what lands in the lake and from where"},
+                "research_prompt": {"type": "string",
+                                    "description": "exact per-run research instructions: named "
+                                                   "sources/sites and precisely which facts to capture"},
+                "columns": {"type": "array", "minItems": 2, "maxItems": 6, "items": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string",
+                                            "description": "lowercase snake_case"},
+                                   "description": {"type": "string"}},
+                    "required": ["name", "description"]}},
+                "sources": {"type": "string",
+                            "description": "the authoritative sites found, comma separated"}},
+            "required": ["name", "kind", "cadence", "description",
+                         "research_prompt", "columns", "sources"]}},
+        "note": {"type": "string",
+                 "description": "one line for the user: coverage found / caveats"}},
+    "required": ["already_available", "proposals", "note"]}
+
+
+def search(query):
+    """'Search for data to load': check what the lake + feed registry already
+    cover, then web-research authoritative recurring sources for the topic and
+    return ready-to-add feed proposals (name/cadence/schema/research prompt)."""
+    feeds = tk_db.get("feeds", {"select": "slug,name,status,description"})
+    tables = []
+    try:
+        from azure.storage.blob import BlobServiceClient
+        svc = BlobServiceClient.from_connection_string(os.environ["BLOB_CONNECTION_STRING"])
+        cc = svc.get_container_client("datasights-lake")
+        cat = json.loads(cc.download_blob("catalog/catalog.json").readall())
+        tables = [(t.get("name") or t.get("table") or "",
+                   (t.get("note") or "")[:100]) for t in cat.get("tables", [])]
+    except Exception:
+        LOG.exception("catalog read failed (search continues without it)")
+    research = tk_ai.searched_text(
+        "You research public data sources for the finance learning data centre of "
+        "Yo-Chi, an Australian frozen-yoghurt chain (74 venues, also UK/US/SG). "
+        "Find AUTHORITATIVE, regularly-updated sources (government, regulator, "
+        "statistics bureau, industry body) for the topic. For each source note the "
+        "site, what facts it publishes, and how often it updates. Facts only.",
+        "Topic to find recurring data sources for: %s" % query,
+        max_searches=5, max_tokens=2500)
+    existing_desc = (
+        "EXISTING FEEDS (slug | name | status):\n"
+        + "\n".join("%s | %s | %s" % (f["slug"], f["name"], f["status"]) for f in feeds)
+        + "\n\nEXISTING LAKE TABLES (name | note):\n"
+        + "\n".join("%s | %s" % t for t in tables))
+    return tk_ai.structured(
+        "Design data feeds for a finance learning data centre. From the research, "
+        "propose up to 4 NEW recurring feeds for the user's topic - each with a "
+        "sharp research_prompt naming its sources and the exact facts to capture "
+        "per run, and a small snake_case column schema. Also list any EXISTING "
+        "tables/feeds (exact names from the lists) that already cover the topic - "
+        "do not propose a new feed that duplicates an existing one. If the topic "
+        "has no reliable public source, say so in note and propose fewer/none.",
+        "USER TOPIC: %s\n\n%s\n\nWEB RESEARCH:\n%s" % (query, existing_desc, research),
+        "propose_feeds", SEARCH_SCHEMA, max_tokens=3000)
+
+
 def run(force_slug=None):
     today = dt.date.today()
     feeds = tk_db.get("feeds", {"select": "*", "order": "slug"})
