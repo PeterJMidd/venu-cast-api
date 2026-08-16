@@ -252,6 +252,15 @@ def flash_timer(timer: func.TimerRequest) -> None:
     logging.info("flash_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 50 7 * * 1-5", arg_name="timer", run_on_startup=False)
+def escalate_timer(timer: func.TimerRequest) -> None:
+    """Weekdays 07:50: close auto-assignment sweep + escalation/nudge rules
+    (critical-overdue, review stalls, stale in-progress, long-overdue digest)."""
+    import tk_escalate
+    result = tk_escalate.run()
+    logging.info("escalate_timer: %s", result)
+
+
 @app.timer_trigger(schedule="0 0 5 * * *", arg_name="timer", run_on_startup=False)
 @app.queue_output(arg_name="outmsg", queue_name="taskhub-batch",
                   connection="AzureWebJobsStorage")
@@ -474,6 +483,12 @@ def feed_search(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         logging.exception("feed_search failed")
         return _json(500, {"error": str(e)})
+
+
+@app.route(route="run_escalate", auth_level=func.AuthLevel.FUNCTION)
+def run_escalate(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_escalate
+    return _json(200, tk_escalate.run(force=req.params.get("force") == "1"))
 
 
 @app.route(route="ops_feed_search", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])

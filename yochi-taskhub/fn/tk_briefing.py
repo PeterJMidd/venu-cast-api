@@ -18,7 +18,8 @@ SYSTEM = (
     "their open tasks in JSON buckets. Return ONLY an HTML fragment (no <html>/<body>, "
     "no markdown): <h3>Today</h3> 1-2 sentences naming the single most important thing; "
     "then <h3>Overdue</h3>, <h3>Due soon</h3>, <h3>Waiting on you to review</h3>, "
-    "<h3>Blocked</h3> as short <ul> lists (task title + due date + project). Omit any "
+    "<h3>Blocked</h3>, <h3>You were mentioned</h3> as short <ul> lists (task title + "
+    "due date + project; for mentions: who said what, briefly). Omit any "
     "empty section entirely. If they recently completed things, close with one positive "
     "sentence under <h3>Done this week</h3>. Be specific, warm but brief - this is a "
     "30-second read."
@@ -35,7 +36,31 @@ def _next_bds(n):
     return out
 
 
-def _user_buckets(uid):
+def _mentions(uid, profiles_by_id):
+    """Comments from the last 24h that @mention this user (by first or full
+    name), excluding their own comments."""
+    me = profiles_by_id.get(uid) or {}
+    name = (me.get("full_name") or me.get("email", "").split("@")[0]).strip().lower()
+    if not name:
+        return []
+    since = (dt.datetime.utcnow() - dt.timedelta(days=1)).isoformat() + "Z"
+    comments = tk_db.get("comments", {
+        "created_at": "gte." + since, "author_id": "neq." + uid,
+        "select": "task_id,author_id,body,created_at", "limit": "200"})
+    first = name.split(" ")[0]
+    hits = [c for c in comments
+            if "@" + name in c["body"].lower() or "@" + first in c["body"].lower()]
+    if not hits:
+        return []
+    task_ids = list({c["task_id"] for c in hits})
+    titles = {t["id"]: t["title"] for t in tk_db.get(
+        "tasks", {"id": "in.(%s)" % ",".join(task_ids), "select": "id,title"})}
+    return [{"task": titles.get(c["task_id"], ""),
+             "by": (profiles_by_id.get(c["author_id"]) or {}).get("full_name", ""),
+             "said": c["body"][:160]} for c in hits[:10]]
+
+
+def _user_buckets(uid, profiles_by_id=None):
     tasks = tk_db.get("tasks", {
         "or": "(assignee_id.eq.%s,reviewer_id.eq.%s)" % (uid, uid),
         "select": "id,title,status,priority,due_date,project_id,assignee_id,reviewer_id,completed_at",
@@ -58,6 +83,7 @@ def _user_buckets(uid):
         "blocked": [slim(t) for t in open_t if t["status"] == "blocked"],
         "done_this_week": [slim(t) for t in tasks
                            if t["status"] == "done" and (t["completed_at"] or "") >= week_ago],
+        "mentions_last_24h": _mentions(uid, profiles_by_id or {}),
     }
 
 
@@ -80,6 +106,7 @@ def run(force=False):
     if not force and not tk_calendar.is_business_day(dt.date.today()):
         return {"skipped": "not a business day"}
     profiles = tk_db.get("profiles", {"active": "eq.true", "select": "id,email,full_name"})
+    profiles_by_id = {p["id"]: p for p in profiles}
     prefs = {p["user_id"]: p for p in tk_db.get("notification_prefs", {"select": "*"})}
     sent = skipped = 0
     for p in profiles:
@@ -87,7 +114,7 @@ def run(force=False):
         if pref and not pref.get("daily_briefing", True):
             skipped += 1
             continue
-        buckets = _user_buckets(p["id"])
+        buckets = _user_buckets(p["id"], profiles_by_id)
         if not any(buckets.values()):
             skipped += 1
             continue
