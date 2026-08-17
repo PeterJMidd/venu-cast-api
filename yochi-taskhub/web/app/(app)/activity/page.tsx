@@ -23,6 +23,7 @@ type Report = {
                batch_runs: { kind: string; status: string | null }[] };
     blob: { container: string; files_changed: number; mb: number;
             areas: Record<string, number>; samples: string[] }[];
+    contracts?: { label: string; table: string; status: string; detail: string }[];
   };
 };
 
@@ -128,6 +129,24 @@ function ActivityInner() {
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm">
             <span className="text-gray-400">Blob containers changed </span>
             <span className="font-bold">{s.blob.length}</span>
+          </div>
+        </div>
+      )}
+
+      {(s.contracts ?? []).some((c) => c.status !== "ok") && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+          <div className="mb-1 text-xs font-bold uppercase tracking-wide text-red-700">
+            Data feeds failing their contract
+          </div>
+          <ul className="ml-4 list-disc text-xs text-red-900">
+            {(s.contracts ?? []).filter((c) => c.status !== "ok").map((c) => (
+              <li key={c.table}>
+                <span className="font-semibold">{c.label}</span> — {c.detail}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-1.5 text-[11px] text-red-700">
+            Figures below that depend on these feeds are understated.
           </div>
         </div>
       )}

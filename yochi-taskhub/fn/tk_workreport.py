@@ -185,6 +185,23 @@ def _blob_scan(report_date):
     return sorted(out, key=lambda c: -c["files_changed"])
 
 
+def _contract_status():
+    """Latest data-contract results, so the report says 'this feed is stale'
+    instead of quietly printing zero."""
+    try:
+        rows = tk_db.get("data_contracts", {
+            "active": "eq.true",
+            "select": "table_name,label,last_status,last_detail,last_checked_at",
+            "order": "last_status.desc,table_name"})
+        return [{"label": r.get("label") or r["table_name"],
+                 "table": r["table_name"],
+                 "status": r.get("last_status") or "unchecked",
+                 "detail": r.get("last_detail") or ""} for r in rows]
+    except Exception:
+        LOG.exception("contract status read failed")
+        return []
+
+
 def _clean(obj):
     """NaN/Inf floats (DuckDB aggregates over NULLs) are invalid JSON and make
     PostgREST reject the whole stats payload - null them out recursively."""
@@ -213,10 +230,23 @@ def _table(rows, cols):
 
 def _email_html(day, stats, narrative):
     s = stats
+    breaches = [c for c in (s.get("contracts") or []) if c["status"] != "ok"]
+    banner = ""
+    if breaches:
+        banner = ("<div style='background:#fef2f2;border:1px solid #fecaca;"
+                  "border-radius:8px;padding:10px 14px;margin:10px 0'>"
+                  "<b style='color:#b91c1c'>%d data feed(s) failing their contract"
+                  "</b><ul style='margin:6px 0 0'>%s</ul>"
+                  "<div style='font-size:11px;color:#7f1d1d;margin-top:6px'>"
+                  "Numbers below that depend on these feeds are understated.</div>"
+                  "</div>" % (len(breaches), "".join(
+                      "<li><b>%s</b> — %s</li>" % (c["label"], c["detail"])
+                      for c in breaches)))
     parts = ["<div style='font-family:-apple-system,Segoe UI,Roboto,Arial,"
              "sans-serif;color:#1f2937;max-width:680px'>",
              "<h2 style='color:#1d683d'>Daily work activity — %s</h2>"
              % day.strftime("%A %d %B %Y"),
+             banner,
              narrative or "",
              "<h3>TaskHub — by person</h3>",
              _table(s["taskhub"]["people"],
@@ -254,7 +284,8 @@ def run(report_date=None):
     lake_reader.sync(extra_tables=EXTRA_TABLES, log=LOG.info)
     stats = _clean({"lake": _lake_stats(day, utc0, utc1),
                     "taskhub": _taskhub_stats(utc0, utc1),
-                    "blob": _blob_scan(day)})
+                    "blob": _blob_scan(day),
+                    "contracts": _contract_status()})
     try:
         narrative = tk_ai.text(
             "You write the CFO's morning work-activity intelligence brief for "
@@ -262,7 +293,10 @@ def run(report_date=None):
             "EVERYTHING done yesterday (people's TaskHub actions, venue "
             "procedures and Asana completions by person, Xero postings by type/"
             "entity, invoice activity, Restoke receipting, and what the "
-            "automated systems produced in the blob estate), return ONLY an "
+            "automated systems produced in the blob estate). IMPORTANT: the "
+            "'contracts' block reports data-feed health - if a feed is in breach, "
+            "say the underlying data is stale/missing rather than reporting the "
+            "activity as genuinely zero. Return ONLY an "
             "HTML fragment: <h3>Headline</h3> 2-3 sentences on the shape of the "
             "day; <h3>People</h3> short <ul> naming the most active people and "
             "what they did; <h3>Watch</h3> short <ul> of anything unusual - "

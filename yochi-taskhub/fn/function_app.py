@@ -252,6 +252,31 @@ def flash_timer(timer: func.TimerRequest) -> None:
     logging.info("flash_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 15 8 * * *", arg_name="timer", run_on_startup=False)
+def contracts_timer(timer: func.TimerRequest) -> None:
+    """Daily 08:15, BEFORE the reports: check every table's freshness/volume
+    contract so a stale feed is named rather than silently reported as zero."""
+    import tk_contracts
+    result = tk_contracts.run()
+    logging.info("contracts_timer: %d checked, %d breach(es)",
+                 result["checked"], len(result["breaches"]))
+
+
+@app.route(route="run_contracts", auth_level=func.AuthLevel.FUNCTION)
+def run_contracts(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_contracts
+    return _json(200, tk_contracts.check(
+        raise_task=req.params.get("raise_task", "1") != "0"))
+
+
+@app.route(route="ops_smoke", auth_level=func.AuthLevel.FUNCTION)
+def ops_smoke(req: func.HttpRequest) -> func.HttpResponse:
+    """Post-deploy self-check: every DB column and lake query the code uses."""
+    import smoke_test
+    out = smoke_test.run(level=req.params.get("level", "quick"))
+    return _json(200 if out["ok"] else 500, out)
+
+
 @app.timer_trigger(schedule="0 30 8 * * *", arg_name="timer", run_on_startup=False)
 def workreport_timer(timer: func.TimerRequest) -> None:
     """Daily 08:30 (after the 08:00 Xero History & Notes scrape lands): prior-day

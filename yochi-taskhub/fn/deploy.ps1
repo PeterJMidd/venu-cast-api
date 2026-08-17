@@ -104,4 +104,54 @@ print('zipped', os.path.getsize('deploy_local.zip'), 'bytes')
 Write-Host "== deploying ==" -ForegroundColor Cyan
 py -m azure.cli functionapp deployment source config-zip -g $RG -n $APP --src deploy_local.zip --timeout 600
 
+# --- 7. Restart (workers can serve stale module code after config-zip) ---
+Write-Host "== restarting ==" -ForegroundColor Cyan
+py -m azure.cli functionapp restart -n $APP -g $RG
+Start-Sleep -Seconds 45
+
+# --- 8. Smoke test: every DB column + lake query the code actually uses ---
+if ($env:SKIP_SMOKE -eq "1") {
+    Write-Host "== smoke test SKIPPED (SKIP_SMOKE=1) ==" -ForegroundColor Yellow
+} else {
+    Write-Host "== smoke test ==" -ForegroundColor Cyan
+    $key = py -m azure.cli functionapp keys list -n $APP -g $RG --query masterKey -o tsv
+    # 'quick' fits inside Azure's ~230s HTTP limit; run the full suite locally
+    # (py smoke_test.py) before deploying - that is the fast feedback loop.
+    $env:SMOKE_URL = "https://$APP.azurewebsites.net/api/ops_smoke?level=quick&code=$key"
+    py -c @"
+import json, os, time, urllib.request, urllib.error
+url = os.environ['SMOKE_URL']
+for attempt in range(4):
+    try:
+        with urllib.request.urlopen(url, timeout=240) as r:
+            out = json.loads(r.read().decode())
+        break
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors='replace')
+        try:
+            out = json.loads(body)
+            break
+        except Exception:
+            print('  HTTP %s (attempt %d)' % (e.code, attempt + 1))
+            if attempt == 3:
+                raise SystemExit('smoke test unreachable')
+            time.sleep(20)
+    except Exception as e:
+        print('  %s (attempt %d)' % (str(e)[:120], attempt + 1))
+        if attempt == 3:
+            raise SystemExit('smoke test unreachable')
+        time.sleep(20)
+print('  ' + out.get('summary', '?'))
+for f in out.get('failed', []):
+    print('  FAIL %-34s %s' % (f['check'], f['error'][:150].replace('\n', ' ')))
+raise SystemExit(0 if out.get('ok') else 1)
+"@
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "!! SMOKE TEST FAILED - the deploy is live but something is broken." -ForegroundColor Red
+        Write-Host "   Fix and redeploy, or roll back." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "smoke test passed" -ForegroundColor Green
+}
+
 Write-Host "== done. verify with: py -m azure.cli functionapp function list -n $APP -g $RG ==" -ForegroundColor Green
