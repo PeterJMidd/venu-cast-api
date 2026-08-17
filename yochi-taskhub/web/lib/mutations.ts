@@ -70,10 +70,40 @@ export async function uploadAttachment(taskId: string, file: File) {
   const { data: sess } = await supabase.auth.getSession();
   const { error } = await supabase.from("attachments").insert({
     task_id: taskId,
+    kind: "file",
     storage_path: path,
     filename: file.name,
     size_bytes: file.size,
     mime: file.type || null,
+    uploaded_by: sess.session!.user.id,
+  });
+  if (error) throw error;
+}
+
+/** Attach a link (SharePoint doc, Xero screen, dashboard, anything on the web). */
+export async function addLink(taskId: string, rawUrl: string, label?: string) {
+  const url = rawUrl.trim();
+  // http(s) only — a javascript:/data: URI in an <a href> is an XSS vector.
+  // The database enforces this too; this check is for a friendly message.
+  if (!/^https?:\/\/\S+$/i.test(url)) {
+    throw new Error("Enter a full web address starting with http:// or https://");
+  }
+  let name = (label || "").trim();
+  if (!name) {
+    try {
+      const u = new URL(url);
+      const last = u.pathname.split("/").filter(Boolean).pop();
+      name = decodeURIComponent(last || u.hostname);
+    } catch {
+      name = url;
+    }
+  }
+  const { data: sess } = await supabase.auth.getSession();
+  const { error } = await supabase.from("attachments").insert({
+    task_id: taskId,
+    kind: "link",
+    url,
+    filename: name.slice(0, 200),
     uploaded_by: sess.session!.user.id,
   });
   if (error) throw error;
@@ -87,9 +117,12 @@ export async function downloadAttachment(storagePath: string) {
   window.open(data.signedUrl, "_blank");
 }
 
-export async function deleteAttachment(attachmentId: string, storagePath: string) {
-  const { error: sErr } = await supabase.storage.from("taskapp-files").remove([storagePath]);
-  if (sErr) throw sErr;
+export async function deleteAttachment(attachmentId: string, storagePath?: string | null) {
+  // links have no stored object to remove
+  if (storagePath) {
+    const { error: sErr } = await supabase.storage.from("taskapp-files").remove([storagePath]);
+    if (sErr) throw sErr;
+  }
   const { error } = await supabase.from("attachments").delete().eq("id", attachmentId);
   if (error) throw error;
 }

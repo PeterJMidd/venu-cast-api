@@ -140,7 +140,12 @@ export interface Comment {
 export interface Attachment {
   id: string;
   task_id: string;
-  storage_path: string;
+  kind: "file" | "link";
+  /** null for links */
+  storage_path: string | null;
+  /** null for uploaded files */
+  url: string | null;
+  /** display name — the file name, or the label given to a link */
   filename: string;
   size_bytes: number | null;
   mime: string | null;

@@ -36,7 +36,7 @@ DB_PROBES = {
     "agent_runs": "id,task_id,task_title,plan,outcome,error,requested_by,created_at",
     "batch_runs": "id,project_id,kind,status,created_at",
     "approvals": "id,task_id,kind,approver_id,note",
-    "attachments": "id,task_id,storage_path,filename,size_bytes,mime,uploaded_by",
+    "attachments": "id,task_id,kind,storage_path,url,filename,size_bytes,mime,uploaded_by",
     "task_dependencies": "task_id,depends_on_task_id",
     "task_templates": "id,project_id,title,description,cadence,due_rule,active,priority,"
                       "default_assignee_id,default_reviewer_id",

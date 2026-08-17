@@ -8,6 +8,7 @@ import {
   addApproval,
   addComment,
   addDependency,
+  addLink,
   createTask,
   deleteAttachment,
   downloadAttachment,
@@ -47,6 +48,9 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   const [tab, setTab] = useState<Tab>("details");
   const [commentText, setCommentText] = useState("");
   const [newCheckItem, setNewCheckItem] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
+  const [linkBusy, setLinkBusy] = useState(false);
   const [depPick, setDepPick] = useState("");
   const [newSubtask, setNewSubtask] = useState("");
   const [viewer, setViewer] = useState<{ title: string; html: string } | null>(null);
@@ -249,6 +253,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   }
 
   async function viewReport(a: Attachment) {
+    if (!a.storage_path) return;   // links open directly, nothing to sign
     const { data, error } = await supabase.storage
       .from("taskapp-files")
       .createSignedUrl(a.storage_path, 120);
@@ -309,6 +314,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
             {(["details", "comments", "files", "activity"] as Tab[]).map((t) => (
               <button
                 key={t}
+                title={t === "files" ? "Files & links" : undefined}
                 onClick={() => setTab(t)}
                 className={`rounded-lg px-3 py-1 text-sm capitalize ${
                   tab === t ? "bg-brand-50 font-semibold text-brand-700" : "text-gray-500 hover:bg-gray-100"
@@ -680,17 +686,75 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                 Upload workpaper / evidence
                 <input type="file" className="hidden" onChange={onFile} />
               </label>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!linkUrl.trim() || linkBusy) return;
+                  setLinkBusy(true);
+                  try {
+                    await addLink(taskId, linkUrl, linkLabel);
+                    setLinkUrl("");
+                    setLinkLabel("");
+                    qc.invalidateQueries({ queryKey: ["task", taskId, "attachments"] });
+                  } catch (err) {
+                    alert(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setLinkBusy(false);
+                  }
+                }}
+                className="rounded-lg border border-gray-200 p-3"
+              >
+                <div className="mb-1.5 text-xs font-semibold text-gray-500">
+                  Or link a document (SharePoint, Xero, a dashboard…)
+                </div>
+                <input
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://…"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                />
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={linkLabel}
+                    onChange={(e) => setLinkLabel(e.target.value)}
+                    placeholder="Label (optional)"
+                    className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                  />
+                  <button
+                    disabled={!linkUrl.trim() || linkBusy}
+                    className="shrink-0 rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    {linkBusy ? "Adding…" : "Add link"}
+                  </button>
+                </div>
+              </form>
+
               {attachments?.map((a) => (
                 <div key={a.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
                   <div className="min-w-0">
-                    <div className="truncate font-medium">{a.filename}</div>
-                    <div className="text-xs text-gray-400">
+                    <div className="truncate font-medium">
+                      {a.kind === "link" ? "🔗 " : "📄 "}
+                      {a.filename}
+                    </div>
+                    <div className="truncate text-xs text-gray-400">
+                      {a.kind === "link" && a.url ? `${a.url} · ` : ""}
                       {profileName(profiles, a.uploaded_by)} · {format(parseISO(a.created_at), "d MMM HH:mm")}
                       {a.size_bytes ? ` · ${(a.size_bytes / 1024).toFixed(0)} KB` : ""}
                     </div>
                   </div>
                   <div className="ml-3 flex shrink-0 gap-3">
-                    {a.mime === "text/html" && (
+                    {a.kind === "link" && a.url && (
+                      <a
+                        href={a.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold text-brand-600 hover:underline"
+                      >
+                        Open
+                      </a>
+                    )}
+                    {a.kind === "file" && a.mime === "text/html" && (
                       <button
                         onClick={() => viewReport(a)}
                         className="text-xs font-semibold text-brand-600 hover:underline"
@@ -698,16 +762,18 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                         View
                       </button>
                     )}
-                    <button
-                      onClick={() => downloadAttachment(a.storage_path)}
-                      className="text-xs font-semibold text-brand-600 hover:underline"
-                    >
-                      Download
-                    </button>
+                    {a.kind === "file" && a.storage_path && (
+                      <button
+                        onClick={() => downloadAttachment(a.storage_path!)}
+                        className="text-xs font-semibold text-brand-600 hover:underline"
+                      >
+                        Download
+                      </button>
+                    )}
                     {(isStaff || a.uploaded_by === me?.id) && (
                       <button
                         onClick={async () => {
-                          if (!confirm(`Delete ${a.filename}?`)) return;
+                          if (!confirm(`Remove ${a.filename}?`)) return;
                           try {
                             await deleteAttachment(a.id, a.storage_path);
                             qc.invalidateQueries({ queryKey: ["task", taskId, "attachments"] });
@@ -717,13 +783,15 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                         }}
                         className="text-xs text-gray-300 hover:text-red-600"
                       >
-                        Delete
+                        Remove
                       </button>
                     )}
                   </div>
                 </div>
               ))}
-              {attachments?.length === 0 && <div className="text-sm text-gray-300">No files yet.</div>}
+              {attachments?.length === 0 && (
+                <div className="text-sm text-gray-300">No files or links yet.</div>
+              )}
             </div>
           )}
 
