@@ -86,9 +86,25 @@ export interface Task {
   created_by: string | null;
   parent_id: string | null;
   sort_order: number | null;
+  recurrence: Recurrence | null;
+  recurrence_mode: "schedule" | "completion";
+  recurrence_until: string | null;
+  recurrence_parent_id: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export type Recurrence =
+  | "daily" | "weekly" | "fortnightly" | "monthly" | "quarterly" | "annual";
+
+export const RECURRENCE_LABELS: Record<Recurrence, string> = {
+  daily: "Every day",
+  weekly: "Every week",
+  fortnightly: "Every fortnight",
+  monthly: "Every month",
+  quarterly: "Every quarter",
+  annual: "Every year",
+};
 
 export interface TaskTemplate {
   id: string;

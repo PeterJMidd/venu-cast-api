@@ -21,9 +21,11 @@ import { useProfiles, profileName } from "@/hooks/useProfiles";
 import { useOpenTask, CompleteToggle } from "@/components/TaskCard";
 import AgentPanel from "@/components/AgentPanel";
 import {
+  RECURRENCE_LABELS,
   STATUS_LABELS,
   TASK_STATUSES,
   type Approval,
+  type Recurrence,
   type Attachment,
   type AuditEntry,
   type ChecklistItem,
@@ -169,9 +171,8 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
   async function patch(p: Partial<Task>) {
     try {
       await updateTask(taskId, p);
-      if (p.assignee_id && p.assignee_id !== task?.assignee_id) {
-        notify("assigned", taskId, [p.assignee_id]);
-      }
+      // assignment email is queued by a DB trigger (notify_outbox) so every
+      // path notifies, including server-created tasks - see tk_notify.py
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e));
     }
@@ -388,7 +389,63 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                     className={`mt-1 block w-full ${selCls}`}
                   />
                 </label>
+                <label className="text-xs text-gray-500">
+                  Repeat
+                  <select
+                    value={task.recurrence ?? ""}
+                    disabled={!isStaff}
+                    onChange={(e) =>
+                      patch({ recurrence: (e.target.value || null) as Recurrence | null })
+                    }
+                    className={`mt-1 block w-full ${selCls}`}
+                  >
+                    <option value="">Does not repeat</option>
+                    {(Object.keys(RECURRENCE_LABELS) as Recurrence[]).map((r) => (
+                      <option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>
+                    ))}
+                  </select>
+                </label>
+                {task.recurrence && (
+                  <label className="text-xs text-gray-500">
+                    Next one is due
+                    <select
+                      value={task.recurrence_mode ?? "schedule"}
+                      disabled={!isStaff}
+                      onChange={(e) =>
+                        patch({ recurrence_mode: e.target.value as "schedule" | "completion" })
+                      }
+                      className={`mt-1 block w-full ${selCls}`}
+                    >
+                      <option value="schedule">On a fixed schedule</option>
+                      <option value="completion">After this one is done</option>
+                    </select>
+                  </label>
+                )}
+                {task.recurrence && (
+                  <label className="text-xs text-gray-500">
+                    Repeat until (optional)
+                    <input
+                      type="date"
+                      value={task.recurrence_until ?? ""}
+                      disabled={!isStaff}
+                      onChange={(e) => patch({ recurrence_until: e.target.value || null })}
+                      className={`mt-1 block w-full ${selCls}`}
+                    />
+                  </label>
+                )}
               </div>
+
+              {task.recurrence && (
+                <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">
+                  🔁 Repeats <b>{RECURRENCE_LABELS[task.recurrence].toLowerCase()}</b>
+                  {task.recurrence_mode === "completion"
+                    ? " — the next one appears once this is marked done."
+                    : task.due_date
+                      ? " — the next one is created automatically about a week ahead."
+                      : " — set a due date so the schedule has something to count from."}
+                  {task.recurrence_until && ` Ends ${task.recurrence_until}.`}
+                </div>
+              )}
 
               {task.description && (
                 <div>

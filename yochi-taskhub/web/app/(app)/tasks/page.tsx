@@ -49,8 +49,7 @@ function TasksInner() {
     setBulkBusy(true);
     try {
       for (const id of Array.from(selected)) {
-        await updateTask(id, patch as never);
-        if (patch.assignee_id) notify("assigned", id, [patch.assignee_id]);
+        await updateTask(id, patch as never);  // notify_outbox trigger emails
       }
       setSelected(new Set());
       qc.invalidateQueries({ queryKey: ["tasks"] });

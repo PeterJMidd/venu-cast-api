@@ -68,6 +68,15 @@ def patch(table, params, body):
                 body=body, headers=_headers(prefer="return=representation"))
 
 
+def delete(table, params):
+    """PostgREST refuses an unfiltered DELETE, so params must narrow the rows."""
+    if not params:
+        raise ValueError("delete requires a filter")
+    qs = urllib.parse.urlencode(params, doseq=True)
+    return _req("DELETE", "%s/rest/v1/%s?%s" % (_base(), table, qs),
+                headers=_headers(prefer="return=minimal"))
+
+
 # ---------------------------------------------------------------- auth admin
 def invite_user(email, role, full_name=None, redirect_to=None):
     """Send a Supabase invite email, then set the profile's role/active directly.

@@ -111,6 +111,9 @@ export default function TaskCard({
             {format(parseISO(task.due_date), "d MMM")}
           </span>
         )}
+        {task.recurrence && (
+          <span title={`Repeats ${task.recurrence}`} className="text-gray-400">🔁</span>
+        )}
         {task.assignee_id && (
           <span className="ml-auto truncate text-gray-400">
             {profileName(profiles, task.assignee_id)}

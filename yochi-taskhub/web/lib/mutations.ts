@@ -38,9 +38,11 @@ export async function createTask(input: NewTaskInput): Promise<string> {
     .select("id")
     .single();
   if (error) throw error;
-  const id = (data as { id: string }).id;
-  if (input.assignee_id && input.assignee_id !== uid) notify("assigned", id, [input.assignee_id]);
-  return id;
+  // assignment emails are NOT sent from here: a DB trigger queues every
+  // assignee/reviewer change into taskapp.notify_outbox and the function app
+  // drains it, so server-created tasks (watcher, register, email drop, agents)
+  // notify too. Comments/@mentions still notify directly.
+  return (data as { id: string }).id;
 }
 
 export async function addComment(taskId: string, body: string) {

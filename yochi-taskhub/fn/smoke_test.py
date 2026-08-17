@@ -25,7 +25,9 @@ LOG = logging.getLogger("smoke_test")
 DB_PROBES = {
     "tasks": "id,project_id,template_id,period_id,title,description,status,priority,"
              "assignee_id,reviewer_id,due_date,completed_at,source,checklist,created_by,"
-             "created_at,updated_at,watcher_rule_id,parent_id,sort_order,external_ref",
+             "created_at,updated_at,watcher_rule_id,parent_id,sort_order,external_ref,"
+             "recurrence,recurrence_mode,recurrence_until,recurrence_parent_id",
+    "notify_outbox": "id,task_id,recipient,kind,actor,created_at,sent_at,attempts,error",
     "projects": "id,name,category_id",
     "categories": "id,name,sort",
     "profiles": "id,email,full_name,role,active",
@@ -296,6 +298,23 @@ def run(level="full", deep=None):
                % (out["checked"], len(out["breaches"])))
         except Exception as e:
             fail("contracts:check", e)
+
+        try:
+            import tk_recurring
+            base = dt.date(2026, 1, 31)
+            cases = [("daily", dt.date(2026, 2, 1)), ("weekly", dt.date(2026, 2, 7)),
+                     ("fortnightly", dt.date(2026, 2, 14)),
+                     ("monthly", dt.date(2026, 2, 28)),      # clamps short month
+                     ("quarterly", dt.date(2026, 4, 30)),
+                     ("annual", dt.date(2027, 1, 31))]
+            for rec, want in cases:
+                got = tk_recurring.next_due(rec, base)
+                if got != want:
+                    raise AssertionError("%s from %s -> %s, expected %s"
+                                         % (rec, base, got, want))
+            ok("recurring:next_due", "%d cadences correct" % len(cases))
+        except Exception as e:
+            fail("recurring:next_due", e)
 
     results["ok"] = not results["failed"]
     results["summary"] = "%s: %d passed, %d failed" % (

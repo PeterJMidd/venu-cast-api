@@ -252,6 +252,38 @@ def flash_timer(timer: func.TimerRequest) -> None:
     logging.info("flash_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 */5 * * * *", arg_name="timer", run_on_startup=False)
+def notify_timer(timer: func.TimerRequest) -> None:
+    """Every 5 min: email whoever was assigned a task, whatever did the
+    assigning (web, watcher, register, email-drop, agent). Fed by a DB trigger
+    into taskapp.notify_outbox, so no code path can forget to notify."""
+    import tk_notify
+    result = tk_notify.run()
+    if result.get("sent") or result.get("failed"):
+        logging.info("notify_timer: %s", result)
+
+
+@app.route(route="run_notify", auth_level=func.AuthLevel.FUNCTION)
+def run_notify(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_notify
+    return _json(200, tk_notify.run())
+
+
+@app.timer_trigger(schedule="0 45 0 * * *", arg_name="timer", run_on_startup=False)
+def recurring_timer(timer: func.TimerRequest) -> None:
+    """00:45 daily: materialise the next instance of every recurring task
+    (runs after the 00:15 template run so both calendars settle together)."""
+    import tk_recurring
+    result = tk_recurring.run()
+    logging.info("recurring_timer: %s", result)
+
+
+@app.route(route="run_recurring", auth_level=func.AuthLevel.FUNCTION)
+def run_recurring(req: func.HttpRequest) -> func.HttpResponse:
+    import tk_recurring
+    return _json(200, tk_recurring.run())
+
+
 @app.timer_trigger(schedule="0 15 8 * * *", arg_name="timer", run_on_startup=False)
 def contracts_timer(timer: func.TimerRequest) -> None:
     """Daily 08:15, BEFORE the reports: check every table's freshness/volume
