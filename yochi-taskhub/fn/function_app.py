@@ -252,10 +252,10 @@ def flash_timer(timer: func.TimerRequest) -> None:
     logging.info("flash_timer: %s", result)
 
 
-@app.timer_trigger(schedule="0 30 7 * * *", arg_name="timer", run_on_startup=False)
+@app.timer_trigger(schedule="0 30 8 * * *", arg_name="timer", run_on_startup=False)
 def workreport_timer(timer: func.TimerRequest) -> None:
-    """Daily 07:30: prior-day work-activity intelligence report (blob estate +
-    lake + TaskHub, per-person where the data allows) -> table + admin email."""
+    """Daily 08:30 (after the 08:00 Xero History & Notes scrape lands): prior-day
+    work-activity intelligence report -> table + admin email."""
     import tk_workreport
     result = tk_workreport.run()
     logging.info("workreport_timer: %s", result)

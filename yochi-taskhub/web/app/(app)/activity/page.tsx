@@ -85,7 +85,7 @@ function ActivityInner() {
   if (!report)
     return (
       <div className="p-6 text-sm text-gray-500">
-        No reports yet — the first one is generated at 07:30 tomorrow covering today,
+        No reports yet — the first one is generated at 08:30 tomorrow covering today,
         or an admin can trigger one now via <code>run_workreport</code>.
       </div>
     );
