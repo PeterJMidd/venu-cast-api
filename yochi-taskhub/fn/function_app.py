@@ -557,6 +557,17 @@ def run_escalate(req: func.HttpRequest) -> func.HttpResponse:
     return _json(200, tk_escalate.run(force=req.params.get("force") == "1"))
 
 
+@app.route(route="ops_xero_activity", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
+def ops_xero_activity(req: func.HttpRequest) -> func.HttpResponse:
+    """Desktop History & Notes scrape posts prior-day Xero per-user activity."""
+    import tk_xeroactivity
+    try:
+        return _json(200, tk_xeroactivity.ingest(req.get_json()))
+    except Exception as e:
+        logging.exception("ops_xero_activity failed")
+        return _json(500, {"error": str(e)})
+
+
 @app.route(route="ops_feed_search", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
 def ops_feed_search(req: func.HttpRequest) -> func.HttpResponse:
     import tk_feeds

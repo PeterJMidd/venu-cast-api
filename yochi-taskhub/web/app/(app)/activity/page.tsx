@@ -17,6 +17,7 @@ type Report = {
       xero_by_source: Row[]; invoices_touched: Row[];
       restoke_receipting: Row[]; procedures_by_person: Row[];
       asana_completed_by_person: Row[]; sales_context: Row[];
+      xero_by_user?: Row[];
     };
     taskhub: { people: Row[]; agent_runs: { total: number; success: number };
                batch_runs: { kind: string; status: string | null }[] };
@@ -148,7 +149,12 @@ function ActivityInner() {
         <Card title="Asana tasks completed — by person">
           <Table rows={s.lake.asana_completed_by_person} cols={["person", "completed"]} />
         </Card>
-        <Card title="Xero activity" note="by type & entity — Xero carries no per-user data">
+        <Card title="Xero — by person" note="from Xero History & Notes (morning scrape)">
+          <Table rows={s.lake.xero_by_user ?? []}
+                 cols={["xero_user", "entity", "item_type", "action", "items"]}
+                 labels={["person", "entity", "type", "action", "items"]} />
+        </Card>
+        <Card title="Xero postings" note="by type & entity">
           <Table rows={s.lake.xero_by_source} cols={["source", "org", "lines", "net"]}
                  labels={["source", "entity", "lines", "net $"]} />
         </Card>

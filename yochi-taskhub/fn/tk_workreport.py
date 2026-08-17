@@ -22,7 +22,8 @@ LOG = logging.getLogger("tk_workreport")
 
 AEST = dt.timezone(dt.timedelta(hours=10))
 EXTRA_TABLES = ["XeroAccountTransactionsMasterView", "Invoices",
-                "restoke_purchasing", "procedure_report", "AsanaTasks"]
+                "restoke_purchasing", "procedure_report", "AsanaTasks",
+                "feed_xero_user_activity"]
 BLOB_CAP_PER_CONTAINER = 25000
 
 
@@ -41,8 +42,11 @@ def _q(sql):
         out = lake_reader.query(sql, max_rows=100)
         return [dict(zip(out["columns"], r)) for r in out["rows"]]
     except Exception as e:
+        msg = str(e)
+        if "does not exist" in msg or "not found" in msg.lower():
+            return []  # optional table not in the lake yet
         LOG.exception("workreport query failed")
-        return [{"error": str(e)[:150]}]
+        return [{"error": msg[:150]}]
 
 
 def _lake_stats(day, utc0, utc1):
@@ -82,6 +86,12 @@ def _lake_stats(day, utc0, utc1):
             WHERE TRY_CAST(CompletedAt AS TIMESTAMP) >= TIMESTAMP '%s'
               AND TRY_CAST(CompletedAt AS TIMESTAMP) <  TIMESTAMP '%s'
             GROUP BY 1 ORDER BY 2 DESC LIMIT 20""" % (utc0, utc1)),
+        "xero_by_user": _q("""
+            SELECT xero_user, entity, item_type, action,
+                   sum(TRY_CAST(items AS INT)) AS items
+            FROM feed_xero_user_activity
+            WHERE activity_date = '%s'
+            GROUP BY 1, 2, 3, 4 ORDER BY items DESC LIMIT 30""" % d),
         "sales_context": _q("""
             SELECT count(*) AS venues_traded,
                    round(sum(TRY_CAST(net_sales AS DOUBLE)), 0) AS net_sales
@@ -217,7 +227,10 @@ def _email_html(day, stats, narrative):
              "<h3>Asana tasks completed — by person</h3>",
              _table(s["lake"]["asana_completed_by_person"],
                     ["person", "completed"]),
-             "<h3>Xero activity (by type & entity — Xero has no per-user data)</h3>",
+             "<h3>Xero — by person (from History &amp; Notes)</h3>",
+             _table(s["lake"].get("xero_by_user") or [],
+                    ["xero_user", "entity", "item_type", "action", "items"]),
+             "<h3>Xero postings (by type & entity)</h3>",
              _table(s["lake"]["xero_by_source"],
                     ["source", "org", "lines", "net"]),
              "<h3>Invoices touched</h3>",
