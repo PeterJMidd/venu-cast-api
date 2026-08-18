@@ -1,18 +1,28 @@
 "use client";
 
-// Ask-a-question research on a task: live web search, cited, and written back
-// onto the task as a comment. Distinct from the Task agent, which analyses our
-// own data in the lake and produces a deliverable.
+// Ask-a-question research on a task: live web search, cited, written back onto
+// the task as a comment. Distinct from the Task agent, which analyses our own
+// lake data. Two engines with different search indexes; "Compare both" is the
+// one that earns its keep on decisions - agreement is corroboration,
+// disagreement is the signal to dig.
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { callFn } from "@/lib/fn";
 
 type Depth = "quick" | "standard" | "deep";
+type Engine = "claude" | "perplexity" | "compare";
+type Recency = "" | "week" | "month" | "year";
 
-const DEPTHS: { key: Depth; label: string; hint: string }[] = [
-  { key: "quick", label: "Quick", hint: "a few sources, ~20s" },
-  { key: "standard", label: "Standard", hint: "balanced, ~45s" },
-  { key: "deep", label: "Deep", hint: "widest search, 1-2 min" },
+const DEPTHS: { key: Depth; label: string }[] = [
+  { key: "quick", label: "Quick" },
+  { key: "standard", label: "Standard" },
+  { key: "deep", label: "Deep" },
+];
+
+const ENGINES: { key: Engine; label: string; hint: string }[] = [
+  { key: "claude", label: "Standard search", hint: "fastest, good default" },
+  { key: "perplexity", label: "Perplexity", hint: "different index, strong on what changed" },
+  { key: "compare", label: "Compare both", hint: "corroborates, flags conflicts" },
 ];
 
 const SUGGESTIONS = [
@@ -26,9 +36,13 @@ export default function ResearchPanel({ taskId }: { taskId: string }) {
   const qc = useQueryClient();
   const [question, setQuestion] = useState("");
   const [depth, setDepth] = useState<Depth>("standard");
+  const [engine, setEngine] = useState<Engine>("claude");
+  const [recency, setRecency] = useState<Recency>("");
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const slow = engine === "compare" && depth === "deep";
 
   async function ask(q?: string) {
     const text = (q ?? question).trim();
@@ -37,14 +51,15 @@ export default function ResearchPanel({ taskId }: { taskId: string }) {
     setError(null);
     setAnswer(null);
     try {
-      const out = await callFn<{ answer: string }>("task_research", {
+      const out = await callFn<{ answer: string; engine: Engine }>("task_research", {
         task_id: taskId,
         question: text,
         depth,
+        engine,
+        recency: recency || undefined,
       });
       setAnswer(out.answer);
       setQuestion("");
-      // it is saved as a comment, so refresh that tab's data
       qc.invalidateQueries({ queryKey: ["task", taskId, "comments"] });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -57,14 +72,12 @@ export default function ResearchPanel({ taskId }: { taskId: string }) {
     <div className="rounded-xl border border-gray-200 bg-white p-4">
       <div className="mb-1 flex items-center gap-2">
         <span className="text-sm font-semibold">🔍 Research this</span>
-        <span className="text-[11px] text-gray-400">
-          searches the live web, always cited
-        </span>
+        <span className="text-[11px] text-gray-400">live web search, always cited</span>
       </div>
       <p className="mb-2 text-xs text-gray-500">
-        Ask about rules, rates, deadlines or what others do. The answer is saved
-        to this task&apos;s comments. For questions about <em>our own</em> numbers,
-        use the Task agent above.
+        Ask about rules, rates, deadlines or what others do. The answer is saved to
+        this task&apos;s comments. For questions about <em>our own</em> numbers, use the
+        Task agent above.
       </p>
 
       <textarea
@@ -74,19 +87,40 @@ export default function ResearchPanel({ taskId }: { taskId: string }) {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask();
         }}
         rows={2}
-        placeholder="e.g. What are the current WHT rates on royalties from Singapore to Australia?"
+        placeholder="e.g. What withholding tax applies to royalties from Singapore to Australia?"
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
       />
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
+        <select
+          value={engine}
+          onChange={(e) => setEngine(e.target.value as Engine)}
+          title={ENGINES.find((x) => x.key === engine)?.hint}
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+        >
+          {ENGINES.map((x) => (
+            <option key={x.key} value={x.key}>{x.label}</option>
+          ))}
+        </select>
         <select
           value={depth}
           onChange={(e) => setDepth(e.target.value as Depth)}
           className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
         >
           {DEPTHS.map((d) => (
-            <option key={d.key} value={d.key}>{d.label} — {d.hint}</option>
+            <option key={d.key} value={d.key}>{d.label}</option>
           ))}
+        </select>
+        <select
+          value={recency}
+          onChange={(e) => setRecency(e.target.value as Recency)}
+          title="Only consider recent sources — useful for 'what changed'"
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+        >
+          <option value="">Any date</option>
+          <option value="week">Last week</option>
+          <option value="month">Last month</option>
+          <option value="year">Last year</option>
         </select>
         <button
           onClick={() => ask()}
@@ -97,9 +131,18 @@ export default function ResearchPanel({ taskId }: { taskId: string }) {
         </button>
         {busy && (
           <span className="text-[11px] text-gray-400">
-            searching the web and reading sources…
+            {engine === "compare"
+              ? "running both engines and reconciling…"
+              : "searching the web and reading sources…"}
           </span>
         )}
+      </div>
+
+      <div className="mt-1 text-[11px] text-gray-400">
+        {engine === "compare"
+          ? "Runs both search engines, then reports what they agree on, where they differ, and what to verify."
+          : ENGINES.find((x) => x.key === engine)?.hint}
+        {slow && " — deep + compare can take a couple of minutes."}
       </div>
 
       {!answer && !busy && (
@@ -117,9 +160,7 @@ export default function ResearchPanel({ taskId }: { taskId: string }) {
       )}
 
       {error && (
-        <div className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
+        <div className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
       )}
 
       {answer && (

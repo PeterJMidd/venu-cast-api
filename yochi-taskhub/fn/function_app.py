@@ -313,7 +313,9 @@ def task_research(req: func.HttpRequest) -> func.HttpResponse:
         body = req.get_json()
         return _json(200, tk_research.run(
             body["task_id"], body.get("question"), uid=uid,
-            depth=body.get("depth", "standard")))
+            depth=body.get("depth", "standard"),
+            engine=body.get("engine", "claude"),
+            recency=body.get("recency")))
     except ValueError as e:
         return _json(400, {"error": str(e)})
     except Exception as e:
