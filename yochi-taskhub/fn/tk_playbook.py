@@ -26,7 +26,8 @@ LOG = logging.getLogger("tk_playbook")
 TABLE = "agent_playbook"
 CONTAINER = "datasights-lake"
 COLUMNS = ["approach_key", "task_title", "project", "method", "queries_that_worked",
-           "pitfalls", "improve_next_time", "outcome", "run_at"]
+           "pitfalls", "improve_next_time", "outcome", "version",
+           "changed_this_run", "run_at"]
 STOP = {"the", "and", "for", "with", "from", "into", "this", "that", "review",
         "check", "confirm", "update", "prepare", "monthly", "weekly", "daily"}
 
@@ -51,15 +52,30 @@ DISTIL_SCHEMA = {
                                              "for the next run of this kind"}},
     "required": ["approach_key", "method", "queries_that_worked", "pitfalls",
                  "improve_next_time"]}
+DISTIL_SCHEMA["properties"].update({
+    "changed_this_run": {"type": "string",
+                         "description": "what this run changed about the "
+                                        "approach, one or two sentences"}})
 
 DISTIL_SYSTEM = (
-    "You distil one completed analysis into a reusable playbook entry for the "
-    "next agent that gets a task of the same KIND. Write instructions, not a "
-    "summary of findings - the numbers will be different next time, the method "
-    "should not have to be rediscovered. Be concrete: name lake tables, "
-    "columns, filters and gotchas. If something went wrong or produced an empty "
-    "result, say what to do instead. Never invent a table or column you were "
-    "not shown.")
+    "You maintain the standing RECOMMENDED APPROACH for one KIND of finance "
+    "task. You get the current recommended approach (may be empty) and what "
+    "just happened on a new run. Return the UPDATED approach - the whole "
+    "thing, ready to replace what was there.\n\n"
+    "Write instructions to the next agent, not a summary of findings: the "
+    "numbers will differ next time, the method should not have to be "
+    "rediscovered. Be concrete - name lake tables, columns, filters and "
+    "gotchas. Fold the new run in: keep what still holds, correct anything the "
+    "new run showed to be wrong, and add what was learned. If something "
+    "produced an empty or misleading result, say what to do instead. Never "
+    "invent a table or column you were not shown. Also state briefly, in "
+    "changed_this_run, what this run actually changed about the approach (or "
+    "'first version' / 'no change - confirmed the existing approach').")
+
+DISTIL_SCHEMA_EXTRA = {
+    "changed_this_run": {"type": "string",
+                         "description": "what this run changed about the "
+                                        "approach, one or two sentences"}}
 
 
 def key_for(title):
@@ -107,8 +123,11 @@ def _append(rows):
     if has_old:
         con.execute("CREATE TABLE hist AS SELECT * FROM read_parquet('%s', "
                     "union_by_name=true)" % old)
-        con.execute("INSERT INTO t SELECT %s FROM hist"
-                    % ", ".join('"%s"' % c for c in COLUMNS))
+        # tolerate schema evolution: older files predate newer columns
+        have = {r[0] for r in con.execute("DESCRIBE hist").fetchall()}
+        sel = ", ".join(('"%s"' % c) if c in have else ("'' AS \"%s\"" % c)
+                        for c in COLUMNS)
+        con.execute("INSERT INTO t SELECT %s FROM hist" % sel)
     con.execute("COPY (SELECT * FROM t ORDER BY run_at DESC) TO '%s' "
                 "(FORMAT PARQUET, COMPRESSION ZSTD)" % new)
     total = con.execute("SELECT count(*) FROM t").fetchone()[0]
@@ -134,7 +153,8 @@ def _append(rows):
 
 
 def recall(title, limit=3):
-    """Playbook entries for this KIND of task, newest first."""
+    """Playbook versions for this KIND of task, newest first. The first row is
+    the CURRENT recommended approach; the rest are how it got there."""
     import lake_reader
     key = key_for(title)
     if not key:
@@ -144,17 +164,25 @@ def recall(title, limit=3):
         return []
     where = " OR ".join("lower(approach_key) LIKE '%%%s%%'" % w.replace("'", "")
                         for w in words)
-    sql = ("SELECT approach_key, task_title, method, queries_that_worked, "
-           "pitfalls, improve_next_time, run_at FROM %s WHERE %s "
+    sql = ("SELECT approach_key, task_title, project, method, "
+           "queries_that_worked, pitfalls, improve_next_time, outcome, "
+           "version, changed_this_run, run_at FROM %s WHERE %s "
            "ORDER BY run_at DESC LIMIT %d" % (TABLE, where, int(limit)))
     try:
         out = lake_reader.query(sql, max_rows=limit)
         return [dict(zip(out["columns"], r)) for r in out["rows"]]
     except Exception as e:
-        if "does not exist" in str(e) or "not found" in str(e).lower():
+        msg = str(e)
+        if "does not exist" in msg or "not found" in msg.lower():
             return []          # no playbook yet - first run of anything
         LOG.exception("playbook recall failed")
         return []
+
+
+def current(title):
+    """The standing recommended approach for this kind of task, or None."""
+    rows = recall(title, limit=1)
+    return rows[0] if rows else None
 
 
 def prompt_block(title, limit=3):
@@ -174,19 +202,39 @@ def prompt_block(title, limit=3):
     return "\n".join(bits)[:6000]
 
 
-def record(task_title, project, plan, summary, outcome="success"):
-    """Distil one successful run into a playbook entry. Never raises - losing a
-    playbook entry must not fail the agent run that produced it."""
+def record(task_title, project, plan, summary=None, outcome="success"):
+    """Fold one run into the standing recommended approach and store the new
+    version. Called on PROPOSE (so an approach is captured even if you never
+    execute) and again on a successful EXECUTE (so results sharpen it).
+
+    Never raises: losing a playbook version must not fail the run that made it."""
     try:
+        prior = current(task_title)
         queries = plan.get("data_queries") or []
-        payload = (
-            "TASK: %s\nPROJECT: %s\n\nAPPROACH TAKEN:\n%s\n\nQUERIES RUN:\n%s"
-            "\n\nWHAT THE RUN PRODUCED:\n%s" % (
-                task_title, project or "",
-                plan.get("approach") or "", json.dumps(queries)[:4000],
-                (summary or "")[:3000]))
-        d = tk_ai.structured(DISTIL_SYSTEM, payload, "distil_playbook",
-                             DISTIL_SCHEMA, max_tokens=1200)
+        parts = ["TASK: %s" % task_title, "PROJECT: %s" % (project or "")]
+        if prior:
+            parts.append(
+                "CURRENT RECOMMENDED APPROACH (version %s, %s):\n%s\n\nData that "
+                "worked: %s\nKnown pitfalls: %s\nWanted improvement: %s" % (
+                    prior.get("version") or "1", (prior.get("run_at") or "")[:10],
+                    prior.get("method", ""), prior.get("queries_that_worked", ""),
+                    prior.get("pitfalls", ""), prior.get("improve_next_time", "")))
+        else:
+            parts.append("CURRENT RECOMMENDED APPROACH: (none yet - this is the "
+                         "first version)")
+        parts.append("THIS RUN (%s)\nApproach planned:\n%s\n\nQueries:\n%s" % (
+            outcome, plan.get("approach") or "", json.dumps(queries)[:4000]))
+        if summary:
+            parts.append("What the run produced:\n" + summary[:3000])
+        else:
+            parts.append("This run was planned but not executed, so there are no "
+                         "results yet - capture the intended approach.")
+        d = tk_ai.structured(DISTIL_SYSTEM, "\n\n".join(parts),
+                             "distil_playbook", DISTIL_SCHEMA, max_tokens=1400)
+        try:
+            version = int(float(prior.get("version") or 0)) + 1 if prior else 1
+        except (TypeError, ValueError):
+            version = 1
         row = {
             "approach_key": (d.get("approach_key") or key_for(task_title))[:80],
             "task_title": (task_title or "")[:200],
@@ -196,12 +244,16 @@ def record(task_title, project, plan, summary, outcome="success"):
             "pitfalls": d.get("pitfalls", ""),
             "improve_next_time": d.get("improve_next_time", ""),
             "outcome": outcome,
+            "version": str(version),
+            "changed_this_run": d.get("changed_this_run", ""),
             "run_at": dt.datetime.utcnow().isoformat(),
         }
         total = _append([row])
-        LOG.info("playbook entry recorded (%s), %d total", row["approach_key"], total)
+        LOG.info("playbook v%d recorded (%s), %d rows total",
+                 version, row["approach_key"], total)
         return {"recorded": True, "approach_key": row["approach_key"],
-                "entries": total}
+                "version": version, "entries": total,
+                "changed_this_run": row["changed_this_run"]}
     except Exception as e:
         LOG.exception("playbook record failed")
         return {"recorded": False, "error": str(e)[:200]}

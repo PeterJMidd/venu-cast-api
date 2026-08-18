@@ -165,6 +165,10 @@ def propose(task_id):
     plan["validation"] = validation
     plan["all_valid"] = bool(validation) and all(v["ok"] for v in validation)
     plan["used_precedents"] = [p["task_title"] for p in precedents]
+    # Persist the approach NOW. Proposing used to be stateless, so closing the
+    # drawer without executing lost the plan entirely.
+    plan["playbook"] = tk_playbook.record(task["title"], proj.get("name"),
+                                          plan, outcome="proposed")
     return plan
 
 

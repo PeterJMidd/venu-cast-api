@@ -323,6 +323,37 @@ def task_research(req: func.HttpRequest) -> func.HttpResponse:
         return _json(500, {"error": str(e)})
 
 
+@app.route(route="task_playbook", auth_level=func.AuthLevel.ANONYMOUS,
+           methods=["POST", "OPTIONS"])
+def task_playbook(req: func.HttpRequest) -> func.HttpResponse:
+    """The standing recommended approach for this kind of task, plus how it got
+    there. {task_id} -> {current, history[]}"""
+    if req.method == "OPTIONS":
+        return func.HttpResponse("", status_code=204)
+    import tk_auth
+    import tk_db
+    import tk_playbook
+    try:
+        _, role, _ = _authed(req)
+    except tk_auth.AuthError as e:
+        return _json(401, {"error": str(e)})
+    if role in ("stakeholder", "external"):
+        return _json(403, {"error": "finance or admin only"})
+    try:
+        rows = tk_db.get("tasks", {"id": "eq." + req.get_json()["task_id"],
+                                   "select": "title"})
+        if not rows:
+            return _json(404, {"error": "task not found"})
+        title = rows[0]["title"]
+        versions = tk_playbook.recall(title, limit=12)
+        return _json(200, {"approach_key": tk_playbook.key_for(title),
+                           "current": versions[0] if versions else None,
+                           "history": versions[1:]})
+    except Exception as e:
+        logging.exception("task_playbook failed")
+        return _json(500, {"error": str(e)})
+
+
 @app.route(route="run_contracts", auth_level=func.AuthLevel.FUNCTION)
 def run_contracts(req: func.HttpRequest) -> func.HttpResponse:
     import tk_contracts

@@ -20,6 +20,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useProfiles, profileName } from "@/hooks/useProfiles";
 import { useOpenTask, CompleteToggle } from "@/components/TaskCard";
 import AgentPanel from "@/components/AgentPanel";
+import ApproachTab from "@/components/ApproachTab";
 import KnowledgeTab from "@/components/KnowledgeTab";
 import {
   RECURRENCE_LABELS,
@@ -36,7 +37,7 @@ import {
   type TaskStatus,
 } from "@/lib/types";
 
-type Tab = "details" | "comments" | "knowledge" | "files" | "activity";
+type Tab = "details" | "comments" | "approach" | "knowledge" | "files" | "activity";
 
 const AUDIT_FIELDS = ["status", "assignee_id", "reviewer_id", "due_date", "priority", "title"];
 
@@ -320,7 +321,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
             </div>
           )}
           <div className="mt-3 flex gap-1">
-            {(["details", "comments", "knowledge", "files", "activity"] as Tab[]).map((t) => (
+            {(["details", "comments", "approach", "knowledge", "files", "activity"] as Tab[]).map((t) => (
               <button
                 key={t}
                 title={t === "files" ? "Files & links" : undefined}
@@ -723,6 +724,16 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                 </button>
               </form>
             </div>
+          )}
+
+          {tab === "approach" && (
+            isStaff ? (
+              <ApproachTab taskId={taskId} />
+            ) : (
+              <div className="text-sm text-gray-400">
+                The recommended approach is available to the finance team.
+              </div>
+            )
           )}
 
           {tab === "knowledge" && (
