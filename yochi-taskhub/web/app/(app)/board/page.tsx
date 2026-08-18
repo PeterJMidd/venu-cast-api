@@ -24,12 +24,14 @@ import NewTaskModal from "@/components/NewTaskModal";
 import BatchPanel from "@/components/BatchPanel";
 import PositionPanel from "@/components/PositionPanel";
 import {
+  PRIORITY_LABELS,
   STATUS_LABELS,
   TASK_STATUSES,
   type Project,
   type Task,
   type TaskStatus,
 } from "@/lib/types";
+import { DUE_WINDOWS, PRIORITY_ORDER, filterTasks, type DueWindow } from "@/lib/taskFilters";
 
 function DraggableCard({ task, profiles }: { task: Task; profiles: any }) {
   const { attributes, listeners, setNodeRef, isDragging, transform, transition } = useSortable({ id: task.id });
@@ -92,6 +94,9 @@ function BoardInner() {
   const { data: profiles } = useProfiles();
   const [dragTask, setDragTask] = useState<Task | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [search, setSearch] = useState("");
+  const [fPriority, setFPriority] = useState("");
+  const [fDue, setFDue] = useState<DueWindow>("");
   useRealtimeTasks();
 
   const isStaff = me?.role === "admin" || me?.role === "finance";
@@ -178,6 +183,8 @@ function BoardInner() {
   }
 
   const project = projects?.find((p) => p.id === projectId);
+  const filtering = !!(search.trim() || fPriority || fDue);
+  const visible = filterTasks(tasks ?? [], { search, priority: fPriority, due: fDue });
 
   return (
     <div className="flex h-full flex-col px-6 py-6">
@@ -209,6 +216,49 @@ function BoardInner() {
         )}
       </div>
 
+      {projectId && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search this board…"
+            className="w-56 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+          />
+          <select
+            value={fPriority}
+            onChange={(e) => setFPriority(e.target.value)}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+          >
+            <option value="">Any importance</option>
+            {PRIORITY_ORDER.map((p) => (
+              <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
+            ))}
+          </select>
+          <select
+            value={fDue}
+            onChange={(e) => setFDue(e.target.value as DueWindow)}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+          >
+            {DUE_WINDOWS.map((w) => (
+              <option key={w.key} value={w.key}>{w.label}</option>
+            ))}
+          </select>
+          {filtering && (
+            <>
+              <span className="text-xs text-gray-500">
+                {visible.length} of {tasks?.length ?? 0} shown
+              </span>
+              <button
+                onClick={() => { setSearch(""); setFPriority(""); setFDue(""); }}
+                className="text-xs font-semibold text-brand-600 hover:underline"
+              >
+                Clear
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {!projectId && (
         <div className="rounded-lg border border-dashed border-gray-300 p-10 text-center text-sm text-gray-400">
           Pick a project to see its board.
@@ -223,7 +273,7 @@ function BoardInner() {
                 key={s}
                 status={s}
                 profiles={profiles}
-                tasks={tasks?.filter((t) => t.status === s) ?? []}
+                tasks={visible.filter((t) => t.status === s)}
               />
             ))}
           </div>

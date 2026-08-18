@@ -7,7 +7,7 @@ escalation engine's owner sweep, or an AI agent. A DB trigger writes one row to
 taskapp.notify_outbox whenever assignee_id/reviewer_id changes, and another
 does the same for every comment (tagging by email address or @name, plus the
 task assignee/reviewer); this drains them
-on a short timer and sends via Graph. Self-assignment never emails (the trigger
+on a one-minute timer and sends via Graph. Self-assignment never emails (the trigger
 compares against auth.uid()), and notification_prefs.email_on_assign still
 opts a person out."""
 import datetime as dt

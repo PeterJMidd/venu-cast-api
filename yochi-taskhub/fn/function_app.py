@@ -252,9 +252,9 @@ def flash_timer(timer: func.TimerRequest) -> None:
     logging.info("flash_timer: %s", result)
 
 
-@app.timer_trigger(schedule="0 */5 * * * *", arg_name="timer", run_on_startup=False)
+@app.timer_trigger(schedule="0 */1 * * * *", arg_name="timer", run_on_startup=False)
 def notify_timer(timer: func.TimerRequest) -> None:
-    """Every 5 min: email whoever was assigned a task, whatever did the
+    """Every minute: email whoever was assigned a task, whatever did the
     assigning (web, watcher, register, email-drop, agent). Fed by a DB trigger
     into taskapp.notify_outbox, so no code path can forget to notify."""
     import tk_notify

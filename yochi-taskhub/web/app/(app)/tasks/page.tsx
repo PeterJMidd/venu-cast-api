@@ -10,6 +10,7 @@ import { useProfiles, profileName } from "@/hooks/useProfiles";
 import { useRealtimeTasks } from "@/hooks/useRealtimeTasks";
 import { useOpenTask } from "@/components/TaskCard";
 import NewTaskModal from "@/components/NewTaskModal";
+import { DUE_WINDOWS, PRIORITY_ORDER, matchesDue, type DueWindow } from "@/lib/taskFilters";
 import {
   PRIORITY_LABELS,
   STATUS_LABELS,
@@ -30,7 +31,8 @@ function TasksInner() {
   const [fProject, setFProject] = useState("");
   const [fAssignee, setFAssignee] = useState("");
   const [fStatus, setFStatus] = useState("");
-  const [overdueOnly, setOverdueOnly] = useState(false);
+  const [fPriority, setFPriority] = useState("");
+  const [fDue, setFDue] = useState<DueWindow>("");
   const [showNew, setShowNew] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -114,9 +116,8 @@ function TasksInner() {
     }
     if (fAssignee && t.assignee_id !== fAssignee) return false;
     if (fStatus && t.status !== fStatus) return false;
-    if (overdueOnly) {
-      if (!t.due_date || t.status === "done" || !isBefore(parseISO(t.due_date), today)) return false;
-    }
+    if (fPriority && t.priority !== fPriority) return false;
+    if (!matchesDue(t, fDue)) return false;
     return true;
   });
 
@@ -168,15 +169,22 @@ function TasksInner() {
             <option key={s} value={s}>{STATUS_LABELS[s]}</option>
           ))}
         </select>
-        <label className="flex items-center gap-1.5 text-sm text-gray-600">
-          <input
-            type="checkbox"
-            checked={overdueOnly}
-            onChange={(e) => setOverdueOnly(e.target.checked)}
-            className="accent-brand-600"
-          />
-          Overdue only
-        </label>
+        <select value={fPriority} onChange={(e) => setFPriority(e.target.value)} className={selCls}>
+          <option value="">Any importance</option>
+          {PRIORITY_ORDER.map((p) => (
+            <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
+          ))}
+        </select>
+        <select
+          value={fDue}
+          onChange={(e) => setFDue(e.target.value as DueWindow)}
+          className={selCls}
+        >
+          {DUE_WINDOWS.map((w) => (
+            <option key={w.key} value={w.key}>{w.label}</option>
+          ))}
+        </select>
+        <span className="text-xs text-gray-500">{filtered.length} shown</span>
       </div>
 
       {isLoading && <div className="text-sm text-gray-400">Loading…</div>}
