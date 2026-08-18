@@ -144,15 +144,25 @@ def attach_email(task_id, mail, actor):
         parts.append(body)
     tk_db.insert("comments", [{"task_id": task_id, "author_id": actor,
                                "body": chr(10).join(parts)[:6000]}])
+    _link_email(task_id, mail, actor)
+
+
+def _link_email(task_id, mail, actor=None):
+    """Link back to the message in Outlook. The flow builds this from the
+    message id; anything that is not http(s) is ignored."""
+    if not task_id:
+        return
     weblink = (mail.get("weblink") or mail.get("webLink") or "").strip()
-    if weblink.lower().startswith(("http://", "https://")):
-        try:
-            tk_db.insert("attachments", [{
-                "task_id": task_id, "kind": "link", "url": weblink,
-                "filename": ("Email: " + (subject or "message"))[:200],
-                "uploaded_by": actor}])
-        except Exception:
-            LOG.exception("could not link the original email")
+    if not weblink.lower().startswith(("http://", "https://")):
+        return
+    subject = (mail.get("subject") or "").strip()
+    try:
+        tk_db.insert("attachments", [{
+            "task_id": task_id, "kind": "link", "url": weblink,
+            "filename": ("Email: " + (subject or "message"))[:200],
+            "uploaded_by": actor}])
+    except Exception:
+        LOG.exception("could not link the original email")
 
 
 def _log_drop(ref, task_id, action, subject):
@@ -241,6 +251,7 @@ def run():
             existing.add(ref)
             if key and new_id:
                 open_threads.setdefault(key, new_id)   # later replies attach here
+            _link_email(new_id, mail)
             _log_drop(ref, new_id, "created", mail.get("subject"))
             created.append({"title": row["title"], "project": c.get("project")})
         except Exception as e:
