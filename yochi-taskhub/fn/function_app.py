@@ -345,10 +345,9 @@ def task_playbook(req: func.HttpRequest) -> func.HttpResponse:
         if not rows:
             return _json(404, {"error": "task not found"})
         title = rows[0]["title"]
-        versions = tk_playbook.recall(title, limit=12)
         return _json(200, {"approach_key": tk_playbook.key_for(title),
-                           "current": versions[0] if versions else None,
-                           "history": versions[1:]})
+                           "current": tk_playbook.current(title),
+                           "history": tk_playbook.history(title, limit=12)})
     except Exception as e:
         logging.exception("task_playbook failed")
         return _json(500, {"error": str(e)})

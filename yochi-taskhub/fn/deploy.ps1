@@ -45,20 +45,35 @@ py -m azure.cli functionapp config appsettings set --name $APP --resource-group 
 
 # --- 3. Secrets: copied from sibling apps so values never live in this script ---
 Write-Host "== app settings (secrets, copied from yochi-daily-insights) ==" -ForegroundColor Cyan
-$anthKey  = py -m azure.cli functionapp config appsettings list -n yochi-daily-insights -g $RG --query "[?name=='ANTHROPIC_API_KEY'].value" -o tsv
-$clientId = py -m azure.cli functionapp config appsettings list -n yochi-daily-insights -g $RG --query "[?name=='CLIENT_ID'].value" -o tsv
-$clientSc = py -m azure.cli functionapp config appsettings list -n yochi-daily-insights -g $RG --query "[?name=='CLIENT_SECRET'].value" -o tsv
-$tenantId = py -m azure.cli functionapp config appsettings list -n yochi-daily-insights -g $RG --query "[?name=='TENANT_ID'].value" -o tsv
-$sender   = py -m azure.cli functionapp config appsettings list -n yochi-daily-insights -g $RG --query "[?name=='SENDER_EMAIL'].value" -o tsv
-$blobCs   = py -m azure.cli functionapp config appsettings list -n yochi-daily-insights -g $RG --query "[?name=='BLOB_CONNECTION_STRING'].value" -o tsv
-py -m azure.cli functionapp config appsettings set --name $APP --resource-group $RG --settings `
-    ANTHROPIC_API_KEY=$anthKey `
-    CLIENT_ID=$clientId `
-    CLIENT_SECRET=$clientSc `
-    TENANT_ID=$tenantId `
-    SENDER_EMAIL=$sender `
-    BLOB_CONNECTION_STRING=$blobCs `
-    | Out-Null
+# A read that fails (transient DNS, throttling) returns an EMPTY string, and
+# `appsettings set NAME=` writes that empty value straight over a working
+# secret - which is exactly how ANTHROPIC_API_KEY, CLIENT_ID and TENANT_ID got
+# blanked on 19-Aug-26 and every AI route started 500ing. So: read each secret,
+# and only send the ones that actually came back with a value.
+function Read-Secret($name) {
+    $v = py -m azure.cli functionapp config appsettings list `
+            -n yochi-daily-insights -g $RG --query "[?name=='$name'].value" -o tsv
+    if ($LASTEXITCODE -ne 0) { return "" }
+    return ($v | Out-String).Trim()
+}
+
+$copy = @{}
+foreach ($n in @("ANTHROPIC_API_KEY", "CLIENT_ID", "CLIENT_SECRET",
+                 "TENANT_ID", "SENDER_EMAIL", "BLOB_CONNECTION_STRING")) {
+    $v = Read-Secret $n
+    if ($v) { $copy[$n] = $v } else { Write-Host "   skip $n (read failed - keeping the value already on $APP)" -ForegroundColor Yellow }
+}
+
+if ($copy.Count -gt 0) {
+    $pairs = $copy.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }
+    py -m azure.cli functionapp config appsettings set --name $APP --resource-group $RG --settings $pairs | Out-Null
+    Write-Host "   copied $($copy.Count) of 6 secrets" -ForegroundColor Green
+}
+
+# Never leave the app running with a blank secret, whatever the cause.
+$blank = py -m azure.cli functionapp config appsettings list -n $APP -g $RG `
+            --query "[?value==''].name" -o tsv
+if ($blank) { throw "BLANK app settings on ${APP}: $blank - fix before the deploy is trusted" }
 
 # SUPABASE_SERVICE_ROLE_KEY cannot be auto-copied (lives only in the Supabase dashboard).
 $hasKey = py -m azure.cli functionapp config appsettings list -n $APP -g $RG --query "[?name=='SUPABASE_SERVICE_ROLE_KEY'].name" -o tsv

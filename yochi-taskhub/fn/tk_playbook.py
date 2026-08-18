@@ -20,6 +20,7 @@ import os
 import re
 
 import tk_ai
+import tk_db
 
 LOG = logging.getLogger("tk_playbook")
 
@@ -33,11 +34,24 @@ STOP = {"the", "and", "for", "with", "from", "into", "this", "that", "review",
 
 DISTIL_SCHEMA = {
     "type": "object",
+    # changed_this_run is deliberately SECOND. It used to be appended last, and
+    # with a long method/pitfalls the response hit max_tokens before reaching
+    # it - so the field arrived empty and the Approach tab showed no history of
+    # what moved. Short fields first, long prose after.
     "properties": {
         "approach_key": {"type": "string",
                          "description": "2-4 lowercase words naming the KIND of "
                                         "task, e.g. 'payroll tax reconciliation' "
                                         "or 'venue sales completeness'"},
+        "changed_this_run": {"type": "string",
+                             "description": "what this run changed about the "
+                                            "approach, one or two sentences; "
+                                            "'first version' or 'no change - "
+                                            "confirmed the existing approach' "
+                                            "are fine answers"},
+        "improve_next_time": {"type": "string",
+                              "description": "the single most useful improvement "
+                                             "for the next run of this kind"},
         "method": {"type": "string",
                    "description": "the approach that worked, as instructions to "
                                   "a future agent; 3-6 short sentences"},
@@ -46,16 +60,9 @@ DISTIL_SCHEMA = {
                                                "and why; name the tables"},
         "pitfalls": {"type": "string",
                      "description": "traps hit or narrowly avoided (naming "
-                                    "mismatches, date/type quirks, empty results)"},
-        "improve_next_time": {"type": "string",
-                              "description": "the single most useful improvement "
-                                             "for the next run of this kind"}},
-    "required": ["approach_key", "method", "queries_that_worked", "pitfalls",
-                 "improve_next_time"]}
-DISTIL_SCHEMA["properties"].update({
-    "changed_this_run": {"type": "string",
-                         "description": "what this run changed about the "
-                                        "approach, one or two sentences"}})
+                                    "mismatches, date/type quirks, empty results)"}},
+    "required": ["approach_key", "changed_this_run", "improve_next_time",
+                 "method", "queries_that_worked", "pitfalls"]}
 
 DISTIL_SYSTEM = (
     "You maintain the standing RECOMMENDED APPROACH for one KIND of finance "
@@ -71,12 +78,6 @@ DISTIL_SYSTEM = (
     "invent a table or column you were not shown. Also state briefly, in "
     "changed_this_run, what this run actually changed about the approach (or "
     "'first version' / 'no change - confirmed the existing approach').")
-
-DISTIL_SCHEMA_EXTRA = {
-    "changed_this_run": {"type": "string",
-                         "description": "what this run changed about the "
-                                        "approach, one or two sentences"}}
-
 
 def key_for(title):
     """Normalise a task title to the KIND of task it is."""
@@ -152,37 +153,46 @@ def _append(rows):
     return int(total)
 
 
-def recall(title, limit=3):
-    """Playbook versions for this KIND of task, newest first. The first row is
-    the CURRENT recommended approach; the rest are how it got there."""
-    import lake_reader
-    key = key_for(title)
-    if not key:
-        return []
-    words = [w for w in key.split() if len(w) > 3][:4]
-    if not words:
-        return []
-    where = " OR ".join("lower(approach_key) LIKE '%%%s%%'" % w.replace("'", "")
-                        for w in words)
-    sql = ("SELECT approach_key, task_title, project, method, "
-           "queries_that_worked, pitfalls, improve_next_time, outcome, "
-           "version, changed_this_run, run_at FROM %s WHERE %s "
-           "ORDER BY run_at DESC LIMIT %d" % (TABLE, where, int(limit)))
-    try:
-        out = lake_reader.query(sql, max_rows=limit)
-        return [dict(zip(out["columns"], r)) for r in out["rows"]]
-    except Exception as e:
-        msg = str(e)
-        if "does not exist" in msg or "not found" in msg.lower():
-            return []          # no playbook yet - first run of anything
-        LOG.exception("playbook recall failed")
-        return []
+def _dated(row):
+    """The lake rows carry run_at; the Postgres rows carry created_at/updated_at.
+    The UI and the planning prompt both read run_at, so fill it in here rather
+    than teaching every caller about both shapes."""
+    if row and not row.get("run_at"):
+        row["run_at"] = row.get("created_at") or row.get("updated_at") or ""
+    return row
 
 
 def current(title):
-    """The standing recommended approach for this kind of task, or None."""
-    rows = recall(title, limit=1)
-    return rows[0] if rows else None
+    """The standing recommended approach for this kind of task, or None.
+
+    Read from Postgres, NOT the lake: a parquet we appended seconds ago is not
+    reliably visible to the next read, which meant consecutive runs each
+    believed they were the first and every run wrote v1."""
+    key = key_for(title)
+    if not key:
+        return None
+    rows = tk_db.get("playbook", {"approach_key": "eq." + key, "select": "*"})
+    return _dated(rows[0]) if rows else None
+
+
+def history(title, limit=12):
+    """Earlier versions, newest first (excludes the current one)."""
+    key = key_for(title)
+    if not key:
+        return []
+    rows = tk_db.get("playbook_versions", {
+        "approach_key": "eq." + key, "select": "*",
+        "order": "created_at.desc", "limit": str(int(limit) + 1)})
+    return [_dated(r) for r in rows[1:]] if rows else []
+
+
+def recall(title, limit=3):
+    """Current approach plus recent history, newest first - what the planner
+    is shown."""
+    cur = current(title)
+    if not cur:
+        return []
+    return ([cur] + history(title, limit=limit))[:limit]
 
 
 def prompt_block(title, limit=3):
@@ -230,13 +240,17 @@ def record(task_title, project, plan, summary=None, outcome="success"):
             parts.append("This run was planned but not executed, so there are no "
                          "results yet - capture the intended approach.")
         d = tk_ai.structured(DISTIL_SYSTEM, "\n\n".join(parts),
-                             "distil_playbook", DISTIL_SCHEMA, max_tokens=1400)
+                             "distil_playbook", DISTIL_SCHEMA, max_tokens=2000)
         try:
             version = int(float(prior.get("version") or 0)) + 1 if prior else 1
         except (TypeError, ValueError):
             version = 1
         row = {
-            "approach_key": (d.get("approach_key") or key_for(task_title))[:80],
+            # The key MUST be deterministic. Letting the model name it meant
+            # the same task got "ato certificate of residency" on one run and
+            # "...of residency lodgement" on the next, so versions never
+            # chained and every run looked like v1.
+            "approach_key": key_for(task_title) or (d.get("approach_key") or "")[:80],
             "task_title": (task_title or "")[:200],
             "project": (project or "")[:120],
             "method": d.get("method", ""),
@@ -245,11 +259,41 @@ def record(task_title, project, plan, summary=None, outcome="success"):
             "improve_next_time": d.get("improve_next_time", ""),
             "outcome": outcome,
             "version": str(version),
-            "changed_this_run": d.get("changed_this_run", ""),
+            # the model usually explains what moved; if it returns nothing,
+            # still say something true rather than leaving the tab blank
+            "changed_this_run": (d.get("changed_this_run") or "").strip() or (
+                "First version - captured from a %s run." % outcome if not prior
+                else "Version %d - refined from v%s after a %s run." % (
+                    version, prior.get("version"), outcome)),
             "run_at": dt.datetime.utcnow().isoformat(),
         }
-        total = _append([row])
-        LOG.info("playbook v%d recorded (%s), %d rows total",
+        # 1. Postgres is the authority for "what is the current approach" and
+        #    for the version history the tab renders - always immediately
+        #    consistent, so the next run definitely builds on this one.
+        pg = {k: row[k] for k in
+              ("task_title", "project", "method", "queries_that_worked",
+               "pitfalls", "improve_next_time", "outcome", "changed_this_run")}
+        pg["version"] = version
+        pg["updated_at"] = dt.datetime.utcnow().isoformat() + "Z"
+        if prior:
+            tk_db.patch("playbook", {"approach_key": "eq." + row["approach_key"]}, pg)
+        else:
+            tk_db.insert("playbook", [dict(pg, approach_key=row["approach_key"])])
+        tk_db.insert("playbook_versions", [{
+            "approach_key": row["approach_key"], "task_title": row["task_title"],
+            "method": row["method"], "queries_that_worked": row["queries_that_worked"],
+            "pitfalls": row["pitfalls"], "improve_next_time": row["improve_next_time"],
+            "outcome": row["outcome"], "version": version,
+            "changed_this_run": row["changed_this_run"]}])
+
+        # 2. and the lake keeps the full append-only record, so the playbook is
+        #    queryable from the Data lake page, the voice assistant and skills
+        total = 0
+        try:
+            total = _append([row])
+        except Exception:
+            LOG.exception("playbook lake append failed (Postgres copy is saved)")
+        LOG.info("playbook v%d recorded (%s), %d lake rows",
                  version, row["approach_key"], total)
         return {"recorded": True, "approach_key": row["approach_key"],
                 "version": version, "entries": total,
