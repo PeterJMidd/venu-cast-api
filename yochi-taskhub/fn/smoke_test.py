@@ -26,8 +26,10 @@ DB_PROBES = {
     "tasks": "id,project_id,template_id,period_id,title,description,status,priority,"
              "assignee_id,reviewer_id,due_date,completed_at,source,checklist,created_by,"
              "created_at,updated_at,watcher_rule_id,parent_id,sort_order,external_ref,"
-             "recurrence,recurrence_mode,recurrence_until,recurrence_parent_id",
-    "notify_outbox": "id,task_id,recipient,kind,actor,created_at,sent_at,attempts,error",
+             "recurrence,recurrence_mode,recurrence_until,recurrence_parent_id,email_thread",
+    "notify_outbox": "id,task_id,recipient,kind,actor,created_at,sent_at,attempts,error,"
+                     "comment_id",
+    "email_drop_log": "ref,task_id,action,subject,processed_at",
     "projects": "id,name,category_id",
     "categories": "id,name,sort",
     "profiles": "id,email,full_name,role,active",
