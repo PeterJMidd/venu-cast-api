@@ -2,7 +2,9 @@ import { supabase } from "@/lib/supabase";
 import { callFn } from "@/lib/fn";
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types";
 
-/** Fire-and-forget notification email via the FN app. Never blocks the UI. */
+/** Fire-and-forget notification email via the FN app. Retained for ad-hoc use;
+ *  assignment/comment/mention emails are queued by DB triggers into
+ *  taskapp.notify_outbox and sent by tk_notify, so no code path can forget. */
 export function notify(kind: "assigned" | "comment" | "mention", taskId: string, recipientIds: (string | null | undefined)[], note?: string) {
   const ids = recipientIds.filter(Boolean) as string[];
   if (!ids.length) return;
@@ -41,7 +43,7 @@ export async function createTask(input: NewTaskInput): Promise<string> {
   // assignment emails are NOT sent from here: a DB trigger queues every
   // assignee/reviewer change into taskapp.notify_outbox and the function app
   // drains it, so server-created tasks (watcher, register, email drop, agents)
-  // notify too. Comments/@mentions still notify directly.
+  // notify too - as do comments and @mentions (trigger on comments).
   return (data as { id: string }).id;
 }
 

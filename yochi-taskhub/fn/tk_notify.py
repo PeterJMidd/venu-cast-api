@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Assignment notification drainer.
+"""Notification drainer: assignments, reviewers, comments and @/email tags.
 
 Every assignment now emails the person, no matter what did the assigning - the
 web UI, a watcher rule, the compliance register, the email-drop pipeline, the
 escalation engine's owner sweep, or an AI agent. A DB trigger writes one row to
-taskapp.notify_outbox whenever assignee_id/reviewer_id changes; this drains it
+taskapp.notify_outbox whenever assignee_id/reviewer_id changes, and another
+does the same for every comment (tagging by email address or @name, plus the
+task assignee/reviewer); this drains them
 on a short timer and sends via Graph. Self-assignment never emails (the trigger
 compares against auth.uid()), and notification_prefs.email_on_assign still
 opts a person out."""
@@ -20,14 +22,16 @@ LOG = logging.getLogger("tk_notify")
 BATCH = 50
 MAX_ATTEMPTS = 3
 SUBJECTS = {"assigned": "You've been assigned: %s",
-            "reviewer": "You're the reviewer on: %s"}
+            "reviewer": "You're the reviewer on: %s",
+            "mention": "You were tagged on: %s",
+            "comment": "New comment on: %s"}
 
 
 def _esc(s):
     return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _html(task, kind, actor_name, project_name):
+def _html(task, kind, actor_name, project_name, comment_body=None):
     app_url = os.environ.get("APP_URL", "").rstrip("/")
     link = "%s/my-tasks?task=%s" % (app_url, task["id"])
     bits = []
@@ -41,8 +45,16 @@ def _html(task, kind, actor_name, project_name):
     desc = (task.get("description") or "").strip()
     if len(desc) > 600:
         desc = desc[:600] + "..."
-    role = ("You've been assigned this task" if kind == "assigned"
-            else "You've been set as reviewer on this task")
+    role = {"assigned": "You've been assigned this task",
+            "reviewer": "You've been set as reviewer on this task",
+            "mention": "You were tagged in a comment",
+            "comment": "There's a new comment on a task you're on"}.get(
+        kind, "Update on this task")
+    if comment_body is not None:
+        # the comment IS the message - show it instead of the task description
+        desc = comment_body.strip()
+        if len(desc) > 900:
+            desc = desc[:900] + "..."
     return (
         "<div style='font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;"
         "color:#1f2937;max-width:620px'>"
@@ -64,7 +76,7 @@ def _html(task, kind, actor_name, project_name):
 def run():
     pending = tk_db.get("notify_outbox", {
         "sent_at": "is.null", "attempts": "lt.%d" % MAX_ATTEMPTS,
-        "select": "id,task_id,recipient,kind,actor,attempts",
+        "select": "id,task_id,recipient,kind,actor,attempts,comment_id",
         "order": "created_at", "limit": str(BATCH)})
     if not pending:
         return {"pending": 0, "sent": 0}
@@ -101,17 +113,28 @@ def run():
                 skipped += 1
                 continue
             task = tasks[0]
-            if task.get("status") == "done":
+            if task.get("status") == "done" and row["kind"] in ("assigned", "reviewer"):
                 tk_db.patch("notify_outbox", {"id": "eq." + row["id"]},
                             dict(stamp, error="task already done"))
                 skipped += 1
                 continue
+            comment_body = None
+            if row.get("comment_id"):
+                crows = tk_db.get("comments", {"id": "eq." + row["comment_id"],
+                                               "select": "body"})
+                if not crows:
+                    tk_db.patch("notify_outbox", {"id": "eq." + row["id"]},
+                                dict(stamp, error="comment gone"))
+                    skipped += 1
+                    continue
+                comment_body = crows[0]["body"]
             actor = profiles.get(row.get("actor")) or {}
             actor_name = actor.get("full_name") or actor.get("email") or ""
             subject = SUBJECTS.get(row["kind"], "Update on: %s") % task["title"]
             ok = tk_email.send(who["email"], subject[:200],
                                _html(task, row["kind"], actor_name,
-                                     projects.get(task.get("project_id"))))
+                                     projects.get(task.get("project_id")),
+                                     comment_body))
             if ok:
                 tk_db.patch("notify_outbox", {"id": "eq." + row["id"]}, stamp)
                 sent += 1

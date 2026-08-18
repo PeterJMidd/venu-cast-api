@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, isBefore, parseISO, startOfDay } from "date-fns";
 import { supabase } from "@/lib/supabase";
-import { updateTask, notify } from "@/lib/mutations";
+import { updateTask } from "@/lib/mutations";
 import { useProfile } from "@/hooks/useProfile";
 import { useProfiles, profileName } from "@/hooks/useProfiles";
 import { useRealtimeTasks } from "@/hooks/useRealtimeTasks";

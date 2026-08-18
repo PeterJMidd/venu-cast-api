@@ -12,7 +12,6 @@ import {
   createTask,
   deleteAttachment,
   downloadAttachment,
-  notify,
   removeDependency,
   updateTask,
   uploadAttachment,
@@ -135,6 +134,23 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     },
   });
 
+  const { data: allProjects } = useQuery({
+    queryKey: ["projects", "selectable"],
+    enabled: isStaff,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id,name,category_id,archived,categories(name,sort)")
+        .eq("archived", false)
+        .order("name");
+      if (error) throw error;
+      return data as unknown as {
+        id: string; name: string; category_id: number | null;
+        categories: { name: string; sort: number | null } | null;
+      }[];
+    },
+  });
+
   const { data: projectTasks } = useQuery({
     queryKey: ["tasks", "project-of", task?.project_id],
     enabled: !!task && isStaff,
@@ -228,18 +244,10 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
     const text = commentText.trim();
     if (!text) return;
     await addComment(taskId, text);
-    // @mentions: match "@First" / "@First Last" against profiles
-    const mentioned = (profiles ?? []).filter((p) => {
-      const name = (p.full_name || p.email.split("@")[0]).toLowerCase();
-      const first = name.split(" ")[0];
-      const t = text.toLowerCase();
-      return t.includes("@" + name) || t.includes("@" + first);
-    });
-    if (mentioned.length) notify("mention", taskId, mentioned.map((p) => p.id), text);
-    // task participants hear about new comments
-    notify("comment", taskId,
-      [task?.assignee_id, task?.reviewer_id].filter((id) => !mentioned.some((m) => m.id === id)),
-      text);
+    // Notifications are queued by a DB trigger on comments (notify_outbox) and
+    // sent by tk_notify: anyone tagged by email address or @name, plus the
+    // task's assignee and reviewer. Doing it in the database means comments
+    // posted by agents and server jobs notify people too.
     setCommentText("");
     qc.invalidateQueries({ queryKey: ["task", taskId, "comments"] });
   }
@@ -331,6 +339,42 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
           {tab === "details" && (
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-3">
+                <label className="col-span-2 text-xs text-gray-500">
+                  Project
+                  <select
+                    value={task.project_id}
+                    disabled={!isStaff}
+                    onChange={(e) => patch({ project_id: e.target.value })}
+                    className={`mt-1 block w-full ${selCls}`}
+                  >
+                    {(() => {
+                      const list = allProjects ?? [];
+                      // current project may be archived / not in the list yet
+                      const known = list.some((p) => p.id === task.project_id);
+                      const groups = new Map<string, { sort: number; items: typeof list }>();
+                      for (const p of list) {
+                        const key = p.categories?.name ?? "Other";
+                        const g = groups.get(key) ?? { sort: p.categories?.sort ?? 99, items: [] };
+                        g.items.push(p);
+                        groups.set(key, g);
+                      }
+                      const ordered = Array.from(groups.entries()).sort(
+                        (a, b) => a[1].sort - b[1].sort);
+                      return (
+                        <>
+                          {!known && <option value={task.project_id}>Current project</option>}
+                          {ordered.map(([name, g]) => (
+                            <optgroup key={name} label={name}>
+                              {g.items.map((p) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </select>
+                </label>
                 <label className="text-xs text-gray-500">
                   Status
                   <select
@@ -668,7 +712,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               </div>
               <form onSubmit={postComment} className="mt-4 flex gap-2">
                 <input
-                  placeholder="Write a comment…"
+                  placeholder="Write a comment… type a name with @ or paste an email address to notify someone"
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
