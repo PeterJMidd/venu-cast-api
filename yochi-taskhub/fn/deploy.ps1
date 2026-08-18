@@ -102,7 +102,15 @@ print('zipped', os.path.getsize('deploy_local.zip'), 'bytes')
 "@
 
 Write-Host "== deploying ==" -ForegroundColor Cyan
+# az writes an informational WARNING to stderr here. Under PS 5.1 that becomes a
+# NativeCommandError and, with ErrorActionPreference=Stop, aborts the script -
+# but only when the caller redirects/pipes output. Relax it around this call so
+# the deploy behaves the same however it is invoked, then check the exit code.
+$ErrorActionPreference = "Continue"
 py -m azure.cli functionapp deployment source config-zip -g $RG -n $APP --src deploy_local.zip --timeout 600
+$zipExit = $LASTEXITCODE
+$ErrorActionPreference = "Stop"
+if ($zipExit -ne 0) { throw "config-zip deployment failed (exit $zipExit)" }
 
 # --- 7. Restart (workers can serve stale module code after config-zip) ---
 Write-Host "== restarting ==" -ForegroundColor Cyan
