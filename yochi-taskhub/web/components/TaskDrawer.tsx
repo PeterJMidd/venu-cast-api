@@ -20,6 +20,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useProfiles, profileName } from "@/hooks/useProfiles";
 import { useOpenTask, CompleteToggle } from "@/components/TaskCard";
 import AgentPanel from "@/components/AgentPanel";
+import ResearchPanel from "@/components/ResearchPanel";
 import {
   RECURRENCE_LABELS,
   STATUS_LABELS,
@@ -505,6 +506,8 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               )}
 
               {isStaff && <AgentPanel taskId={taskId} />}
+
+              {isStaff && <ResearchPanel taskId={taskId} />}
 
               {/* Sign-off */}
               <div className="rounded-xl border border-gray-200 p-4">

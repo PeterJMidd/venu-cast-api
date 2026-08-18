@@ -294,6 +294,33 @@ def contracts_timer(timer: func.TimerRequest) -> None:
                  result["checked"], len(result["breaches"]))
 
 
+@app.route(route="task_research", auth_level=func.AuthLevel.ANONYMOUS,
+           methods=["POST", "OPTIONS"])
+def task_research(req: func.HttpRequest) -> func.HttpResponse:
+    """Ask a research question about a task: live web search, cited, posted
+    back as a comment. {task_id, question, depth?: quick|standard|deep}"""
+    if req.method == "OPTIONS":
+        return func.HttpResponse("", status_code=204)
+    import tk_auth
+    import tk_research
+    try:
+        uid, role, _ = _authed(req)
+    except tk_auth.AuthError as e:
+        return _json(401, {"error": str(e)})
+    if role in ("stakeholder", "external"):
+        return _json(403, {"error": "finance or admin only"})
+    try:
+        body = req.get_json()
+        return _json(200, tk_research.run(
+            body["task_id"], body.get("question"), uid=uid,
+            depth=body.get("depth", "standard")))
+    except ValueError as e:
+        return _json(400, {"error": str(e)})
+    except Exception as e:
+        logging.exception("task_research failed")
+        return _json(500, {"error": str(e)})
+
+
 @app.route(route="run_contracts", auth_level=func.AuthLevel.FUNCTION)
 def run_contracts(req: func.HttpRequest) -> func.HttpResponse:
     import tk_contracts
