@@ -13,6 +13,7 @@ import urllib.request
 
 import tk_ai
 import tk_db
+import tk_playbook
 import tk_skillbuilder
 import lake_reader
 
@@ -142,6 +143,9 @@ def propose(task_id):
         prec_txt += ("\n\nLessons from the user's past refinements of agent output "
                      "(apply proactively where relevant):\n" +
                      "\n".join("- " + l for l in lessons))
+    # the distilled playbook from the lake: how this KIND of task was done
+    # before, so each run starts ahead of the last one
+    prec_txt += tk_playbook.prompt_block(task["title"])
     user = "Lake schema:\n%s\n\nTask: %s\nProject: %s\nDue: %s\nDescription:\n%s%s" % (
         schema, task["title"], proj.get("name", ""), task.get("due_date"),
         task.get("description") or "(none)", prec_txt)
@@ -269,7 +273,7 @@ def download_file(task_id, filename):
 
 
 def execute(task_id, plan, requester_uid, feedback=None, prior_summary=None):
-    task, _ = _task_context(task_id)
+    task, proj = _task_context(task_id)
     queries = plan.get("data_queries") or []
     if not queries:
         raise ValueError("plan has no queries")
@@ -349,6 +353,10 @@ def execute(task_id, plan, requester_uid, feedback=None, prior_summary=None):
         "task_id": task_id, "task_title": task["title"],
         "plan": plan_record,
         "outcome": "success", "requested_by": requester_uid}])
+    # distil what worked into the lake playbook, so the next run of this KIND
+    # of task starts from this one rather than from scratch
+    playbook = tk_playbook.record(task["title"], (proj or {}).get("name"),
+                                  plan, out["summary"])
     import tk_position
     tk_position.append_event(task["project_id"], "Agent %s '%s': %s" % (
         "revised" if feedback else "completed", task["title"], out["summary"][:250]))

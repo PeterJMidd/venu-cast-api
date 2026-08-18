@@ -18,6 +18,7 @@ import logging
 
 import tk_ai
 import tk_db
+import tk_knowledge
 import tk_perplexity
 
 LOG = logging.getLogger("tk_research")
@@ -92,6 +93,12 @@ def _context(task_id):
              if not c["body"].startswith("Research")]
     if notes:
         bits.append("RECENT NOTES ON THE TASK:\n" + "\n---\n".join(notes))
+    known = tk_knowledge.summary_text(task_id)
+    if known:
+        bits.append(
+            "WHAT WE HAVE ALREADY ESTABLISHED ON THIS TASK (build on it, do "
+            "not repeat it back. If newer sources contradict any of it, say so "
+            "explicitly and give the newer position with its date):\n" + known)
     return t, "\n\n".join(bits)
 
 
@@ -177,15 +184,30 @@ def run(task_id, question, uid=None, depth="standard", save=True,
     if not answer:
         raise RuntimeError("no answer came back - try rewording the question")
 
+    knowledge = None
     comment_id = None
-    if save and uid:
-        label = {"compare": "Research (both engines)",
-                 "perplexity": "Research (Perplexity)"}.get(engine, "Research")
-        body = "%s: %s\n\n%s" % (label, question[:200], answer)
-        rows = tk_db.insert("comments", [{
-            "task_id": task_id, "author_id": uid, "body": body[:9000]}],
-            returning=True)
-        comment_id = rows[0]["id"] if rows else None
+    if save:
+        # the full finding lands in the task's Knowledge tab and refreshes the
+        # living summary, so the next question starts from what we already know
+        knowledge = tk_knowledge.add(task_id, question, answer, engine=engine,
+                                     depth=depth, recency=recency, uid=uid)
+        if uid:
+            # and a short pointer stays in the conversation, so the team sees a
+            # question was answered (and gets notified) without the comment
+            # stream carrying the whole finding twice
+            head = answer.strip().split("\n\n")[0].strip()
+            if len(head) > 600:
+                head = head[:600].rstrip() + "..."
+            note = ("Researched: %s\n\n%s\n\nFull finding and the updated "
+                    "knowledge for this task are on the Knowledge tab."
+                    % (question[:200], head))
+            try:
+                rows = tk_db.insert("comments", [{
+                    "task_id": task_id, "author_id": uid,
+                    "body": note[:4000]}], returning=True)
+                comment_id = rows[0]["id"] if rows else None
+            except Exception:
+                LOG.exception("could not post the research pointer comment")
     return {"question": question, "depth": depth, "engine": engine,
-            "recency": recency, "answer": answer,
+            "recency": recency, "answer": answer, "knowledge": knowledge,
             "saved_comment_id": comment_id, "task_title": task.get("title")}

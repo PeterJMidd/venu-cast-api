@@ -20,7 +20,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useProfiles, profileName } from "@/hooks/useProfiles";
 import { useOpenTask, CompleteToggle } from "@/components/TaskCard";
 import AgentPanel from "@/components/AgentPanel";
-import ResearchPanel from "@/components/ResearchPanel";
+import KnowledgeTab from "@/components/KnowledgeTab";
 import {
   RECURRENCE_LABELS,
   STATUS_LABELS,
@@ -36,7 +36,7 @@ import {
   type TaskStatus,
 } from "@/lib/types";
 
-type Tab = "details" | "comments" | "files" | "activity";
+type Tab = "details" | "comments" | "knowledge" | "files" | "activity";
 
 const AUDIT_FIELDS = ["status", "assignee_id", "reviewer_id", "due_date", "priority", "title"];
 
@@ -320,7 +320,7 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
             </div>
           )}
           <div className="mt-3 flex gap-1">
-            {(["details", "comments", "files", "activity"] as Tab[]).map((t) => (
+            {(["details", "comments", "knowledge", "files", "activity"] as Tab[]).map((t) => (
               <button
                 key={t}
                 title={t === "files" ? "Files & links" : undefined}
@@ -506,8 +506,6 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               )}
 
               {isStaff && <AgentPanel taskId={taskId} />}
-
-              {isStaff && <ResearchPanel taskId={taskId} />}
 
               {/* Sign-off */}
               <div className="rounded-xl border border-gray-200 p-4">
@@ -725,6 +723,16 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
                 </button>
               </form>
             </div>
+          )}
+
+          {tab === "knowledge" && (
+            isStaff ? (
+              <KnowledgeTab taskId={taskId} profiles={profiles} />
+            ) : (
+              <div className="text-sm text-gray-400">
+                Research and knowledge are available to the finance team.
+              </div>
+            )
           )}
 
           {tab === "files" && (

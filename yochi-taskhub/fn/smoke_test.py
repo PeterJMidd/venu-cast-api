@@ -30,6 +30,9 @@ DB_PROBES = {
     "notify_outbox": "id,task_id,recipient,kind,actor,created_at,sent_at,attempts,error,"
                      "comment_id",
     "email_drop_log": "ref,task_id,action,subject,processed_at",
+    "knowledge": "id,task_id,question,answer,engine,depth,recency,created_by,"
+                 "created_at",
+    "task_knowledge": "task_id,summary,entry_count,updated_at",
     "projects": "id,name,category_id",
     "categories": "id,name,sort",
     "profiles": "id,email,full_name,role,active",
