@@ -172,6 +172,16 @@ def autoaudit_timer(timer: func.TimerRequest) -> None:
     logging.info("autoaudit_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 45 7 * * *", arg_name="timer", run_on_startup=False)
+def agreements_timer(timer: func.TimerRequest) -> None:
+    """Daily 07:45: reconcile TaskHub against the signed agreements tracker
+    (the source of truth) - add, amend and flag - then email the summary."""
+    import tk_agreements
+    result = tk_agreements.run()
+    logging.info("agreements_timer: %d added, %d amended, %d flags",
+                 len(result["added"]), len(result["amended"]), len(result["flags"]))
+
+
 @app.timer_trigger(schedule="0 40 7 * * *", arg_name="timer", run_on_startup=False)
 def mmr_timer(timer: func.TimerRequest) -> None:
     """Daily 07:40, self-gates to WD+3: MMR finance pack auto-assembly."""
@@ -351,6 +361,16 @@ def task_playbook(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         logging.exception("task_playbook failed")
         return _json(500, {"error": str(e)})
+
+
+@app.route(route="run_agreements", auth_level=func.AuthLevel.FUNCTION)
+def run_agreements(req: func.HttpRequest) -> func.HttpResponse:
+    """Manual signed-agreements check. ?apply=0 for a dry run, ?email=0 to skip
+    the email (both default on, matching the 07:45 timer)."""
+    import tk_agreements
+    return _json(200, tk_agreements.run(
+        apply=req.params.get("apply", "1") != "0",
+        email=req.params.get("email", "1") != "0"))
 
 
 @app.route(route="run_contracts", auth_level=func.AuthLevel.FUNCTION)

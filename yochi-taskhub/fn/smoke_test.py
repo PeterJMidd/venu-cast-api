@@ -33,6 +33,9 @@ DB_PROBES = {
     "knowledge": "id,task_id,question,answer,engine,depth,recency,created_by,"
                  "created_at",
     "task_knowledge": "task_id,summary,entry_count,updated_at",
+    "agreement_snapshots": "id,slug,territory,data,hash,captured_at",
+    "playbook": "approach_key,task_title,project,method,queries_that_worked,pitfalls,improve_next_time,outcome,version,changed_this_run,updated_at",
+    "playbook_versions": "id,approach_key,task_title,method,version,changed_this_run,created_at",
     "projects": "id,name,category_id",
     "categories": "id,name,sort",
     "profiles": "id,email,full_name,role,active",
