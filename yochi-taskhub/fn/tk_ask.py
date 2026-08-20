@@ -156,6 +156,7 @@ def answer(question, history=None):
     messages.append({"role": "user", "content": question[:2000]})
 
     queries_run = 0
+    sql_run = []          # what it actually asked the lake, for provenance
     for step in range(MAX_STEPS):
         final_round = step == MAX_STEPS - 1
         if final_round:
@@ -182,10 +183,11 @@ def answer(question, history=None):
             text = "".join(b.get("text", "") for b in content
                            if b.get("type") == "text").strip()
             return {"answer": text or "I couldn't produce an answer - try rephrasing.",
-                    "queries_run": queries_run}
+                    "queries_run": queries_run, "sql": sql_run}
         results = []
         for tu in tool_uses:
             queries_run += 1
+            sql_run.append((tu["input"].get("sql", "") or "").strip())
             try:
                 out = _run_sql(tu["input"].get("sql", ""))
             except Exception as e:
@@ -194,4 +196,4 @@ def answer(question, history=None):
                             "content": out})
         messages.append({"role": "user", "content": results})
     return {"answer": "That took too many data pulls to answer - try a narrower question.",
-            "queries_run": queries_run}
+            "queries_run": queries_run, "sql": sql_run}

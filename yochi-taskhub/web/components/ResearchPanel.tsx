@@ -1,16 +1,18 @@
 "use client";
 
-// Ask-a-question research on a task: live web search, cited, written back onto
-// the task as a comment. Distinct from the Task agent, which analyses our own
-// lake data. Two engines with different search indexes; "Compare both" is the
-// one that earns its keep on decisions - agreement is corroboration,
-// disagreement is the signal to dig.
+// Ask a question on a task and get it answered, saved to the Knowledge tab and
+// pointed to from the comments. Two kinds of question, chosen by engine:
+// OUTWARD (Claude / Perplexity / compare both) searches the web and cites it -
+// "compare" earns its keep on decisions, where agreement is corroboration and
+// disagreement is the signal to dig. INWARD ("Our data lake") runs the agentic
+// SQL loop over our own parquet and answers with figures, showing the queries
+// it ran. Distinct from the Task agent, which plans and executes the whole task.
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { callFn } from "@/lib/fn";
 
 type Depth = "quick" | "standard" | "deep";
-type Engine = "claude" | "perplexity" | "compare";
+type Engine = "claude" | "perplexity" | "compare" | "lake";
 type Recency = "" | "week" | "month" | "year";
 
 const DEPTHS: { key: Depth; label: string }[] = [
@@ -23,6 +25,7 @@ const ENGINES: { key: Engine; label: string; hint: string }[] = [
   { key: "claude", label: "Standard search", hint: "fastest, good default" },
   { key: "perplexity", label: "Perplexity", hint: "different index, strong on what changed" },
   { key: "compare", label: "Compare both", hint: "corroborates, flags conflicts" },
+  { key: "lake", label: "Our data lake", hint: "answers from OUR numbers, not the web" },
 ];
 
 const SUGGESTIONS = [
@@ -30,6 +33,14 @@ const SUGGESTIONS = [
   "What are the deadlines and who enforces them?",
   "How do comparable AU franchise groups handle this?",
   "What are the risks or common mistakes here?",
+];
+
+// asking OUR data is a different kind of question from asking the web
+const LAKE_SUGGESTIONS = [
+  "Summarise the transaction flows behind this, by entity and month.",
+  "What have we actually paid or received on this in the last 12 months?",
+  "Which entities and venues does this touch, and how much is involved?",
+  "Show the trend over the last 6 months and flag anything unusual.",
 ];
 
 export default function ResearchPanel({ taskId }: { taskId: string }) {
@@ -42,6 +53,7 @@ export default function ResearchPanel({ taskId }: { taskId: string }) {
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const lake = engine === "lake";
   const slow = engine === "compare" && depth === "deep";
 
   async function ask(q?: string) {
@@ -71,8 +83,14 @@ export default function ResearchPanel({ taskId }: { taskId: string }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
       <div className="mb-1 flex items-center gap-2">
-        <span className="text-sm font-semibold">🔍 Research this</span>
-        <span className="text-[11px] text-gray-400">live web search, always cited</span>
+        <span className="text-sm font-semibold">
+          {lake ? "📊 Ask our data" : "🔍 Research this"}
+        </span>
+        <span className="text-[11px] text-gray-400">
+          {lake
+            ? "queries the data lake and answers with figures"
+            : "live web search, always cited"}
+        </span>
       </div>
       <p className="mb-2 text-xs text-gray-500">
         Ask about rules, rates, deadlines or what others do. The answer is saved to
@@ -87,7 +105,11 @@ export default function ResearchPanel({ taskId }: { taskId: string }) {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask();
         }}
         rows={2}
-        placeholder="e.g. What withholding tax applies to royalties from Singapore to Australia?"
+        placeholder={
+          lake
+            ? "e.g. Summarise the transaction flows behind the agreements for this market"
+            : "e.g. What withholding tax applies to royalties from Singapore to Australia?"
+        }
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
       />
 
@@ -102,52 +124,60 @@ export default function ResearchPanel({ taskId }: { taskId: string }) {
             <option key={x.key} value={x.key}>{x.label}</option>
           ))}
         </select>
-        <select
-          value={depth}
-          onChange={(e) => setDepth(e.target.value as Depth)}
-          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
-        >
-          {DEPTHS.map((d) => (
-            <option key={d.key} value={d.key}>{d.label}</option>
-          ))}
-        </select>
-        <select
-          value={recency}
-          onChange={(e) => setRecency(e.target.value as Recency)}
-          title="Only consider recent sources — useful for 'what changed'"
-          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
-        >
-          <option value="">Any date</option>
-          <option value="week">Last week</option>
-          <option value="month">Last month</option>
-          <option value="year">Last year</option>
-        </select>
+        {!lake && (
+          <>
+            <select
+              value={depth}
+              onChange={(e) => setDepth(e.target.value as Depth)}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+            >
+              {DEPTHS.map((d) => (
+                <option key={d.key} value={d.key}>{d.label}</option>
+              ))}
+            </select>
+            <select
+              value={recency}
+              onChange={(e) => setRecency(e.target.value as Recency)}
+              title="Only consider recent sources — useful for 'what changed'"
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+            >
+              <option value="">Any date</option>
+              <option value="week">Last week</option>
+              <option value="month">Last month</option>
+              <option value="year">Last year</option>
+            </select>
+          </>
+        )}
         <button
           onClick={() => ask()}
           disabled={busy || !question.trim()}
           className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
         >
-          {busy ? "Researching…" : "Research"}
+          {busy ? (lake ? "Analysing…" : "Researching…") : lake ? "Analyse" : "Research"}
         </button>
         {busy && (
           <span className="text-[11px] text-gray-400">
-            {engine === "compare"
-              ? "running both engines and reconciling…"
-              : "searching the web and reading sources…"}
+            {lake
+              ? "querying the data lake…"
+              : engine === "compare"
+                ? "running both engines and reconciling…"
+                : "searching the web and reading sources…"}
           </span>
         )}
       </div>
 
       <div className="mt-1 text-[11px] text-gray-400">
-        {engine === "compare"
-          ? "Runs both search engines, then reports what they agree on, where they differ, and what to verify."
-          : ENGINES.find((x) => x.key === engine)?.hint}
+        {lake
+          ? "Queries our own data lake and answers with figures — it shows the SQL it ran, and the finding is saved to the Knowledge tab."
+          : engine === "compare"
+            ? "Runs both search engines, then reports what they agree on, where they differ, and what to verify."
+            : ENGINES.find((x) => x.key === engine)?.hint}
         {slow && " — deep + compare can take a couple of minutes."}
       </div>
 
       {!answer && !busy && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {SUGGESTIONS.map((s) => (
+          {(lake ? LAKE_SUGGESTIONS : SUGGESTIONS).map((s) => (
             <button
               key={s}
               onClick={() => ask(s)}

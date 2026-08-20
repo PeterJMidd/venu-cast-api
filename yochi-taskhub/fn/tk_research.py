@@ -28,7 +28,7 @@ DEPTHS = {
     "standard": {"searches": 6,  "tokens": 3000},
     "deep":     {"searches": 12, "tokens": 6000},
 }
-ENGINES = ("claude", "perplexity", "compare")
+ENGINES = ("claude", "perplexity", "compare", "lake")
 RECENCY = ("day", "week", "month", "year")
 
 SYSTEM = """You are the research analyst for the CFO of Yo-Chi, an Australian
@@ -123,6 +123,33 @@ def _ask_perplexity(context, question, depth, cfg, recency):
         depth=depth, recency=recency, max_tokens=cfg["tokens"])
 
 
+LAKE_FRAMING = (
+    "You are answering a question asked from inside a specific finance task, "
+    "against Yo-Chi's OWN data lake - not the web. Use the task context to "
+    "decide what to query and how to frame the answer.\n\n"
+    "Answer with figures, not description: the numbers you found, the period "
+    "they cover, and the entities or venues involved. Name the tables you "
+    "used. If the lake cannot answer part of the question, say which part and "
+    "what data would be needed - never estimate a number a query did not "
+    "return.")
+
+
+def _ask_lake(context, question):
+    """Analysis over OUR data rather than the web: the same agentic SQL loop
+    the cockpit assistant uses, pointed at this task's question."""
+    import tk_ask
+    out = tk_ask.answer("%s\n\n%s\n\nQUESTION: %s"
+                        % (LAKE_FRAMING, context, question))
+    answer = (out.get("answer") or "").strip()
+    sql = [q for q in (out.get("sql") or []) if q]
+    if sql:
+        # provenance, kept with the finding: a later question - or the agent
+        # playbook - can reuse a query that already worked
+        answer += "\n\n---\nQueries run against the lake (%d):\n\n%s" % (
+            len(sql), "\n\n".join("```sql\n%s\n```" % q[:1200] for q in sql[:6]))
+    return answer
+
+
 def _compare(context, question, depth, cfg, recency):
     """Both engines, then a reconciliation. One engine failing degrades to the
     other's answer rather than losing the question."""
@@ -173,7 +200,9 @@ def run(task_id, question, uid=None, depth="standard", save=True,
             raise ValueError("Perplexity is not configured (no API key set)")
         engine = "claude"      # compare degrades to one engine, not an error
 
-    if engine == "claude":
+    if engine == "lake":
+        answer = _ask_lake(context, question)
+    elif engine == "claude":
         answer = _ask_claude(context, question, cfg, recency)
     elif engine == "perplexity":
         answer = _ask_perplexity(context, question, depth, cfg, recency)
@@ -198,9 +227,10 @@ def run(task_id, question, uid=None, depth="standard", save=True,
             head = answer.strip().split("\n\n")[0].strip()
             if len(head) > 600:
                 head = head[:600].rstrip() + "..."
-            note = ("Researched: %s\n\n%s\n\nFull finding and the updated "
+            note = ("%s: %s\n\n%s\n\nFull finding and the updated "
                     "knowledge for this task are on the Knowledge tab."
-                    % (question[:200], head))
+                    % ("Analysed the data lake" if engine == "lake"
+                       else "Researched", question[:200], head))
             try:
                 rows = tk_db.insert("comments", [{
                     "task_id": task_id, "author_id": uid,
