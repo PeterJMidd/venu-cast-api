@@ -301,9 +301,15 @@ def sync_items(items):
         tk_db.insert("compliance_items", rows[i:i + 200],
                      on_conflict="ref,period", merge_duplicates=True)
     seen = {(r["ref"], r["period"]) for r in rows}
-    stale = [x for x in tk_db.get("compliance_items",
-                                  {"active": "eq.true", "select": "id,ref,period"})
-             if (x["ref"], x["period"]) not in seen]
+    # Only rows from the streams we just read can go stale. Document-review
+    # gaps are by definition NOT in the workbook, so sweeping every active row
+    # switched them all off the moment they were found.
+    streams = {r["stream"] for r in rows} or {"calendar", "exception"}
+    stale = [x for x in tk_db.get(
+        "compliance_items",
+        {"active": "eq.true", "stream": "in.(%s)" % ",".join(sorted(streams)),
+         "select": "id,ref,period"})
+        if (x["ref"], x["period"]) not in seen]
     for x in stale:
         tk_db.patch("compliance_items", {"id": "eq." + x["id"]}, {"active": False})
     return {"upserted": len(rows), "deactivated": len(stale)}
@@ -457,8 +463,21 @@ def reconcile_tasks(items, today=None, apply=True):
                             {"status": "done",
                              "completed_at": dt.datetime.utcnow().isoformat() + "Z"})
             closed.append({"ref": t["external_ref"], "title": t["title"][:80]})
+    # open register tasks that no longer match anything in the register: left
+    # behind by an earlier sync or by a row leaving the workbook. Reported, not
+    # deleted - closing someone's task is their call, not ours.
+    wanted_refs = set(refs) | {_task_ref(i) for i in items}
+    orphans = []
+    for t in tk_db.get("tasks", {
+            "or": "(external_ref.like.creg:*,external_ref.like.cexc:*,"
+                  "external_ref.like.cdoc:*)",
+            "status": "neq.done",
+            "select": "id,external_ref,title,due_date", "limit": "2000"}):
+        if t["external_ref"] not in wanted_refs:
+            orphans.append({"ref": t["external_ref"],
+                            "title": (t.get("title") or "")[:90]})
     return {"added": added, "amended": amended, "closed": closed,
-            "in_window": len(want)}
+            "orphans": orphans, "in_window": len(want)}
 
 
 def status_flow(items, apply=True):
@@ -653,8 +672,8 @@ def document_review(items, docs=None, apply=True):
             LOG.exception("document review failed for %s", name)
             errors.append({"doc": name, "error": str(e)[:200]})
 
-    if apply and gaps:
-        rows = {}
+    rows = {}
+    if gaps:
         today = dt.datetime.now(AEST).date()
         for g in gaps:
             slug = re.sub(r"[^a-z0-9]+", "-",
@@ -678,10 +697,11 @@ def document_review(items, docs=None, apply=True):
                 "active": True,
                 "updated_at": dt.datetime.utcnow().isoformat() + "Z"}
             rows[(row["ref"], row["period"])] = row
+    if apply and rows:
         tk_db.insert("compliance_items", list(rows.values()),
                      on_conflict="ref,period", merge_duplicates=True)
     return {"gaps": gaps, "errors": errors, "documents_read": read,
-            "documents_attempted": len(docs)}
+            "documents_attempted": len(docs), "items": list(rows.values())}
 
 
 # ------------------------------------------------------------- the button
@@ -695,12 +715,26 @@ def review(apply=True, documents=False, today=None, ran_by="timer"):
     items = parse_calendar(data) + parse_exceptions(data)
 
     synced = sync_items(items) if apply else {"upserted": 0, "deactivated": 0}
-    tasks = reconcile_tasks(items, today=today, apply=apply)
-    status = status_flow(items, apply=apply)
 
-    docs = {"gaps": [], "errors": [], "documents_read": 0}
+    # the document audit runs FIRST so anything it finds becomes a task in the
+    # SAME run - reconciling before it meant gaps sat as register rows with no
+    # task until the next morning
+    docs = {"gaps": [], "errors": [], "documents_read": 0, "items": []}
     if documents:
         docs = document_review(items, apply=apply)
+        items = items + docs.get("items", [])
+
+    # gaps found by earlier audits still need tasks, and re-reading 21
+    # documents just to remember them would be absurd - read them back instead
+    have = {(i["ref"], i["period"]) for i in items}
+    for row in tk_db.get("compliance_items",
+                         {"stream": "eq.document", "active": "eq.true",
+                          "select": ",".join(ITEM_COLS), "limit": "500"}):
+        if (row["ref"], row["period"]) not in have:
+            items.append(row)
+
+    tasks = reconcile_tasks(items, today=today, apply=apply)
+    status = status_flow(items, apply=apply)
 
     overdue = [i for i in items
                if i.get("due_date") and i["due_date"] < today.isoformat()
@@ -713,6 +747,10 @@ def review(apply=True, documents=False, today=None, ran_by="timer"):
     for e in docs["errors"]:
         flags.append({"kind": "document-unreadable",
                       "detail": "%s: %s" % (e["doc"], e["error"])})
+    for o in tasks.get("orphans", []):
+        flags.append({"kind": "orphan-task",
+                      "detail": "%s: '%s' no longer matches the register - close "
+                                "it or restore the row" % (o["ref"], o["title"])})
     if status["writeback_ready"]:
         flags.append({"kind": "writeback-blocked",
                       "detail": "%d item(s) are complete in TaskHub and would be "
