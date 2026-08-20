@@ -105,13 +105,25 @@ def check(raise_task=True, today=None):
     if prev:
         gained = (now.get("indexed_docs") or 0) - (prev.get("indexed_docs") or 0)
         now["indexed_gain"] = gained
+        # how long since the last check - two checks minutes apart tell us
+        # nothing about a nightly job, and complaining about it is a false
+        # alarm that teaches everyone to ignore the alarm
+        hours = None
+        try:
+            t = dt.datetime.fromisoformat(
+                str(prev.get("checked_at")).replace("Z", "").split("+")[0])
+            hours = (dt.datetime.utcnow() - t).total_seconds() / 3600.0
+        except Exception:
+            pass
         if gained < 0:
             problems.append("the index SHRANK by %d documents - parts may have "
                             "been lost" % abs(gained))
-        elif gained == 0 and (now.get("coverage_pct") or 100) < 95:
-            problems.append("indexing added nothing since the last check while "
-                            "coverage is only %.1f%% - the backlog is not moving"
-                            % (now.get("coverage_pct") or 0))
+        elif (gained == 0 and (now.get("coverage_pct") or 100) < 95
+              and (hours is None or hours >= 12)):
+            problems.append("indexing added nothing in %s and coverage is only "
+                            "%.1f%% - the backlog is not moving"
+                            % ("%.0f hours" % hours if hours else "the last check",
+                               now.get("coverage_pct") or 0))
         lost = (prev.get("mirror_files") or 0) - (now.get("mirror_files") or 0)
         if lost > 0:
             problems.append("the mirror reports %d FEWER files than last check" % lost)
