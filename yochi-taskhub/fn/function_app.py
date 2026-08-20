@@ -172,6 +172,91 @@ def autoaudit_timer(timer: func.TimerRequest) -> None:
     logging.info("autoaudit_timer: %s", result)
 
 
+@app.timer_trigger(schedule="0 20 6 * * *", arg_name="timer", run_on_startup=False)
+def compliance_timer(timer: func.TimerRequest) -> None:
+    """Daily 06:20: re-read the FY27 compliance calendar and make the register
+    and its tasks match it. The document re-audit is heavier, so it runs on
+    Mondays only."""
+    import datetime as _dt
+    import tk_compliance
+    monday = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=10))).weekday() == 0
+    result = tk_compliance.run(documents=monday, ran_by="timer")
+    logging.info("compliance_timer: %d items, %d added, %d amended, %d gaps",
+                 result["items"], len(result["added"]), len(result["amended"]),
+                 len(result["document_gaps"]))
+
+
+@app.route(route="compliance_summary", auth_level=func.AuthLevel.ANONYMOUS,
+           methods=["POST", "GET", "OPTIONS"])
+def compliance_summary(req: func.HttpRequest) -> func.HttpResponse:
+    """The register as the compliance page renders it."""
+    if req.method == "OPTIONS":
+        return func.HttpResponse("", status_code=204)
+    import tk_auth
+    import tk_compliance
+    try:
+        _, role, _ = _authed(req)
+    except tk_auth.AuthError as e:
+        return _json(401, {"error": str(e)})
+    if role in ("stakeholder", "external"):
+        return _json(403, {"error": "finance or admin only"})
+    try:
+        return _json(200, tk_compliance.summary())
+    except Exception as e:
+        logging.exception("compliance_summary failed")
+        return _json(500, {"error": str(e)})
+
+
+@app.route(route="run_compliance", auth_level=func.AuthLevel.ANONYMOUS,
+           methods=["POST", "OPTIONS"])
+@app.queue_output(arg_name="cmsg", queue_name="taskhub-compliance",
+                  connection="AzureWebJobsStorage")
+def run_compliance(req: func.HttpRequest, cmsg: func.Out[str]) -> func.HttpResponse:
+    """The 'Review & update' button. Re-reading 21 legal documents takes well
+    over the ~230s HTTP limit, so the work is queued and the page polls
+    compliance_summary for the finished run."""
+    if req.method == "OPTIONS":
+        return func.HttpResponse("", status_code=204)
+    import tk_auth
+    try:
+        uid, role, _ = _authed(req)
+    except tk_auth.AuthError as e:
+        return _json(401, {"error": str(e)})
+    if role in ("stakeholder", "external"):
+        return _json(403, {"error": "finance or admin only"})
+    body = {}
+    try:
+        body = req.get_json() or {}
+    except ValueError:
+        pass
+    cmsg.set(json.dumps({"documents": bool(body.get("documents")),
+                         "email": bool(body.get("email")),
+                         "ran_by": str(uid)}))
+    return _json(202, {"queued": True, "documents": bool(body.get("documents")),
+                       "note": "the register updates in place - reopen or "
+                               "refresh this page when it finishes"})
+
+
+@app.queue_trigger(arg_name="msg", queue_name="taskhub-compliance",
+                   connection="AzureWebJobsStorage")
+def compliance_worker(msg: func.QueueMessage) -> None:
+    import tk_compliance
+    try:
+        body = json.loads(msg.get_body().decode() or "{}")
+    except ValueError:
+        body = {}
+    try:
+        result = tk_compliance.run(documents=bool(body.get("documents")),
+                                   email=bool(body.get("email")),
+                                   ran_by=body.get("ran_by") or "button")
+        logging.info("compliance_worker done: %d items, %d added, %d gaps",
+                     result["items"], len(result["added"]),
+                     len(result["document_gaps"]))
+    except Exception:
+        logging.exception("compliance_worker failed")
+        raise
+
+
 @app.timer_trigger(schedule="0 45 7 * * *", arg_name="timer", run_on_startup=False)
 def agreements_timer(timer: func.TimerRequest) -> None:
     """Daily 07:45: reconcile TaskHub against the signed agreements tracker

@@ -33,7 +33,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // externals land on tasks — the cockpit/lake/reporting are internal-only
   useEffect(() => {
     if (profile?.role === "external" &&
-        ["/home", "/lake", "/reporting", "/templates", "/admin"].includes(pathname)) {
+        ["/home", "/lake", "/reporting", "/templates", "/admin", "/compliance"].includes(pathname)) {
       router.replace("/my-tasks");
     }
   }, [profile, pathname, router]);
@@ -137,6 +137,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 }`}
               >
                 Daily activity
+              </Link>
+              <Link
+                href="/compliance"
+                className={`block rounded-lg px-3 py-1.5 text-sm ${
+                  pathname === "/compliance"
+                    ? "bg-brand-50 font-semibold text-brand-700"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                Compliance
               </Link>
               <Link
                 href="/lake"

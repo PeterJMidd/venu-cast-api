@@ -34,6 +34,8 @@ DB_PROBES = {
                  "created_at",
     "task_knowledge": "task_id,summary,entry_count,updated_at",
     "agreement_snapshots": "id,slug,territory,data,hash,captured_at",
+    "compliance_items": "id,ref,period,stream,category,obligation,what_to_do,authority,frequency,due_text,due_date,due_basis,owner,risk,entities,sheet_status,completed_date,evidence,notes,severity,action,task_id,task_status,writeback,active,updated_at",
+    "compliance_runs": "id,ran_at,ran_by,items,tasks_added,tasks_amended,tasks_linked,writeback_ready,flags,detail",
     "playbook": "approach_key,task_title,project,method,queries_that_worked,pitfalls,improve_next_time,outcome,version,changed_this_run,updated_at",
     "playbook_versions": "id,approach_key,task_title,method,version,changed_this_run,created_at",
     "projects": "id,name,category_id",

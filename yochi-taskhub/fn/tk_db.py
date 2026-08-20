@@ -49,13 +49,20 @@ def get(table, params=None):
     return _req("GET", "%s/rest/v1/%s?%s" % (_base(), table, qs), headers=_headers())
 
 
-def insert(table, rows, on_conflict=None, ignore_duplicates=False, returning=False):
+def insert(table, rows, on_conflict=None, ignore_duplicates=False, returning=False,
+           merge_duplicates=False):
+    """merge_duplicates upserts: on conflict the incoming row REPLACES the
+    stored one (PostgREST resolution=merge-duplicates), which is what a sync
+    from a source of truth wants. ignore_duplicates keeps what is already
+    there, which is what task top-ups want."""
     params = {}
     prefer = []
     if on_conflict:
         params["on_conflict"] = on_conflict
     if ignore_duplicates:
         prefer.append("resolution=ignore-duplicates")
+    elif merge_duplicates:
+        prefer.append("resolution=merge-duplicates")
     prefer.append("return=representation" if returning else "return=minimal")
     qs = urllib.parse.urlencode(params)
     url = "%s/rest/v1/%s%s" % (_base(), table, "?" + qs if qs else "")
