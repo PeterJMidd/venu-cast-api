@@ -30,6 +30,18 @@ CACHE_DIR = os.environ.get("LAKE_CACHE_DIR", "/tmp/taskhub_lake")
 EXT_DIR = os.environ.get("DUCKDB_EXT_DIR", "/tmp/duckdb_ext")
 SYNC_PREFIXES = ("tables/mart_", "catalog/")
 CONTAINER = "datasights-lake"
+
+# Tables that live outside the datasights-lake/tables/ convention. `documents`
+# is the SharePoint + Canva mirror in docs-lake, chunked and indexed - the
+# agreements, deeds, board packs and entity papers - so a question can be
+# answered from what we WROTE, not only from what we transacted. The embedding
+# column is deliberately not exposed: a chunk carries a 1k-float vector and
+# SELECT * would blow the result size for no analytical gain.
+EXTRA_VIEWS = {
+    "documents": ("SELECT path, title, ext, mtime, chunk_id, page, text FROM "
+                  "read_parquet('az://docs-lake/index/parts/*.parquet', "
+                  "union_by_name=true)"),
+}
 DIRECT = os.environ.get("LAKE_DIRECT", "1") != "0"
 MEMORY_LIMIT = os.environ.get("DUCKDB_MEMORY_LIMIT", "1GB")
 THREADS = os.environ.get("DUCKDB_THREADS", "2")
@@ -142,6 +154,9 @@ def _direct_con(sql, cc=None):
     con.execute("CREATE OR REPLACE SECRET lake (TYPE AZURE, CONNECTION_STRING '%s')"
                 % os.environ["BLOB_CONNECTION_STRING"].replace("'", "''"))
     wanted = referenced_tables(sql)
+    for name in sorted(wanted & set(EXTRA_VIEWS)):
+        con.execute('CREATE VIEW "%s" AS %s' % (name, EXTRA_VIEWS[name]))
+    wanted = wanted - set(EXTRA_VIEWS)
     if wanted:
         cc = cc or _container()
         available = known_tables(cc)

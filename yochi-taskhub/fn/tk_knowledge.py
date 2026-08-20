@@ -100,14 +100,45 @@ def add(task_id, question, answer, engine=None, depth=None, recency=None,
     return updated
 
 
+REBUILD = CONSOLIDATE.replace(
+    "You get the CURRENT UNDERSTANDING (may be empty) and a NEW FINDING. Return "
+    "the updated understanding - the whole thing, ready to replace what was "
+    "there.",
+    "You get EVERY finding recorded on the task, oldest first. Return the "
+    "understanding they add up to - the whole thing, ready to replace what was "
+    "there. Where two findings conflict, the later one wins and the earlier is "
+    "marked superseded with its date.")
+
+
 def rebuild(task_id):
     """Re-derive the summary from every stored entry, oldest first. Use after
-    deleting an entry, or if a consolidation went wrong."""
+    deleting an entry, or if a consolidation went wrong.
+
+    ONE model call over all the findings, not one per finding: rebuilding a
+    task with a dozen findings used to mean a dozen sequential calls, which
+    outran the HTTP gateway and showed the user an error after a delete that
+    had actually worked."""
     rows = sorted(entries(task_id, limit=200),
                   key=lambda r: r.get("created_at") or "")
     summary = ""
-    for r in rows:
-        summary = _consolidate(task_id, r["question"], r["answer"], summary)
+    if rows:
+        budget = max(600, int(24000 / len(rows)))
+        blocks = []
+        for i, r in enumerate(rows, 1):
+            blocks.append(
+                "FINDING %d of %d (%s)\nQuestion asked: %s\nAnswer:\n%s"
+                % (i, len(rows), (r.get("created_at") or "")[:10],
+                   r.get("question") or "", (r.get("answer") or "")[:budget]))
+        try:
+            summary = (tk_ai.text(REBUILD, "\n\n---\n\n".join(blocks),
+                                  max_tokens=2000) or "").strip()[:MAX_SUMMARY]
+        except Exception:
+            LOG.exception("knowledge rebuild failed for task %s", task_id)
+            # one finding at a time is slower but survives a prompt that was
+            # too large, and a stale summary is worse than a rebuilt one
+            summary = ""
+            for r in rows:
+                summary = _consolidate(task_id, r["question"], r["answer"], summary)
     if get(task_id):
         tk_db.patch("task_knowledge", {"task_id": "eq." + task_id},
                     {"summary": summary or "", "entry_count": len(rows),
@@ -118,3 +149,21 @@ def rebuild(task_id):
             "entry_count": len(rows)}])
     return {"task_id": task_id, "entries": len(rows),
             "summary_chars": len(summary or "")}
+
+
+def remove(task_id, entry_id):
+    """Drop one finding and re-derive the summary from what is left.
+
+    The summary is a rolling consolidation, so deleting an entry without
+    rebuilding would leave its content baked into 'what we know' with no
+    source behind it - which is worse than not deleting at all."""
+    rows = tk_db.get("knowledge", {"id": "eq." + entry_id,
+                                   "select": "id,task_id,question"})
+    if not rows:
+        raise ValueError("finding not found")
+    if rows[0]["task_id"] != task_id:
+        raise ValueError("that finding belongs to another task")
+    tk_db.delete("knowledge", {"id": "eq." + entry_id})
+    out = rebuild(task_id)
+    out["removed"] = rows[0]["question"][:200]
+    return out

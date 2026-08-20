@@ -418,6 +418,31 @@ def task_research(req: func.HttpRequest) -> func.HttpResponse:
         return _json(500, {"error": str(e)})
 
 
+@app.route(route="knowledge_delete", auth_level=func.AuthLevel.ANONYMOUS,
+           methods=["POST", "OPTIONS"])
+def knowledge_delete(req: func.HttpRequest) -> func.HttpResponse:
+    """Drop one finding from a task's knowledge and rebuild the summary from
+    what remains. {task_id, entry_id}"""
+    if req.method == "OPTIONS":
+        return func.HttpResponse("", status_code=204)
+    import tk_auth
+    import tk_knowledge
+    try:
+        _, role, _ = _authed(req)
+    except tk_auth.AuthError as e:
+        return _json(401, {"error": str(e)})
+    if role in ("stakeholder", "external"):
+        return _json(403, {"error": "finance or admin only"})
+    try:
+        body = req.get_json()
+        return _json(200, tk_knowledge.remove(body["task_id"], body["entry_id"]))
+    except ValueError as e:
+        return _json(400, {"error": str(e)})
+    except Exception as e:
+        logging.exception("knowledge_delete failed")
+        return _json(500, {"error": str(e)})
+
+
 @app.route(route="task_playbook", auth_level=func.AuthLevel.ANONYMOUS,
            methods=["POST", "OPTIONS"])
 def task_playbook(req: func.HttpRequest) -> func.HttpResponse:

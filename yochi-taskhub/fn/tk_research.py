@@ -127,11 +127,18 @@ LAKE_FRAMING = (
     "You are answering a question asked from inside a specific finance task, "
     "against Yo-Chi's OWN data lake - not the web. Use the task context to "
     "decide what to query and how to frame the answer.\n\n"
+    "Use BOTH sides of the lake. `documents` holds the signed agreements, "
+    "deeds, licence and JV papers, board packs and entity overviews from "
+    "SharePoint; the mart_/Xero tables hold what actually moved. A question "
+    "about flows 'based on the agreements' needs both: read what the "
+    "agreement requires, then show what the ledger did against it, and say "
+    "where the two do not line up.\n\n"
     "Answer with figures, not description: the numbers you found, the period "
-    "they cover, and the entities or venues involved. Name the tables you "
-    "used. If the lake cannot answer part of the question, say which part and "
-    "what data would be needed - never estimate a number a query did not "
-    "return.")
+    "they cover, and the entities or venues involved. Cite your source in "
+    "prose - the report or document a figure came from - but do NOT show SQL, "
+    "table names as a list, or your workings. If the lake cannot answer part "
+    "of the question, say which part and what would be needed - never "
+    "estimate a number a query did not return.")
 
 
 def _ask_lake(context, question):
@@ -140,14 +147,10 @@ def _ask_lake(context, question):
     import tk_ask
     out = tk_ask.answer("%s\n\n%s\n\nQUESTION: %s"
                         % (LAKE_FRAMING, context, question))
-    answer = (out.get("answer") or "").strip()
-    sql = [q for q in (out.get("sql") or []) if q]
-    if sql:
-        # provenance, kept with the finding: a later question - or the agent
-        # playbook - can reuse a query that already worked
-        answer += "\n\n---\nQueries run against the lake (%d):\n\n%s" % (
-            len(sql), "\n\n".join("```sql\n%s\n```" % q[:1200] for q in sql[:6]))
-    return answer
+    # The SQL stays out of the finding - it is workings, not an answer, and it
+    # made the Knowledge tab unreadable. tk_ask still returns it if a caller
+    # wants provenance.
+    return (out.get("answer") or "").strip()
 
 
 def _compare(context, question, depth, cfg, recency):
