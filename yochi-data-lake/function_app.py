@@ -143,7 +143,10 @@ def marts_now(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.timer_trigger(schedule="%EXTRACT_CRON%", arg_name="timer", run_on_startup=False)
 def nightly_doc_extract(timer: func.TimerRequest):
-    result = doc_extract.run_extract(minutes=100, prefix=None)
+    # 110 minutes: the host caps a single function at 02:00:00, so this is
+    # as much runway as one invocation can use. EXTRACT_CRON fires it
+    # several times a day - ~103k documents will not index in one pass.
+    result = doc_extract.run_extract(minutes=110, prefix=None)
     logging.info("doc extract result: %s", json.dumps(result))
 
 
@@ -160,9 +163,30 @@ def extract_now(req: func.HttpRequest) -> func.HttpResponse:
                                  mimetype="application/json")
 
 
+@app.route(route="reconcile_now", auth_level=func.AuthLevel.FUNCTION)
+def reconcile_now(req: func.HttpRequest) -> func.HttpResponse:
+    """Copy anything SharePoint holds that the blob is missing, for the
+    priority folders. ?minutes=N to bound it, ?prefix=... for one folder."""
+    minutes = int(req.params.get("minutes", "20"))
+    prefix = req.params.get("prefix")
+    try:
+        out = sp_mirror.run_reconcile([prefix] if prefix else None, minutes=minutes)
+        return func.HttpResponse(json.dumps(out, indent=1), mimetype="application/json")
+    except Exception as e:
+        logging.exception("reconcile_now failed")
+        return func.HttpResponse(json.dumps({"error": str(e)[:500]}), status_code=500,
+                                 mimetype="application/json")
+
+
 @app.timer_trigger(schedule="%SP_MIRROR_CRON%", arg_name="timer", run_on_startup=False)
 def nightly_sp_mirror(timer: func.TimerRequest):
-    result = sp_mirror.run_mirror(minutes=100)
+    result = sp_mirror.run_mirror(minutes=110)
+    # the cursor is not evidence: verify the folders that matter are actually
+    # present and fill any silent gaps
+    try:
+        result["reconcile"] = sp_mirror.run_reconcile(minutes=20)
+    except Exception:
+        logging.exception("reconcile pass failed (mirror itself completed)")
     logging.info("sp mirror result: %s", json.dumps(result))
 
 

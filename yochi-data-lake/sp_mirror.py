@@ -211,3 +211,100 @@ def run_mirror(minutes=100):
                      "files_done": state.get("files_done", 0) + copied + skipped})
     return {"phase": phase, "complete": False, "pages": pages, "copied": copied,
             "skipped": skipped, "errors": errors, "secs": round(time.time() - t0)}
+
+
+# ------------------------------------------------------------ reconciliation
+
+# Folders whose contents must actually BE here, checked against SharePoint
+# itself rather than against the delta cursor.
+RECONCILE_PREFIXES = [
+    "ALL-SHARES/Finance/GROUP STRUCTURE & CORPORATE",
+    "ALL-SHARES/1.International Confidential",
+    "ALL-SHARES/Finance/MONTHLY MANAGEMENT REPORTS",
+    "ALL-SHARES/ACCOUNTS/Audit - Accounts",
+]
+
+
+def _walk_folder(sid, path, tok, out, deadline, depth=0):
+    """Every file under a SharePoint folder, depth-first."""
+    if depth > 6 or time.time() >= deadline:
+        return
+    url = (GRAPH + "/sites/%s/drive/root:/%s:/children"
+           "?$select=id,name,size,file,folder,parentReference,eTag&$top=200"
+           % (sid, urllib.parse.quote(path)))
+    while url and time.time() < deadline:
+        try:
+            d = _get(url, tok)
+        except Exception as e:
+            LOG.warning("reconcile: cannot list %s: %s", path[:80], str(e)[:120])
+            return
+        for it in d.get("value", []):
+            name = it.get("name")
+            if not name:
+                continue
+            if "folder" in it:
+                _walk_folder(sid, path + "/" + name, tok, out, deadline, depth + 1)
+                continue
+            if "file" not in it:
+                continue
+            ext = name.rsplit(".", 1)[1].lower() if "." in name else ""
+            if ext not in DOC_EXTS or it.get("size", 0) > MAX_BYTES:
+                continue
+            out.append(it)
+        url = d.get("@odata.nextLink")
+
+
+def run_reconcile(prefixes=None, minutes=20):
+    """Copy anything SharePoint has that the blob does not.
+
+    The delta cursor is not evidence. It reported "caught up" while an entire
+    folder created on 8 Aug 2026 - the Entity Register - had never been
+    copied, with no error logged: a change can be missed and delta will never
+    mention it again, because from its point of view nothing has changed since.
+    So for the folders that matter, ask SharePoint what it actually holds and
+    fill the gaps. Cheap (hundreds of files), and it self-heals silent loss."""
+    deadline = time.time() + minutes * 60
+    svc = _svc()
+    cc = svc.get_container_client(CONTAINER)
+    tok = _token()
+    sid = _site_drive_root(tok)
+    checked = copied = missing = errors = 0
+    gaps = []
+    for prefix in (prefixes or RECONCILE_PREFIXES):
+        if time.time() >= deadline:
+            break
+        items = []
+        _walk_folder(sid, prefix, tok, items, deadline)
+        for it in items:
+            checked += 1
+            dest = _dest_name(it)
+            etag = (it.get("eTag") or "").replace('"', "")
+            try:
+                props = cc.get_blob_client(dest).get_blob_properties()
+                if not etag or (props.metadata or {}).get("src_etag") == etag:
+                    continue
+            except Exception:
+                pass                       # absent - copy it
+            missing += 1
+            if time.time() >= deadline:
+                break
+            try:
+                item = _get(GRAPH + "/sites/%s/drive/items/%s" % (sid, it["id"]), tok)
+                dl = item.get("@microsoft.graph.downloadUrl")
+                if not dl:
+                    errors += 1
+                    continue
+                bc = cc.get_blob_client(dest)
+                bc.upload_blob_from_url(dl, overwrite=True)
+                bc.set_blob_metadata({"src_etag": etag, "src_id": it["id"]})
+                copied += 1
+                if len(gaps) < 25:
+                    gaps.append(dest)
+            except Exception as e:
+                errors += 1
+                LOG.warning("reconcile copy failed %s: %s", dest[:90], str(e)[:150])
+    LOG.info("reconcile: %d checked, %d missing, %d copied, %d errors",
+             checked, missing, copied, errors)
+    return {"checked": checked, "missing": missing, "copied": copied,
+            "errors": errors, "examples": gaps,
+            "secs": round(time.time() - deadline + minutes * 60)}

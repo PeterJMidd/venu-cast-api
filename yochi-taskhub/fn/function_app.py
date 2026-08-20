@@ -494,6 +494,30 @@ def run_agreements(req: func.HttpRequest) -> func.HttpResponse:
         email=req.params.get("email", "1") != "0"))
 
 
+@app.timer_trigger(schedule="0 20 7 * * *", arg_name="timer", run_on_startup=False)
+def lakebrain_timer(timer: func.TimerRequest) -> None:
+    """Daily 07:20, just after the lake brain publishes its 07:00 verdict.
+    (07:15 was taken by the GL sweep - two timers on the same minute compete
+    for the same shared worker, and this one only reads a small JSON.)
+    read it and turn a failed overnight refresh into work on the board.
+
+    Reads the published blob artifacts - never /api/brain_now, which would
+    recompute the brain and could interleave with its own run."""
+    import tk_lakebrain
+    result = tk_lakebrain.run()
+    logging.info("lakebrain_timer: %s, %d anomalies, %d task(s) raised",
+                 result.get("status"), result.get("anomalies", 0),
+                 len(result.get("created") or []))
+
+
+@app.route(route="run_lakebrain", auth_level=func.AuthLevel.FUNCTION)
+def run_lakebrain(req: func.HttpRequest) -> func.HttpResponse:
+    """Lake brain check on demand. ?raise_tasks=0 to look without acting."""
+    import tk_lakebrain
+    return _json(200, tk_lakebrain.check(
+        raise_tasks=req.params.get("raise_tasks", "1") != "0"))
+
+
 @app.route(route="run_corpus", auth_level=func.AuthLevel.FUNCTION)
 def run_corpus(req: func.HttpRequest) -> func.HttpResponse:
     """Corpus health on demand. ?raise_task=0 to inspect without raising one."""
