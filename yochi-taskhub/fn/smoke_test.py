@@ -77,6 +77,11 @@ DB_PROBES = {
 
 # --- representative lake queries per subsystem ------------------------------
 LAKE_PROBES = {
+    # the SharePoint/Canva corpus, registered as a view outside the usual
+    # tables/ convention - the assistant and the task question box both rely
+    # on it now, so a broken registration must fail the deploy
+    "documents": "SELECT path, title, page, substr(text, 1, 40) AS snippet "
+                 "FROM documents LIMIT 1",
     "mart_venue_daily": 'SELECT "date", venue, net_sales FROM mart_venue_daily '
                         'ORDER BY CAST("date" AS DATE) DESC LIMIT 1',
     "xero_transactions": 'SELECT "Date", "Source", "Net Amount", "XeroOrganisationName" '

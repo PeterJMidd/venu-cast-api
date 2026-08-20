@@ -642,17 +642,54 @@ def _register_digest(items):
     return "\n".join(sorted(lines))
 
 
+def _source_documents(docs=None):
+    """The legal documents to audit, as {name, text}.
+
+    The curated SOURCE_DOCS list is the authority on WHICH documents bind us.
+    Do not replace it with "everything in the document lake": that corpus also
+    holds competitor disclosure documents (Gong Cha, Orange Leaf) and draft and
+    marked-up versions, and auditing our register against those manufactures
+    obligations we do not have. The Entity Register folder is not mirrored into
+    docs-lake at all, so Graph remains the only source for the entity
+    overviews. Where the lake does hold the same file, its extracted text is
+    used - one query instead of a download and re-parse."""
+    paths = list(docs or SOURCE_DOCS)
+    cached = {}
+    try:
+        import tk_docs
+        for d in tk_docs.documents_under("sharepoint/", max_docs=400):
+            cached[(d.get("title") or d["path"]).split("/")[-1].lower()] = d["text"]
+    except Exception:
+        LOG.exception("document lake unavailable - reading every document over Graph")
+    out, from_lake = [], 0
+    for path in paths:
+        name = path.split("/")[-1]
+        text = cached.get(name.lower())
+        if text:
+            from_lake += 1
+        else:
+            try:
+                text = _docx_text(_fetch(path))
+            except Exception as e:
+                LOG.warning("could not fetch %s: %s", name, str(e)[:120])
+                text = ""
+        out.append({"name": name, "text": text or ""})
+    LOG.info("document review sources: %d documents, %d from the lake",
+             len(out), from_lake)
+    return out
+
+
 def document_review(items, docs=None, apply=True):
     """Read the deeds and entity overviews and report obligations the register
     does not carry. Never raises - a document that will not open is reported."""
     import tk_ai
     digest = _register_digest(items)
-    docs = docs or SOURCE_DOCS
+    sources = _source_documents(docs)
     gaps, errors, read = [], [], 0
-    for path in docs:
-        name = path.split("/")[-1]
+    for doc in sources:
+        name = doc["name"]
         try:
-            text = _docx_text(_fetch(path))
+            text = doc["text"]
             if len(text) < 200:
                 errors.append({"doc": name, "error": "no readable text"})
                 continue
@@ -701,7 +738,7 @@ def document_review(items, docs=None, apply=True):
         tk_db.insert("compliance_items", list(rows.values()),
                      on_conflict="ref,period", merge_duplicates=True)
     return {"gaps": gaps, "errors": errors, "documents_read": read,
-            "documents_attempted": len(docs), "items": list(rows.values())}
+            "documents_attempted": len(sources), "items": list(rows.values())}
 
 
 # ------------------------------------------------------------- the button

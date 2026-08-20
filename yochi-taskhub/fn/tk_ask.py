@@ -28,6 +28,26 @@ TOOLS = [{
     "input_schema": {"type": "object",
                      "properties": {"sql": {"type": "string"}},
                      "required": ["sql"]},
+}, {
+    "name": "search_documents",
+    "description": (
+        "Find passages in our documents BY MEANING - the signed agreements, "
+        "deeds, licence and JV papers, board packs, entity overviews. Use this "
+        "for what a document says, requires or commits us to, especially when "
+        "you do not know the wording it uses: ask 'what is owed on termination' "
+        "rather than guessing the clause title. Prefer this over a LIKE search "
+        "of the documents table. Narrow with path_like (e.g. 'florida', "
+        "'signed countries') to question one agreement."),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string",
+                      "description": "what you want to find, in plain words"},
+            "path_like": {"type": "string",
+                          "description": "optional folder or filename fragment"},
+            "top_k": {"type": "integer",
+                      "description": "passages to return, default 8"}},
+        "required": ["query"]},
 }]
 
 SYSTEM_TMPL = (
@@ -39,7 +59,8 @@ SYSTEM_TMPL = (
     "items (then a compact list). Under 150 words unless the question demands detail. "
     "Money is AUD net of GST. Fast Food Award items are 'areas to review', never "
     "'breaches'. If the data can't answer, say so plainly - never invent numbers.\n\n"
-    "You can query the data lake with run_sql - use AT MOST 3 queries, then answer "
+    "You can query the data lake with run_sql and search our documents by "
+    "meaning with search_documents - use AT MOST 4 tool calls in total, then answer "
     "with what you have (state gaps briefly rather than exploring further). Known "
     "quirks: numeric fields may be VARCHAR (TRY_CAST AS DOUBLE); labour_cost in "
     "mart_venue_daily has pay-run artefacts >100%% of sales - exclude ratios above "
@@ -56,9 +77,10 @@ SYSTEM_TMPL = (
     "papers and management reports - chunked into ~13k searchable rows "
     "(path, title, ext, mtime, page, text). Use it for questions the numbers "
     "alone cannot answer: what an agreement REQUIRES, a rate or term we "
-    "committed to, who owes what and when. Search it with "
-    "lower(text) LIKE '%%term%%', narrow by lower(path) LIKE or title, and "
-    "always return substr(text, ...) rather than whole chunks. Quote the "
+    "committed to, who owes what and when. Reach it with search_documents "
+    "(by meaning - the better tool, and it does not need you to guess the "
+    "wording), or query `documents` directly when you want an exact string, "
+    "returning substr(text, ...) rather than whole chunks. Quote the "
     "document and name it. The strongest answers combine the two: what the "
     "agreement says, then what actually moved in the ledger.\n\n"
     "CURRENT TASKHUB STATE (live, use before querying):\n%s\n\n"
@@ -139,6 +161,17 @@ def _run_sql(sql):
     return json.dumps(result, separators=(",", ":"))[:20000]
 
 
+def _search_documents(args):
+    import tk_docs
+    if not tk_docs.enabled():
+        return ("Semantic document search is unavailable on this app "
+                "(no OPENAI_API_KEY) - fall back to the documents table.")
+    hits = tk_docs.search(args.get("query", ""),
+                          top_k=min(int(args.get("top_k") or 8), 12),
+                          path_like=args.get("path_like"))
+    return tk_docs.as_text(hits)[:20000]
+
+
 def answer(question, history=None):
     lake_reader.sync(log=LOG.info)
     try:
@@ -197,9 +230,12 @@ def answer(question, history=None):
         results = []
         for tu in tool_uses:
             queries_run += 1
-            sql_run.append((tu["input"].get("sql", "") or "").strip())
             try:
-                out = _run_sql(tu["input"].get("sql", ""))
+                if tu.get("name") == "search_documents":
+                    out = _search_documents(tu.get("input") or {})
+                else:
+                    sql_run.append((tu["input"].get("sql", "") or "").strip())
+                    out = _run_sql(tu["input"].get("sql", ""))
             except Exception as e:
                 out = "QUERY ERROR: %s" % str(e)[:300]
             results.append({"type": "tool_result", "tool_use_id": tu["id"],
