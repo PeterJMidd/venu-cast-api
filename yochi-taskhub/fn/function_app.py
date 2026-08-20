@@ -387,6 +387,17 @@ def contracts_timer(timer: func.TimerRequest) -> None:
     result = tk_contracts.run()
     logging.info("contracts_timer: %d checked, %d breach(es)",
                  result["checked"], len(result["breaches"]))
+    # the document corpus gets the same treatment as the tables: the mirror
+    # died in July 2026 and ran a month stale because nothing asserted it
+    # should be fresh
+    try:
+        import tk_corpus
+        corpus = tk_corpus.run()
+        logging.info("corpus health: %s, %s docs indexed (%s%% of the mirror)",
+                     corpus["status"], corpus.get("indexed_docs"),
+                     corpus.get("coverage_pct"))
+    except Exception:
+        logging.exception("corpus health check failed")
 
 
 @app.route(route="task_research", auth_level=func.AuthLevel.ANONYMOUS,
@@ -481,6 +492,14 @@ def run_agreements(req: func.HttpRequest) -> func.HttpResponse:
     return _json(200, tk_agreements.run(
         apply=req.params.get("apply", "1") != "0",
         email=req.params.get("email", "1") != "0"))
+
+
+@app.route(route="run_corpus", auth_level=func.AuthLevel.FUNCTION)
+def run_corpus(req: func.HttpRequest) -> func.HttpResponse:
+    """Corpus health on demand. ?raise_task=0 to inspect without raising one."""
+    import tk_corpus
+    return _json(200, tk_corpus.check(
+        raise_task=req.params.get("raise_task", "1") != "0"))
 
 
 @app.route(route="run_contracts", auth_level=func.AuthLevel.FUNCTION)

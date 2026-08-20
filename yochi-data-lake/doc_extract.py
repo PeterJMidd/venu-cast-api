@@ -153,27 +153,107 @@ def _chunks(pages):
 
 # ---------------- embeddings ----------------
 
-def _embed(texts):
+def _embed_call(batch):
     key = os.environ["OPENAI_API_KEY"]
+    body = json.dumps({"model": EMBED_MODEL, "input": batch,
+                       "dimensions": EMBED_DIMS}).encode()
+    req = urllib.request.Request("https://api.openai.com/v1/embeddings", data=body,
+                                 headers={"Authorization": "Bearer " + key,
+                                          "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        data = json.loads(r.read().decode())
+    return [d["embedding"] for d in data["data"]]
+
+
+# OpenAI caps an embeddings request at 300k tokens across all inputs. Batching
+# by COUNT alone sent ~400k tokens once the corpus reached dense audit PDFs, so
+# every request returned 400 and the index stopped dead on 17 Jul 2026. Batch by
+# estimated tokens instead, and keep well under the cap.
+EMBED_TOKEN_BUDGET = 200_000
+EMBED_CHARS_PER_TOKEN = 3.5
+
+
+def _batches(texts):
+    """Sub-batches that respect BOTH the item cap and the token cap."""
+    batch, budget = [], 0.0
+    for t in texts:
+        t = (t or "")[:24_000]
+        cost = len(t) / EMBED_CHARS_PER_TOKEN
+        if batch and (len(batch) >= EMBED_BATCH
+                      or budget + cost > EMBED_TOKEN_BUDGET):
+            yield batch
+            batch, budget = [], 0.0
+        batch.append(t)
+        budget += cost
+    if batch:
+        yield batch
+
+
+def _embed(texts):
+    """Embed texts. A failing batch falls back to per-item embedding with halving
+    truncation; an item that still fails gets a zero vector. One poison chunk must
+    NEVER kill the run - that stalled the whole index (no parts written) for a month."""
     vectors = []
-    for i in range(0, len(texts), EMBED_BATCH):
-        batch = [t[:24_000] for t in texts[i:i + EMBED_BATCH]]
-        body = json.dumps({"model": EMBED_MODEL, "input": batch,
-                           "dimensions": EMBED_DIMS}).encode()
-        req = urllib.request.Request("https://api.openai.com/v1/embeddings", data=body,
-                                     headers={"Authorization": "Bearer " + key,
-                                              "Content-Type": "application/json"})
+    for batch in _batches(texts):
+        done = False
         for attempt in range(3):
             try:
-                with urllib.request.urlopen(req, timeout=120) as r:
-                    data = json.loads(r.read().decode())
-                vectors.extend([d["embedding"] for d in data["data"]])
+                vectors.extend(_embed_call(batch))
+                done = True
                 break
-            except Exception:
-                if attempt == 2:
-                    raise
-                time.sleep(10 * (attempt + 1))
+            except Exception as e:
+                LOG.warning("embed batch failed (attempt %d): %s", attempt + 1, str(e)[:150])
+                time.sleep(8 * (attempt + 1))
+        if done:
+            continue
+        # per-item salvage: halve the text on each failure; zero-vector as last resort
+        for t in batch:
+            vec = None
+            for cut in (24_000, 12_000, 6_000, 3_000):
+                try:
+                    vec = _embed_call([t[:cut]])[0]
+                    break
+                except Exception:
+                    continue
+            if vec is None:
+                LOG.warning("chunk unembeddable even at 3k chars - zero vector used")
+                vec = [0.0] * EMBED_DIMS
+            vectors.append(vec)
     return vectors
+
+
+# Indexing order. The corpus is ~93k documents and a night only buys ~100
+# minutes, so what gets indexed FIRST decides what the assistant can answer for
+# the next few months. These are the folders that answer questions: agreements,
+# entities, statutory and financial records. Store designs (15k files) and team
+# files (9k) are last on purpose - they are bulk, not knowledge.
+PRIORITY_PREFIXES = [
+    "sharepoint/ALL-SHARES/Finance/GROUP STRUCTURE & CORPORATE/",
+    "sharepoint/ALL-SHARES/1.International Confidential/",
+    "sharepoint/ALL-SHARES/Finance/",
+    "sharepoint/ALL-SHARES/ACCOUNTS/",
+    "sharepoint/ALL-SHARES/Payroll/",
+    "canva/",
+    "sharepoint/",                      # everything else, once the above are done
+]
+# Only skipped during the catch-all pass - name one of these as an explicit
+# prefix and it is indexed normally.
+DEPRIORITISED = ("/store designs/", "/team files/", "/marketing/", "/old/",
+                 "/lightboxes/", "/ligthboxes/")
+
+
+def _ordered_prefixes(prefix):
+    if prefix:
+        return [prefix]
+    return list(PRIORITY_PREFIXES)
+
+
+def _deprioritised(name, prefix_i):
+    """True when this blob should wait for the catch-all pass."""
+    if prefix_i != "sharepoint/":
+        return False
+    low = name.lower()
+    return any(d in low for d in DEPRIORITISED)
 
 
 # ---------------- main run ----------------
@@ -207,12 +287,16 @@ def run_extract(minutes=90, prefix="sharepoint/"):
         LOG.info("index part %06d: %d chunks", part, len(df))
         rows = []
 
-    for prefix_i in ([prefix] if prefix else ["sharepoint/", "canva/"]):
+    for prefix_i in _ordered_prefixes(prefix):
+        if time.time() > deadline:
+            break
         for b in cc.list_blobs(name_starts_with=prefix_i):
             if time.time() > deadline:
                 break
             name = b.name
             if name.startswith("index/") or name.endswith("_state.json"):
+                continue
+            if _deprioritised(name, prefix_i):
                 continue
             ext = name.rsplit(".", 1)[1].lower() if "." in name else ""
             if ext not in TEXT_EXTS or b.size > MAX_FILE_BYTES:

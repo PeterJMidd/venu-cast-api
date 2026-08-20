@@ -84,6 +84,7 @@ SYSTEM_TMPL = (
     "document and name it. The strongest answers combine the two: what the "
     "agreement says, then what actually moved in the ledger.\n\n"
     "CURRENT TASKHUB STATE (live, use before querying):\n%s\n\n"
+    "%s\n\n"
     "LAKE SCHEMA:\n%s"
 )
 
@@ -190,7 +191,15 @@ def answer(question, history=None):
                 "%s $%dk" % (d[8:], round(v / 1000)) for d, v in mdays[:31])
     except Exception:
         LOG.exception("budget ctx failed (non-fatal)")
-    system = SYSTEM_TMPL % (dt.date.today().isoformat(), ctx,
+    # the corpus map tells the agent which folders exist, so it can aim
+    # search_documents at one instead of sweeping the whole corpus
+    try:
+        import tk_docs
+        corpus = tk_docs.map_text()
+    except Exception:
+        LOG.exception("corpus map unavailable (non-fatal)")
+        corpus = ""
+    system = SYSTEM_TMPL % (dt.date.today().isoformat(), ctx, corpus,
                             tk_skillbuilder._schema_text())
     messages = []
     for h in (history or [])[-6:]:

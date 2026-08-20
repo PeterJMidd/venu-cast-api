@@ -12,6 +12,7 @@ import logging
 import azure.functions as func
 
 import doc_extract
+import lake_brain
 import lake_export
 import marts
 import opcentral_export
@@ -32,6 +33,45 @@ def nightly_restoke_export(timer: func.TimerRequest):
 def nightly_opcentral_export(timer: func.TimerRequest):
     result = opcentral_export.run()
     logging.info("opcentral export result: %s", json.dumps(result)[:2000])
+
+
+@app.timer_trigger(schedule="%LAKE_BRAIN_CRON%", arg_name="timer", run_on_startup=False)
+def morning_lake_brain(timer: func.TimerRequest):
+    result = lake_brain.run(send=True)
+    logging.info("lake brain result: %s", json.dumps(result)[:1500])
+
+
+@app.route(route="brain_now", auth_level=func.AuthLevel.FUNCTION)
+def brain_now(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        result = lake_brain.run(send=req.params.get("send", "1") == "1")
+        return func.HttpResponse(json.dumps(result, indent=1), mimetype="application/json")
+    except Exception as e:
+        logging.exception("brain_now failed")
+        return func.HttpResponse(json.dumps({"error": str(e)[:500]}), status_code=500,
+                                 mimetype="application/json")
+
+
+@app.route(route="brain_answer", auth_level=func.AuthLevel.FUNCTION)
+def brain_answer(req: func.HttpRequest) -> func.HttpResponse:
+    qid = req.params.get("id")
+    ans = req.params.get("a", "").lower()
+    if not qid or ans not in ("yes", "no", "ignore"):
+        return func.HttpResponse("need id and a=yes|no|ignore", status_code=400)
+    try:
+        result = lake_brain.record_answer(qid, ans)
+        msg = ("Thanks - recorded <b>%s</b> for:<br><i>%s</i>" %
+               (ans.upper(), result.get("question", "")) if result.get("ok")
+               else "Already answered (or unknown question) - nothing changed.")
+        return func.HttpResponse(
+            "<html><body style='font-family:Segoe UI,Arial;max-width:480px;margin:60px auto;"
+            "text-align:center;color:#172029'><h2>Lake Brain</h2><p>%s</p>"
+            "<p style='color:#7C8996;font-size:13px'>You can close this tab.</p></body></html>" % msg,
+            mimetype="text/html")
+    except Exception as e:
+        logging.exception("brain_answer failed")
+        return func.HttpResponse(json.dumps({"error": str(e)[:300]}), status_code=500,
+                                 mimetype="application/json")
 
 
 @app.timer_trigger(schedule="%RESTOKE_HQ_CRON%", arg_name="timer", run_on_startup=False)

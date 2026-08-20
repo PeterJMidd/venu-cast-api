@@ -37,11 +37,10 @@ CONTAINER = "datasights-lake"
 # answered from what we WROTE, not only from what we transacted. The embedding
 # column is deliberately not exposed: a chunk carries a 1k-float vector and
 # SELECT * would blow the result size for no analytical gain.
-EXTRA_VIEWS = {
-    "documents": ("SELECT path, title, ext, mtime, chunk_id, page, text FROM "
-                  "read_parquet('az://docs-lake/index/parts/*.parquet', "
-                  "union_by_name=true)"),
-}
+EXTRA_VIEWS = ("documents",)
+DOCS_CONTAINER = "docs-lake"
+DOCS_PREFIX = "index/parts/"
+DOCS_COLS = "path, title, ext, mtime, chunk_id, page, text"
 DIRECT = os.environ.get("LAKE_DIRECT", "1") != "0"
 MEMORY_LIMIT = os.environ.get("DUCKDB_MEMORY_LIMIT", "1GB")
 THREADS = os.environ.get("DUCKDB_THREADS", "2")
@@ -147,6 +146,53 @@ def _load_azure(con):
     raise last
 
 
+def docs_index_source(log=None, force_local=False):
+    """Where the document index can actually be read from, in this mode.
+
+    Direct blob reads fail on the Function host - DuckDB's azure extension
+    cannot verify the SSL CA there - so in cache mode the index parts are
+    mirrored to local disk (~18MB) exactly like the mart tables. Anything
+    reading the document index MUST come through here, or it works on a laptop
+    and fails in production."""
+    log = log or LOG.info
+    if _direct_ok() and not force_local:
+        return "az://%s/%s*.parquet" % (DOCS_CONTAINER, DOCS_PREFIX)
+    local_dir = os.path.join(CACHE_DIR, "docs-index")
+    os.makedirs(local_dir, exist_ok=True)
+    state_path = os.path.join(local_dir, ".sync_state.json")
+    state = {}
+    if os.path.exists(state_path):
+        try:
+            state = json.load(open(state_path))
+        except Exception:
+            state = {}
+    try:
+        from azure.storage.blob import BlobServiceClient
+        svc = BlobServiceClient.from_connection_string(
+            os.environ["BLOB_CONNECTION_STRING"], read_timeout=300,
+            connection_timeout=60)
+        cc = svc.get_container_client(DOCS_CONTAINER)
+        got = 0
+        for b in cc.list_blobs(name_starts_with=DOCS_PREFIX):
+            if not b.name.endswith(".parquet"):
+                continue
+            local = os.path.join(local_dir, os.path.basename(b.name))
+            if state.get(b.name) == b.etag and os.path.exists(local):
+                continue
+            with open(local, "wb") as f:
+                cc.download_blob(b.name, max_concurrency=2).readinto(f)
+            state[b.name] = b.etag
+            got += 1
+        with open(state_path, "w") as f:
+            json.dump(state, f)
+        if got:
+            log("docs index: %d part(s) refreshed to local cache" % got)
+    except Exception:
+        LOG.exception("docs index sync failed - using whatever is already cached")
+    pattern = os.path.join(local_dir, "*.parquet").replace(os.sep, "/")
+    return pattern if glob.glob(pattern) else None
+
+
 def _direct_con(sql, cc=None):
     """Connection with views over only the lake tables this SQL references."""
     con = _new_con()
@@ -154,8 +200,11 @@ def _direct_con(sql, cc=None):
     con.execute("CREATE OR REPLACE SECRET lake (TYPE AZURE, CONNECTION_STRING '%s')"
                 % os.environ["BLOB_CONNECTION_STRING"].replace("'", "''"))
     wanted = referenced_tables(sql)
-    for name in sorted(wanted & set(EXTRA_VIEWS)):
-        con.execute('CREATE VIEW "%s" AS %s' % (name, EXTRA_VIEWS[name]))
+    if "documents" in wanted:
+        src = docs_index_source()
+        if src:
+            con.execute('CREATE VIEW "documents" AS SELECT %s FROM '
+                        "read_parquet('%s', union_by_name=true)" % (DOCS_COLS, src))
     wanted = wanted - set(EXTRA_VIEWS)
     if wanted:
         cc = cc or _container()
@@ -250,6 +299,11 @@ def _local_con(sql):
         pattern = os.path.join(tdir, "*.parquet").replace("\\", "/")
         con.execute('CREATE VIEW "%s" AS SELECT * FROM read_parquet(\'%s\', union_by_name=true)'
                     % (name, pattern))
+    if "documents" in referenced_tables(sql):
+        src = docs_index_source()
+        if src:
+            con.execute('CREATE VIEW "documents" AS SELECT %s FROM '
+                        "read_parquet('%s', union_by_name=true)" % (DOCS_COLS, src))
     return con
 
 

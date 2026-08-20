@@ -67,6 +67,17 @@ Write-Host "== zipping (python zipfile, forward slashes) ==" -ForegroundColor Cy
 py build_zip.py
 
 Write-Host "== deploying ==" -ForegroundColor Cyan
+# az prints "WARNING: Getting scm site credentials" on stderr. Under PS 5.1 a
+# native command's stderr becomes a NativeCommandError as soon as anything
+# redirects or pipes this script's output, which aborts a deployment that was
+# in fact fine. Tolerate stderr here and judge the result on the exit code.
+$ErrorActionPreference = "Continue"
 py -m azure.cli functionapp deployment source config-zip -g $RG -n $APP --src deploy_local.zip --timeout 900
+$zipExit = $LASTEXITCODE
+$ErrorActionPreference = "Stop"
+if ($zipExit -ne 0) { throw "config-zip deployment failed (exit $zipExit)" }
+
+Write-Host "== restarting ==" -ForegroundColor Cyan
+py -m azure.cli functionapp restart -n $APP -g $RG --output none
 
 Write-Host "== done. verify with: py -m azure.cli functionapp function list -n $APP -g $RG ==" -ForegroundColor Green

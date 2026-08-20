@@ -118,6 +118,7 @@ def run_mirror(minutes=100):
 
     existing = _existing_etags(cc) if phase == "walk" else {}
     copied = skipped = errors = pages = 0
+    out_of_time = False
     t0 = time.time()
 
     while url and time.time() < deadline:
@@ -132,9 +133,16 @@ def run_mirror(minutes=100):
             tok_at = time.time()
             d = _get(url, tok)
         for it in d.get("value", []):
-            if "file" not in it or it.get("deleted"):
+            # A delta page can carry entries that are not usable files: items
+            # removed since the last cursor (@removed, not always 'deleted'),
+            # and entries with a file facet but no name. Indexing one of those
+            # raised KeyError and killed the whole run - which is why this
+            # mirror stopped on 17 Jul 2026 and quietly went a month stale.
+            if "file" not in it or it.get("deleted") or "@removed" in it:
                 continue
-            name = it["name"]
+            name = it.get("name")
+            if not name:
+                continue
             ext = name.rsplit(".", 1)[1].lower() if "." in name else ""
             if ext not in DOC_EXTS or it.get("size", 0) > MAX_BYTES:
                 continue
@@ -143,6 +151,25 @@ def run_mirror(minutes=100):
             if existing.get(dest) == etag:
                 skipped += 1
                 continue
+            # Delta re-sends an item whenever ANY property changes, so without
+            # this the same unchanged file is downloaded again on every run. A
+            # HEAD against the copy we already hold costs a fraction of a
+            # re-download, and makes a resumed page cheap rather than wasteful.
+            if phase != "walk" and etag:
+                try:
+                    props = cc.get_blob_client(dest).get_blob_properties()
+                    if (props.metadata or {}).get("src_etag") == etag.replace('"', ""):
+                        skipped += 1
+                        continue
+                except Exception:
+                    pass                       # not there yet - copy it below
+            if time.time() >= deadline:
+                # The budget used to be checked only between pages, so a page
+                # of 500 files ran hours past it. Stop mid-page and resume from
+                # this same page next time - the etag checks above make the
+                # replayed items nearly free.
+                out_of_time = True
+                break
             try:
                 # NOTE: no $select here - it strips the @microsoft.graph.downloadUrl annotation
                 item = _get(GRAPH + "/sites/%s/drive/items/%s" % (sid, it["id"]), tok)
@@ -159,6 +186,12 @@ def run_mirror(minutes=100):
                 errors += 1
                 if errors <= 20:
                     LOG.warning("copy failed %s: %s", dest, str(e)[:200])
+        if out_of_time:
+            _save_state(cc, {"link": url, "phase": phase,
+                             "files_done": state.get("files_done", 0) + copied + skipped})
+            return {"phase": phase, "complete": False, "out_of_time": True,
+                    "pages": pages, "copied": copied, "skipped": skipped,
+                    "errors": errors, "secs": round(time.time() - t0)}
         pages += 1
         nxt = d.get("@odata.nextLink")
         delta = d.get("@odata.deltaLink")
