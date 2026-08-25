@@ -7,6 +7,9 @@
 import { useState, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { useProfiles } from "@/hooks/useProfiles";
+import { useProfile } from "@/hooks/useProfile";
+import TeamActivity from "@/components/TeamActivity";
 
 type Row = Record<string, string | number | null>;
 type Report = {
@@ -209,10 +212,48 @@ function ActivityInner() {
   );
 }
 
+function ActivityTabs() {
+  // Two different questions, so two tabs: "who is doing what right now" (live,
+  // from TaskHub's own tables) and "what changed across the estate yesterday"
+  // (the 08:30 batch digest). Live is the one people open every day, so it
+  // leads.
+  const [tab, setTab] = useState<"team" | "report">("team");
+  const { data: profiles } = useProfiles();
+  const { data: me } = useProfile();
+
+  return (
+    <div className="mx-auto max-w-5xl p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <h1 className="mr-2 text-xl font-bold">Activity</h1>
+        {([["team", "Team activity"], ["report", "Daily report"]] as const).map(
+          ([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                tab === key
+                  ? "bg-brand-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {label}
+            </button>
+          )
+        )}
+      </div>
+      {tab === "team" ? (
+        <TeamActivity profiles={profiles} me={me?.id} />
+      ) : (
+        <ActivityInner />
+      )}
+    </div>
+  );
+}
+
 export default function ActivityPage() {
   return (
     <Suspense fallback={<div className="p-6 text-sm text-gray-400">Loading…</div>}>
-      <ActivityInner />
+      <ActivityTabs />
     </Suspense>
   );
 }
