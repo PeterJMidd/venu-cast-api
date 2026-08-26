@@ -23,6 +23,7 @@ the HTTP window); scheduled runs ride the existing skills timer."""
 import datetime as dt
 import json
 import logging
+import os
 import re
 
 import tk_ai
@@ -207,11 +208,21 @@ def execute(skill, actor=None, email=True):
     cc, _ = _emails(skill.get("cc"))
     sent_to, email_errors = [], []
     if email and recipients and attachments is not None:
+        app_url = os.environ.get("APP_URL", "").rstrip("/")
+        task_link = ("%s/my-tasks?task=%s" % (app_url, skill["task_id"])
+                     if app_url and skill.get("task_id") else "")
         html = ("<div style='font-family:-apple-system,Segoe UI,Arial,sans-serif;"
                 "max-width:760px;color:#222'><pre style='font-family:inherit;"
-                "white-space:pre-wrap;font-size:13px'>%s</pre>"
+                "white-space:pre-wrap;font-size:13px'>%s</pre>%s"
                 "<p style='color:#888;font-size:11px'>%s</p></div>" % (
                     review.replace("&", "&amp;").replace("<", "&lt;"),
+                    ("<p style='margin:16px 0'><a href='%s' style='background:"
+                     "#7c3aed;color:#fff;padding:9px 16px;border-radius:8px;"
+                     "text-decoration:none;font-size:13px'>Open the task in "
+                     "TaskHub</a> <span style='font-size:11px;color:#888;"
+                     "margin-left:8px'>full history, comments and every "
+                     "previous run live there</span></p>" % task_link)
+                    if task_link else "",
                     EMAIL_NOTE % skill["name"]))
         try:
             # one email, everyone on it - so recipients can see who else has
