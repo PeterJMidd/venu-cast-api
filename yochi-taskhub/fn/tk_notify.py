@@ -87,8 +87,18 @@ def run():
     projects = {p["id"]: p["name"] for p in tk_db.get(
         "projects", {"select": "id,name"})}
 
+    # a burst of assignments to one person becomes a single digest
+    digested = set()
+    try:
+        digested = _digest(pending, profiles, projects)
+    except Exception:
+        LOG.exception("digest pass failed - sending individually instead")
+
     sent = skipped = failed = 0
     for row in pending:
+        if row["id"] in digested:
+            sent += 1
+            continue
         stamp = {"sent_at": dt.datetime.utcnow().isoformat() + "Z"}
         try:
             who = profiles.get(row["recipient"])
@@ -154,3 +164,90 @@ def run():
                 LOG.exception("could not record notify failure")
     return {"pending": len(pending), "sent": sent, "skipped": skipped,
             "failed": failed, "email_enabled": tk_email.enabled()}
+
+
+# --------------------------------------------------------------- digesting
+
+# Above this many assignment notifications waiting for one person, send a
+# single digest instead of one email each. A nightly sync that hands somebody
+# 71 obligations should arrive as one message they will read, not 71 they will
+# filter - and a mailbox rule built to survive that flood would also hide the
+# one assignment that mattered.
+DIGEST_THRESHOLD = int(os.environ.get("NOTIFY_DIGEST_THRESHOLD", "4"))
+
+
+def _digest_html(rows, tasks_by_id, projects, name):
+    items = []
+    for r in rows:
+        t = tasks_by_id.get(r["task_id"]) or {}
+        items.append(
+            "<tr><td style='padding:6px 10px;border-top:1px solid #eee'>"
+            "<div style='font-weight:600'>%s</div>"
+            "<div style='font-size:11px;color:#666'>%s%s%s</div></td></tr>"
+            % ((t.get("title") or "(task)")[:140],
+               projects.get(t.get("project_id")) or "",
+               " &middot; due %s" % t["due_date"] if t.get("due_date") else "",
+               " &middot; %s" % t["priority"] if t.get("priority") else ""))
+    return (
+        "<div style=\"font-family:-apple-system,Segoe UI,Arial,sans-serif;"
+        "max-width:760px;color:#222\">"
+        "<h2 style='margin:0 0 4px'>%d task%s assigned to you</h2>"
+        "<div style='color:#666;font-size:13px;margin-bottom:14px'>%s - these "
+        "arrived together, so here they are in one message rather than %d.</div>"
+        "<table style='border-collapse:collapse;width:100%%;font-size:13px'>%s"
+        "</table>"
+        "<p style='margin-top:16px'><a href='%s/my-tasks' style='background:"
+        "#0f766e;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:"
+        "none;font-size:13px'>Open my tasks</a></p></div>"
+        % (len(rows), "" if len(rows) == 1 else "s", name or "TaskHub",
+           len(rows), "".join(items),
+           os.environ.get("APP_URL", "").rstrip("/")))
+
+
+def _digest(rows, profiles, projects):
+    """One email per recipient for a burst of assignments. Returns the set of
+    outbox ids it handled."""
+    handled = set()
+    by_person = {}
+    for r in rows:
+        if r["kind"] == "assigned":
+            by_person.setdefault(r["recipient"], []).append(r)
+    for uid, rs in by_person.items():
+        if len(rs) < DIGEST_THRESHOLD:
+            continue
+        who = profiles.get(uid)
+        if not who or not who.get("active"):
+            continue
+        ids = [r["task_id"] for r in rs]
+        tasks_by_id = {}
+        for i in range(0, len(ids), 80):
+            chunk = ids[i:i + 80]
+            for t in tk_db.get("tasks", {
+                    "id": "in.(%s)" % ",".join(chunk),
+                    "select": "id,title,due_date,priority,project_id,status"}):
+                tasks_by_id[t["id"]] = t
+        live = [r for r in rs
+                if (tasks_by_id.get(r["task_id"]) or {}).get("status") not in
+                (None, "done")]
+        if not live:
+            continue
+        stamp = {"sent_at": dt.datetime.utcnow().isoformat() + "Z"}
+        ok = False
+        try:
+            ok = tk_email.send(
+                who["email"],
+                "%d tasks assigned to you in TaskHub" % len(live),
+                _digest_html(live, tasks_by_id, projects,
+                             who.get("full_name") or who.get("email")))
+        except Exception:
+            LOG.exception("digest send failed for %s - falling back to one "
+                          "email per task", who.get("email"))
+        if not ok:
+            continue
+        for r in rs:
+            tk_db.patch("notify_outbox", {"id": "eq." + r["id"]},
+                        dict(stamp, error=None if r in live else "rolled into digest"))
+            handled.add(r["id"])
+        LOG.info("digest: %d assignment(s) to %s in one email",
+                 len(live), who.get("email"))
+    return handled
