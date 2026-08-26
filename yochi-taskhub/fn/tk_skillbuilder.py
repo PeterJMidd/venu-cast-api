@@ -53,7 +53,17 @@ SYSTEM = (
     "(per venue/supplier/week) rather than dumping raw rows; always ORDER BY the interesting "
     "metric; keep result sets under ~200 rows (the runner truncates at 200). Known data quirk: "
     "labour_cost in mart_venue_daily has pay-run artefacts >100%% of sales - exclude ratios "
-    "over 1.0. Prefer mart_* views where they cover the need."
+    "over 1.0. Prefer mart_* views where they cover the need. Xero view quirks "
+    "(learned the hard way): Xero*View rows repeat PER LINE ITEM - an invoice "
+    "appears ~6 times, so ALWAYS dedup (GROUP BY invoiceid with MAX(amountdue), "
+    "or COUNT(DISTINCT invoiceid)) before counting or summing, or totals come "
+    "out ~6x reality. The status column is a NUMERIC code, never text like "
+    "'AUTHORISED' - do not filter on status names; for outstanding/overdue "
+    "bills filter TRY_CAST(amountdue AS DOUBLE) > 0 instead, which is what "
+    "actually means money is still owed. XeroBillsView is ALREADY bills-only "
+    "(invoicetypedescribed = 'AccountsPayable', never 'ACCPAY') - no type "
+    "filter needed there. Amount columns may be VARCHAR: "
+    "TRY_CAST(... AS DOUBLE) before maths."
 )
 
 REPAIR_SYSTEM = (

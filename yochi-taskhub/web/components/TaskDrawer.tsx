@@ -20,6 +20,7 @@ import { useProfile } from "@/hooks/useProfile";
 import { useProfiles, profileName } from "@/hooks/useProfiles";
 import { useOpenTask, CompleteToggle } from "@/components/TaskCard";
 import AgentPanel from "@/components/AgentPanel";
+import SkillPanel from "@/components/SkillPanel";
 import ApproachTab from "@/components/ApproachTab";
 import KnowledgeTab from "@/components/KnowledgeTab";
 import {
@@ -507,6 +508,8 @@ export default function TaskDrawer({ taskId }: { taskId: string }) {
               )}
 
               {isStaff && <AgentPanel taskId={taskId} />}
+
+              {isStaff && <SkillPanel taskId={taskId} />}
 
               {/* Sign-off */}
               <div className="rounded-xl border border-gray-200 p-4">

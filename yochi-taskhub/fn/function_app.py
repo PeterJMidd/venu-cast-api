@@ -454,6 +454,63 @@ def knowledge_delete(req: func.HttpRequest) -> func.HttpResponse:
         return _json(500, {"error": str(e)})
 
 
+@app.route(route="task_skill", auth_level=func.AuthLevel.ANONYMOUS,
+           methods=["POST", "OPTIONS"])
+def task_skill(req: func.HttpRequest) -> func.HttpResponse:
+    """The saved routine on a task. Actions in one route so the panel has one
+    surface: get | propose | save | run | refine | toggle.
+
+    propose builds and VALIDATES but saves nothing - the person always sees
+    the plan before it exists. run is synchronous: queries are pre-validated
+    and capped, so the whole path fits the HTTP window."""
+    if req.method == "OPTIONS":
+        return func.HttpResponse("", status_code=204)
+    import tk_auth
+    import tk_taskskill
+    try:
+        uid, role, _ = _authed(req)
+    except tk_auth.AuthError as e:
+        return _json(401, {"error": str(e)})
+    if role in ("stakeholder", "external"):
+        return _json(403, {"error": "finance or admin only"})
+    try:
+        body = req.get_json()
+        action = body.get("action") or "get"
+        task_id = body["task_id"]
+        if action == "get":
+            return _json(200, {"skill": tk_taskskill.get(task_id)})
+        if action == "propose":
+            return _json(200, tk_taskskill.propose(
+                task_id, body.get("ask") or "",
+                recipients=body.get("recipients") or "",
+                formats=body.get("formats") or "pdf",
+                cadence=body.get("cadence") or "on-demand"))
+        if action == "save":
+            return _json(200, tk_taskskill.save(task_id, body.get("proposal") or {},
+                                                uid=str(uid)))
+        if action == "run":
+            return _json(200, tk_taskskill.run_now(task_id, actor=str(uid)))
+        if action == "refine":
+            return _json(200, tk_taskskill.refine(task_id,
+                                                  body.get("feedback") or "",
+                                                  uid=str(uid)))
+        if action == "toggle":
+            skill = tk_taskskill.get(task_id)
+            if not skill:
+                return _json(404, {"error": "no routine on this task"})
+            import tk_db
+            tk_db.patch("ai_skills", {"id": "eq." + skill["id"]},
+                        {"active": not skill.get("active", True)})
+            return _json(200, {"active": not skill.get("active", True)})
+        return _json(400, {"error": "unknown action '%s'" % action})
+    except ValueError as e:
+        return _json(400, {"error": str(e)})
+    except Exception as e:
+        logging.exception("task_skill %s failed", req.get_json().get("action", "?")
+                          if req.get_body() else "?")
+        return _json(500, {"error": str(e)[:300]})
+
+
 @app.route(route="task_playbook", auth_level=func.AuthLevel.ANONYMOUS,
            methods=["POST", "OPTIONS"])
 def task_playbook(req: func.HttpRequest) -> func.HttpResponse:

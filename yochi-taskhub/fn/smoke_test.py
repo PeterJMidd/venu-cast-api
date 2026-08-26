@@ -58,7 +58,8 @@ DB_PROBES = {
     "watcher_rules": "id,name,description,check_sql,comparator,threshold,project_id,"
                      "assignee_id,priority,active,last_run_at",
     "ai_skills": "id,name,prompt,data_queries,cadence,weekday,project_id,assignee_id,"
-                 "email_review,active,last_run_at",
+                 "email_review,active,last_run_at,task_id,ask,recipients,formats,"
+                 "version,refinements,last_result",
     "feeds": "id,slug,name,description,kind,cadence,status,last_run_at,last_summary,"
              "research_prompt,columns",
     "signals": "id,kind,headline,detail,source,created_at",

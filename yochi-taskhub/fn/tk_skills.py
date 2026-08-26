@@ -67,6 +67,15 @@ def run(force_skill_id=None):
     ran, errors = 0, []
     for s in due:
         try:
+            if s.get("task_id"):
+                # a task routine: run through the routine engine, which posts
+                # to its task, emails its saved recipients in their chosen
+                # formats, and records the learning - raising a brand-new task
+                # each run is the standalone skills' behaviour, not this one's
+                import tk_taskskill
+                tk_taskskill.execute(s)
+                ran += 1
+                continue
             pulls = {}
             for q in s["data_queries"]:
                 label = q.get("label", "data")
