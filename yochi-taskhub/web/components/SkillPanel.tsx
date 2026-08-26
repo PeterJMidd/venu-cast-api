@@ -14,7 +14,8 @@ import { callFn } from "@/lib/fn";
 type Query = { label: string; sql: string };
 type Skill = {
   id: string; name: string; prompt: string; data_queries: Query[];
-  cadence: string; recipients: string | null; formats: string | null;
+  cadence: string; weekday: number | null;
+  recipients: string | null; cc: string | null; formats: string | null;
   ask: string | null; active: boolean; version: number;
   last_run_at: string | null;
   last_result: { headline?: string; sent_to?: string[]; pulls?: Record<string, unknown>;
@@ -39,12 +40,17 @@ export default function SkillPanel({ taskId }: { taskId: string }) {
   const qc = useQueryClient();
   const [ask, setAsk] = useState("");
   const [recipients, setRecipients] = useState("");
+  const [cc, setCc] = useState("");
   const [formats, setFormats] = useState<string[]>(["pdf"]);
   const [cadence, setCadence] = useState("on-demand");
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [refining, setRefining] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [runResult, setRunResult] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editTo, setEditTo] = useState("");
+  const [editCc, setEditCc] = useState("");
+  const [editCadence, setEditCadence] = useState("on-demand");
 
   const { data } = useQuery({
     queryKey: ["task", taskId, "skill"],
@@ -63,7 +69,7 @@ export default function SkillPanel({ taskId }: { taskId: string }) {
   });
   const saveIt = useMutation({
     mutationFn: () => callFn("task_skill", { task_id: taskId, action: "save",
-                                             proposal }),
+                                             proposal: { ...proposal, cc } }),
     onSuccess: () => { setProposal(null); setAsk(""); invalidate(); },
   });
   const run = useMutation({
@@ -76,6 +82,12 @@ export default function SkillPanel({ taskId }: { taskId: string }) {
       invalidate();
       qc.invalidateQueries({ queryKey: ["comments", taskId] });
     },
+  });
+  const saveSettings = useMutation({
+    mutationFn: () => callFn("task_skill", {
+      task_id: taskId, action: "settings",
+      recipients: editTo, cc: editCc, cadence: editCadence }),
+    onSuccess: () => { setEditing(false); invalidate(); },
   });
   const refine = useMutation({
     mutationFn: () => callFn("task_skill", { task_id: taskId, action: "refine",
@@ -108,7 +120,13 @@ export default function SkillPanel({ taskId }: { taskId: string }) {
           <input
             value={recipients}
             onChange={(e) => setRecipients(e.target.value)}
-            placeholder="Send results to (emails, comma-separated)"
+            placeholder="To (emails, comma-separated)"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-[12px]"
+          />
+          <input
+            value={cc}
+            onChange={(e) => setCc(e.target.value)}
+            placeholder="CC (optional)"
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-[12px]"
           />
           <div className="flex items-center gap-3">
@@ -210,7 +228,7 @@ export default function SkillPanel({ taskId }: { taskId: string }) {
         </button>
       </div>
       <div className="text-[11px] text-gray-500">
-        {s.recipients ? <>To {s.recipients} · </> : "No recipients · "}
+        {s.recipients ? <>To {s.recipients}{s.cc ? <> · cc {s.cc}</> : null} · </> : "No recipients · "}
         {(s.formats || "pdf").toUpperCase()} ·{" "}
         {s.cadence === "on-demand" ? "on demand" : s.cadence}
         {s.last_run_at && (
@@ -236,10 +254,48 @@ export default function SkillPanel({ taskId }: { taskId: string }) {
           Refine…
         </button>
         <span className="text-gray-300">·</span>
+        <button
+          onClick={() => {
+            setEditTo(s.recipients || "");
+            setEditCc(s.cc || "");
+            setEditCadence(s.cadence || "on-demand");
+            setEditing(!editing);
+          }}
+          className="text-violet-700 hover:underline"
+        >
+          Delivery &amp; schedule…
+        </button>
+        <span className="text-gray-300">·</span>
         <span className="text-gray-400">
           Full result lands as a comment; the approach compounds on the Approach tab
         </span>
       </div>
+      {editing && (
+        <div className="mt-2 rounded-lg border border-violet-200 bg-white/70 p-2">
+          <div className="mb-1 grid gap-1.5 sm:grid-cols-2">
+            <input value={editTo} onChange={(e) => setEditTo(e.target.value)}
+                   placeholder="To (emails, comma-separated)"
+                   className="rounded-lg border border-gray-300 px-2 py-1 text-[12px]" />
+            <input value={editCc} onChange={(e) => setEditCc(e.target.value)}
+                   placeholder="CC (optional)"
+                   className="rounded-lg border border-gray-300 px-2 py-1 text-[12px]" />
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={editCadence} onChange={(e) => setEditCadence(e.target.value)}
+                    className="rounded-lg border border-gray-300 px-2 py-1 text-[12px]">
+              {CADENCES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            <button onClick={() => saveSettings.mutate()}
+                    disabled={saveSettings.isPending}
+                    className="rounded-lg bg-violet-600 px-3 py-1 text-[11px] font-semibold text-white disabled:opacity-50">
+              {saveSettings.isPending ? "Saving…" : "Save delivery & schedule"}
+            </button>
+          </div>
+          {err(saveSettings.error) && (
+            <div className="mt-1 text-[11px] text-red-600">{err(saveSettings.error)}</div>
+          )}
+        </div>
+      )}
       {refining && (
         <div className="mt-2">
           <textarea

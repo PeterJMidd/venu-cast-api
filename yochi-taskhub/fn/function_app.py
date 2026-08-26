@@ -494,6 +494,14 @@ def task_skill(req: func.HttpRequest) -> func.HttpResponse:
             return _json(200, tk_taskskill.refine(task_id,
                                                   body.get("feedback") or "",
                                                   uid=str(uid)))
+        if action == "settings":
+            return _json(200, tk_taskskill.settings(
+                task_id,
+                recipients=body.get("recipients"),
+                cc=body.get("cc"),
+                cadence=body.get("cadence"),
+                weekday=body.get("weekday"),
+                formats=body.get("formats")))
         if action == "toggle":
             skill = tk_taskskill.get(task_id)
             if not skill:

@@ -73,7 +73,7 @@ def _task(task_id):
 def get(task_id):
     rows = tk_db.get("ai_skills", {
         "task_id": "eq." + task_id, "select":
-        "id,task_id,name,prompt,data_queries,cadence,weekday,recipients,formats,ask,"
+        "id,task_id,name,prompt,data_queries,cadence,weekday,recipients,cc,formats,ask,"
         "active,version,refinements,last_run_at,last_result",
         "order": "created_at.desc", "limit": "1"})
     return rows[0] if rows else None
@@ -112,8 +112,10 @@ def save(task_id, proposal, uid=None):
     task = _task(task_id)
     existing = get(task_id)
     good, bad = _emails(proposal.get("recipients"))
-    if bad:
-        raise ValueError("these are not email addresses: %s" % ", ".join(bad[:5]))
+    cc_good, cc_bad = _emails(proposal.get("cc"))
+    if bad or cc_bad:
+        raise ValueError("these are not email addresses: %s"
+                         % ", ".join((bad + cc_bad)[:5]))
     row = {
         "task_id": task_id,
         "name": (proposal.get("name") or task["title"])[:120],
@@ -125,6 +127,7 @@ def save(task_id, proposal, uid=None):
         "project_id": task["project_id"],
         "assignee_id": task.get("assignee_id"),
         "recipients": ", ".join(good),
+        "cc": ", ".join(cc_good),
         "formats": proposal.get("formats") or "pdf",
         "email_review": bool(good),
         "active": True,
@@ -143,6 +146,38 @@ def save(task_id, proposal, uid=None):
         out = tk_db.insert("ai_skills", [row], returning=True)
         row["id"] = out[0]["id"]
     return {"saved": True, "id": row["id"], "version": row.get("version", 1)}
+
+
+def settings(task_id, recipients=None, cc=None, cadence=None, weekday=None,
+             formats=None):
+    """Change who gets the routine and when it runs - the analysis itself is
+    untouched, so this needs no AI round trip and no re-validation."""
+    skill = get(task_id)
+    if not skill:
+        raise ValueError("no routine saved on this task yet")
+    patch = {"updated_at": dt.datetime.utcnow().isoformat() + "Z"}
+    if recipients is not None:
+        good, bad = _emails(recipients)
+        if bad:
+            raise ValueError("these are not email addresses: %s" % ", ".join(bad[:5]))
+        patch["recipients"] = ", ".join(good)
+        patch["email_review"] = bool(good)
+    if cc is not None:
+        cc_good, cc_bad = _emails(cc)
+        if cc_bad:
+            raise ValueError("these are not email addresses: %s" % ", ".join(cc_bad[:5]))
+        patch["cc"] = ", ".join(cc_good)
+    if cadence is not None:
+        if cadence not in ("on-demand", "daily", "weekly", "monthly"):
+            raise ValueError("cadence must be on-demand, daily, weekly or monthly")
+        patch["cadence"] = cadence
+        if cadence == "weekly":
+            patch["weekday"] = weekday if weekday is not None else (
+                skill.get("weekday") if skill.get("weekday") is not None else 0)
+    if formats is not None:
+        patch["formats"] = formats
+    tk_db.patch("ai_skills", {"id": "eq." + skill["id"]}, patch)
+    return {"updated": True, **{k: v for k, v in patch.items() if k != "updated_at"}}
 
 
 def execute(skill, actor=None, email=True):
@@ -169,6 +204,7 @@ def execute(skill, actor=None, email=True):
         skill.get("formats") or "pdf", skill["name"], review, pulls)
 
     recipients, _ = _emails(skill.get("recipients"))
+    cc, _ = _emails(skill.get("cc"))
     sent_to, email_errors = [], []
     if email and recipients and attachments is not None:
         html = ("<div style='font-family:-apple-system,Segoe UI,Arial,sans-serif;"
@@ -177,15 +213,17 @@ def execute(skill, actor=None, email=True):
                 "<p style='color:#888;font-size:11px'>%s</p></div>" % (
                     review.replace("&", "&amp;").replace("<", "&lt;"),
                     EMAIL_NOTE % skill["name"]))
-        for addr in recipients:
-            try:
-                if tk_email.send(addr, "%s — %s" % (skill["name"],
-                                                    dt.date.today().strftime("%d %b %Y")),
-                                 html, attachments=attachments):
-                    sent_to.append(addr)
-            except Exception as e:
-                LOG.exception("routine email to %s failed", addr)
-                email_errors.append("%s: %s" % (addr, str(e)[:100]))
+        try:
+            # one email, everyone on it - so recipients can see who else has
+            # it and reply-all to each other, instead of N separate copies
+            if tk_email.send(recipients,
+                             "%s — %s" % (skill["name"],
+                                          dt.date.today().strftime("%d %b %Y")),
+                             html, attachments=attachments, cc=cc):
+                sent_to = list(recipients) + (["cc: " + c for c in cc] if cc else [])
+        except Exception as e:
+            LOG.exception("routine email failed")
+            email_errors.append(str(e)[:150])
 
     # the run lands on the task, whatever happened to the email
     summary = {
