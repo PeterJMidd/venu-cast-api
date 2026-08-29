@@ -7,13 +7,14 @@ import { callFn } from "@/lib/fn";
 import { useProfile } from "@/hooks/useProfile";
 import AdminSections from "@/components/AdminSections";
 import AdminWatchRules from "@/components/AdminWatchRules";
+import AdminEmailRules from "@/components/AdminEmailRules";
 import AdminSuggestions from "@/components/AdminSuggestions";
 import AdminSkills from "@/components/AdminSkills";
 import AdminAccess from "@/components/AdminAccess";
 import AdminFeeds from "@/components/AdminFeeds";
 import type { Profile, UserRole } from "@/lib/types";
 
-type AdminTab = "users" | "access" | "feeds" | "sections" | "rules" | "skills" | "suggestions";
+type AdminTab = "users" | "access" | "feeds" | "sections" | "rules" | "email" | "skills" | "suggestions";
 
 export default function AdminPage() {
   const qc = useQueryClient();
@@ -96,6 +97,7 @@ export default function AdminPage() {
     { key: "feeds", label: "Data feeds" },
     { key: "sections", label: "Sections" },
     { key: "rules", label: "Watch rules" },
+    { key: "email", label: "Email routing" },
     { key: "skills", label: "AI skills" },
     { key: "suggestions", label: "AI suggestions" },
   ];
@@ -123,6 +125,7 @@ export default function AdminPage() {
       {tab === "feeds" && <AdminFeeds />}
       {tab === "sections" && <AdminSections />}
       {tab === "rules" && <AdminWatchRules />}
+      {tab === "email" && <AdminEmailRules />}
       {tab === "skills" && <AdminSkills />}
       {tab === "suggestions" && <AdminSuggestions />}
 

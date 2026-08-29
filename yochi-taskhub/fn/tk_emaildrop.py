@@ -107,6 +107,39 @@ def _ref(mail, fname):
     return "email:" + (mid if mid else fname)
 
 
+def _load_rules():
+    try:
+        return tk_db.get("email_rules", {"active": "eq.true", "select": "*",
+                                         "order": "position,created_at"})
+    except Exception:
+        LOG.exception("email rules unavailable - falling back to the classifier")
+        return []
+
+
+def match_rule(mail, rules):
+    """The first active rule the mail satisfies, or None.
+
+    Deterministic and owner-set, so it outranks the AI classifier: when the
+    owner says payroll mail goes to People & payroll with a named person, no
+    model gets a vote. keywords: comma-separated, case-insensitive, ANY match
+    fires; '*' matches every mail (the per-mailbox default rule). mailbox
+    limits a rule to mail that arrived at one shared address - drops that do
+    not carry a mailbox field can only match rules without one."""
+    hay = " ".join([(mail.get("subject") or ""), (mail.get("body") or "")]).lower()
+    mbox = (mail.get("mailbox") or "").lower().strip()
+    for r in rules:
+        want_box = (r.get("mailbox") or "").lower().strip()
+        if want_box and want_box != mbox:
+            continue
+        kws = [k.strip().lower() for k in (r.get("keywords") or "").split(",")
+               if k.strip()]
+        if not kws:
+            continue
+        if "*" in kws or any(k in hay for k in kws):
+            return r
+    return None
+
+
 def _classify(mail, projects):
     names = [p["name"] for p in projects]
     cats = {c["id"]: c["name"] for c in tk_db.get("categories", {"select": "id,name"})}
@@ -201,6 +234,7 @@ def run():
     admin_uid = next((p["id"] for p in profiles if p["role"] == "admin"), None)
     projects = tk_db.get("projects", {"select": "id,name,category_id"})
     by_name = {p["name"]: p["id"] for p in projects}
+    rules = _load_rules()
 
     created, attached, skipped, errors = [], [], 0, []
     for it in jsons:
@@ -229,18 +263,22 @@ def run():
                                  "subject": mail.get("subject", "")[:80]})
                 continue
 
+            rule = match_rule(mail, rules)
             c = _classify(mail, projects)
             desc = "From email - %s (%s)\n\n%s" % (
                 mail.get("from", ""), mail.get("received", ""),
                 (mail.get("body") or "")[:2500])
             row = {
-                "project_id": by_name.get(c.get("project")) or FALLBACK_PROJECT,
+                # the rule owns whatever it sets; the classifier fills the rest
+                "project_id": (rule or {}).get("project_id")
+                              or by_name.get(c.get("project")) or FALLBACK_PROJECT,
                 "title": (c.get("title") or mail.get("subject") or "Email task")[:200],
                 "description": desc,
-                "priority": c.get("priority", "medium"),
+                "priority": (rule or {}).get("priority") or c.get("priority", "medium"),
                 "due_date": c.get("due_date") or None,
-                "assignee_id": by_email.get((mail.get("owner_email") or "").lower(),
-                                            admin_uid),
+                "assignee_id": (rule or {}).get("assignee_id")
+                               or by_email.get((mail.get("owner_email") or "").lower(),
+                                               admin_uid),
                 "external_ref": ref,
                 "created_by": admin_uid,
                 "email_thread": key or None,
@@ -253,7 +291,9 @@ def run():
                 open_threads.setdefault(key, new_id)   # later replies attach here
             _link_email(new_id, mail)
             _log_drop(ref, new_id, "created", mail.get("subject"))
-            created.append({"title": row["title"], "project": c.get("project")})
+            created.append({"title": row["title"],
+                            "routed_by": "rule" if rule else "ai",
+                            "project": c.get("project")})
         except Exception as e:
             LOG.exception("email drop file %s failed", it["name"])
             errors.append({"file": it["name"], "error": str(e)[:200]})

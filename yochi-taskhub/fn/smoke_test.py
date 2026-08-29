@@ -33,6 +33,7 @@ DB_PROBES = {
     "knowledge": "id,task_id,question,answer,engine,depth,recency,created_by,"
                  "created_at",
     "task_knowledge": "task_id,summary,entry_count,updated_at",
+    "email_rules": "id,keywords,mailbox,project_id,assignee_id,priority,position,active,created_at,updated_at",
     "agreement_snapshots": "id,slug,territory,data,hash,captured_at",
     "doc_search_log": "id,asked_at,question,terms,path_like,hits,top_score,top_path,authorities,answered,source",
     "doc_usefulness": "path,title,times_top,times_shown,last_used_at,boost",

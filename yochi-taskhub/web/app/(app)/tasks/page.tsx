@@ -100,6 +100,14 @@ function TasksInner() {
     },
   });
 
+  const [sortKey, setSortKey] = useState<
+    "task" | "project" | "assignee" | "status" | "priority" | "due">("due");
+  const [sortAsc, setSortAsc] = useState(true);
+  const toggleSort = (k: typeof sortKey) => {
+    if (k === sortKey) setSortAsc(!sortAsc);
+    else { setSortKey(k); setSortAsc(true); }
+  };
+
   const today = startOfDay(new Date());
   const projectById = new Map(projects?.map((p) => [p.id, p]) ?? []);
 
@@ -119,6 +127,34 @@ function TasksInner() {
     if (fPriority && t.priority !== fPriority) return false;
     if (!matchesDue(t, fDue)) return false;
     return true;
+  });
+
+  const STATUS_RANK: Record<string, number> = {
+    todo: 0, in_progress: 1, waiting_review: 2, blocked: 3, done: 4 };
+  const PRIORITY_RANK: Record<string, number> = {
+    critical: 0, high: 1, medium: 2, low: 3 };
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp = 0;
+    if (sortKey === "task") cmp = a.title.localeCompare(b.title);
+    else if (sortKey === "project")
+      cmp = (projectById.get(a.project_id)?.name ?? "").localeCompare(
+        projectById.get(b.project_id)?.name ?? "");
+    else if (sortKey === "assignee")
+      cmp = profileName(profiles, a.assignee_id).localeCompare(
+        profileName(profiles, b.assignee_id));
+    else if (sortKey === "status")
+      cmp = (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9);
+    else if (sortKey === "priority")
+      cmp = (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9);
+    else {
+      // due: undated tasks stay last in BOTH directions - "no deadline" is
+      // not "the furthest deadline"
+      if (!a.due_date && !b.due_date) cmp = 0;
+      else if (!a.due_date) return 1;
+      else if (!b.due_date) return -1;
+      else cmp = a.due_date.localeCompare(b.due_date);
+    }
+    return sortAsc ? cmp : -cmp;
   });
 
   const selCls =
@@ -205,16 +241,23 @@ function TasksInner() {
                   />
                 </th>
               )}
-              <th className="px-4 py-2.5">Task</th>
-              <th className="px-4 py-2.5">Project</th>
-              <th className="px-4 py-2.5">Assignee</th>
-              <th className="px-4 py-2.5">Status</th>
-              <th className="px-4 py-2.5">Priority</th>
-              <th className="px-4 py-2.5">Due</th>
+              {([["task", "Task"], ["project", "Project"], ["assignee", "Assignee"],
+                 ["status", "Status"], ["priority", "Priority"], ["due", "Due"]] as const
+               ).map(([k, label]) => (
+                <th key={k} className="px-4 py-2.5">
+                  <button onClick={() => toggleSort(k)}
+                          className="flex items-center gap-1 uppercase tracking-wide hover:text-gray-600">
+                    {label}
+                    <span className={sortKey === k ? "text-brand-600" : "text-transparent"}>
+                      {sortKey === k && !sortAsc ? "▼" : "▲"}
+                    </span>
+                  </button>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map((t) => {
+            {sorted.map((t) => {
               const overdue =
                 t.due_date && t.status !== "done" && isBefore(parseISO(t.due_date), today);
               return (
@@ -251,7 +294,7 @@ function TasksInner() {
                 </tr>
               );
             })}
-            {!isLoading && filtered.length === 0 && (
+            {!isLoading && sorted.length === 0 && (
               <tr>
                 <td colSpan={isStaff ? 7 : 6} className="px-4 py-8 text-center text-gray-300">
                   No tasks match.
